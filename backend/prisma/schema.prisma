@@ -1,0 +1,518 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== USUÁRIOS E TENANTS ====================
+
+model User {
+  id                String    @id @default(uuid())
+  email             String    @unique
+  passwordHash      String
+  fullName          String
+  role              String    @default("owner") // owner, member, super_master
+  isActive          Boolean   @default(true)
+  isEmailVerified   Boolean   @default(false)
+  lastLoginAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  deletedAt         DateTime?
+
+  ownedTenants      Tenant[]  @relation("TenantOwner")
+  tenantUsers       TenantUser[]
+  transactions      Transaction[]
+  auditLogs         AuditLog[]
+  refreshTokens     RefreshToken[]
+}
+
+model Tenant {
+  id                  String    @id @default(uuid())
+  ownerId             String
+  name                String
+  slug                String    @unique
+  subscriptionPlan    String    @default("trial") // trial, basic, plus, premium, business
+  subscriptionStatus  String    @default("active") // active, suspended, cancelled
+  trialEndsAt         DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  deletedAt           DateTime?
+
+  owner               User           @relation("TenantOwner", fields: [ownerId], references: [id])
+  tenantUsers         TenantUser[]
+  categories          Category[]
+  bankAccounts        BankAccount[]
+  paymentMethods      PaymentMethod[]
+  transactions        Transaction[]
+  recurringBills      RecurringBill[]
+  recurringOccurrences RecurringBillOccurrence[]
+  installmentPurchases InstallmentPurchase[]
+  installments        Installment[]
+  budgets             Budget[]
+  triggerCategories   TriggerCategory[]
+  notifications       Notification[]
+  imports             Import[]
+  savedFilters        SavedFilter[]
+  auditLogs           AuditLog[]
+
+  @@index([ownerId])
+  @@index([subscriptionPlan])
+}
+
+model TenantUser {
+  id              String    @id @default(uuid())
+  tenantId        String
+  userId          String
+  role            String    @default("member") // owner, member, viewer
+  permissions     String?   // JSON com permissões customizadas
+  invitedBy       String?
+  acceptedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user            User      @relation(fields: [userId], references: [id])
+
+  @@unique([tenantId, userId])
+  @@index([userId])
+}
+
+// ==================== CATEGORIAS ====================
+
+model Category {
+  id          String    @id @default(uuid())
+  tenantId    String
+  parentId    String?
+  name        String
+  type        String    @default("expense") // expense, income
+  level       Int       @default(1) // 1, 2, 3
+  path        String?   // Caminho hierárquico: "/id1/id2/id3" para consultas rápidas
+  icon        String?
+  color       String?
+  isActive    Boolean   @default(true)
+  order       Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  parent      Category?    @relation("CategoryChildren", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  children    Category[]   @relation("CategoryChildren")
+  transactions Transaction[]
+  recurringBills RecurringBill[]
+  installmentPurchases InstallmentPurchase[]
+  budgets     Budget[]
+  triggerCategories TriggerCategory[]
+
+  @@index([tenantId, parentId])
+  @@index([type])
+  @@index([tenantId, type, isActive])
+  @@index([tenantId, isActive])
+  @@index([path])
+}
+
+// ==================== CONTAS E PAGAMENTOS ====================
+
+model BankAccount {
+  id              String    @id @default(uuid())
+  tenantId        String
+  name            String
+  type            String    // bank, wallet, credit_card, investment, other
+  institution     String?   // Nubank, Inter, Bradesco, etc
+  currentBalance  Decimal   @default(0) @db.Decimal(15, 2)
+  initialBalance  Decimal   @default(0) @db.Decimal(15, 2)
+  isActive        Boolean   @default(true)
+  color           String?
+  icon            String?
+  order           Int       @default(0)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  transactions    Transaction[]
+  paymentMethods  PaymentMethod[]
+  recurringBills  RecurringBill[]
+  installments    Installment[]
+
+  @@index([tenantId, isActive])
+  @@index([tenantId, type])
+}
+
+model PaymentMethod {
+  id              String    @id @default(uuid())
+  tenantId        String
+  bankAccountId   String?
+  name            String
+  type            String    // pix, credit_card, debit_card, boleto, cash, bank_transfer, automatic_debit
+  lastFourDigits  String?   // Para cartões
+  cardNetwork     String?   // visa, mastercard, elo, amex, etc.
+  expirationDate  DateTime? // Data de vencimento do cartão
+  isActive        Boolean   @default(true)
+  order           Int       @default(0)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  bankAccount     BankAccount? @relation(fields: [bankAccountId], references: [id])
+  transactions    Transaction[]
+  recurringBills  RecurringBill[]
+  installments    Installment[]
+
+  @@index([tenantId, isActive])
+  @@index([tenantId, type, isActive])
+}
+
+// ==================== TRANSAÇÕES ====================
+
+model Transaction {
+  id              String    @id @default(uuid())
+  tenantId        String
+  userId          String
+  type            String    // income, expense, transfer
+  categoryId      String?
+  bankAccountId   String?
+  paymentMethodId String?
+  destinationAccountId String? // Para transferências internas
+  amount          Decimal   @db.Decimal(15, 2)
+  description     String?
+  transactionDate DateTime
+  dueDate         DateTime? // Data de vencimento (scheduledDate)
+  paidDate        DateTime? // Data real do pagamento (completedDate)
+  isPaidEarly     Boolean?  // Pago antecipado?
+  isPaidLate      Boolean?  // Pago atrasado?
+  daysEarlyLate   Int?      // Quantos dias antes/depois
+  status          String    @default("completed") // scheduled, pending, overdue, completed, cancelled, skipped
+  isRecurring     Boolean   @default(false)
+  isFixed         Boolean   @default(true) // true = Fixa, false = Variável
+  recurringBillId String?
+  installmentId   String?
+  tags            String?   // JSON array
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+  
+  // ==================== NOVOS CAMPOS UNIFICAÇÃO ====================
+  transactionType   String    @default("single")  // single, recurring, installment
+  parentId          String?   // ID da transação pai (para recorrentes/parceladas)
+  
+  // Campos para RECORRENTES
+  frequency         String?   // monthly, weekly, biweekly, yearly, custom
+  frequencyInterval Int?      // Intervalo customizado (ex: a cada 2 meses)
+  occurrenceNumber  Int?      // Número da ocorrência atual
+  totalOccurrences  Int?      // Total de ocorrências (null = infinito)
+  startDate         DateTime? // Data de início da recorrência
+  endDate           DateTime? // Data final da recorrência (null = sem fim)
+  nextDueDate       DateTime? // Próxima data de vencimento
+  alertDaysBefore   Int       @default(3) // Alertar X dias antes
+  autoGenerateNext  Boolean   @default(true) // Gerar próxima automaticamente
+  
+  // Campos para PARCELADAS
+  installmentNumber   Int?      // Número da parcela atual (1, 2, 3...)
+  totalInstallments   Int?      // Total de parcelas (máx 72)
+  originalAmount      Decimal?  @db.Decimal(15, 2) // Valor total original
+  hasDownPayment      Boolean   @default(false) // Tem entrada? (1+X)
+  downPaymentAmount   Decimal?  @db.Decimal(15, 2) // Valor da entrada
+
+  // Self-relation para hierarquia
+  parent          Transaction?  @relation("TransactionChildren", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  children        Transaction[] @relation("TransactionChildren")
+
+  tenant          Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user            User         @relation(fields: [userId], references: [id])
+  category        Category?    @relation(fields: [categoryId], references: [id])
+  bankAccount     BankAccount? @relation(fields: [bankAccountId], references: [id])
+  paymentMethod   PaymentMethod? @relation(fields: [paymentMethodId], references: [id])
+
+  @@index([tenantId, transactionDate])
+  @@index([categoryId])
+  @@index([type, status])
+  @@index([userId])
+  @@index([tenantId, type, transactionDate])
+  @@index([tenantId, status, transactionDate])
+  @@index([tenantId, categoryId, transactionDate])
+  @@index([bankAccountId, transactionDate])
+  @@index([tenantId, dueDate, status])
+  @@index([tenantId, isFixed, status])
+  @@index([recurringBillId])
+  @@index([parentId])
+  @@index([tenantId, transactionType, status])
+  @@index([tenantId, nextDueDate])
+}
+
+// ==================== CONTAS FIXAS (RECORRENTES) ====================
+
+model RecurringBill {
+  id              String    @id @default(uuid())
+  tenantId        String
+  categoryId      String?
+  bankAccountId   String?
+  paymentMethodId String?
+  name            String
+  type            String    @default("expense") // income, expense
+  amount          Decimal?  @db.Decimal(15, 2)
+  isVariableAmount Boolean  @default(false)
+  frequency       String    @default("monthly") // monthly, weekly, yearly
+  dueDay          Int       // 1-31
+  firstDueDate    DateTime?
+  lastDueDate     DateTime?
+  alertDaysBefore Int       @default(3)
+  alertOnDueDay   Boolean   @default(true)
+  alertIfOverdue  Boolean   @default(true)
+  autoGenerate    Boolean   @default(true)
+  monthsAhead     Int       @default(3) // Quantos meses gerar automaticamente
+  isFixed         Boolean   @default(true) // true = Fixa, false = Variável
+  isTemplate      Boolean   @default(false) // true = Template de onboarding, false = Conta real
+  status          String    @default("active") // active, paused, cancelled
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  category        Category? @relation(fields: [categoryId], references: [id])
+  bankAccount     BankAccount? @relation(fields: [bankAccountId], references: [id])
+  paymentMethod   PaymentMethod? @relation(fields: [paymentMethodId], references: [id])
+  occurrences     RecurringBillOccurrence[]
+
+  @@index([tenantId, status])
+  @@index([dueDay])
+  @@index([tenantId, status, dueDay])
+  @@index([tenantId, type, status])
+  @@index([tenantId, isFixed, status])
+}
+
+model RecurringBillOccurrence {
+  id              String    @id @default(uuid())
+  tenantId        String
+  recurringBillId String
+  dueDate         DateTime
+  amount          Decimal   @db.Decimal(15, 2)
+  paidDate        DateTime?
+  paidAmount      Decimal?  @db.Decimal(15, 2)
+  status          String    @default("pending") // pending, paid, overdue, skipped
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  recurringBill   RecurringBill @relation(fields: [recurringBillId], references: [id], onDelete: Cascade)
+
+  @@unique([recurringBillId, dueDate], name: "unique_occurrence_per_date")
+  @@index([tenantId, dueDate, status])
+  @@index([recurringBillId])
+  @@index([tenantId, status, dueDate])
+}
+
+// ==================== PARCELADAS ====================
+
+model InstallmentPurchase {
+  id                  String    @id @default(uuid())
+  tenantId            String
+  categoryId          String?
+  name                String
+  description         String?
+  totalAmount         Decimal   @db.Decimal(15, 2)
+  numberOfInstallments Int
+  installmentAmount   Decimal   @db.Decimal(15, 2)
+  firstDueDate        DateTime
+  remainingBalance    Decimal   @db.Decimal(15, 2)
+  paidInstallments    Int       @default(0)
+  isFixed             Boolean   @default(false) // true = Fixa, false = Variável
+  status              String    @default("active") // active, completed, cancelled
+  notes               String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  deletedAt           DateTime?
+
+  tenant              Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  category            Category? @relation(fields: [categoryId], references: [id])
+  installments        Installment[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, status, firstDueDate])
+  @@index([tenantId, isFixed, status])
+}
+
+model Installment {
+  id                  String    @id @default(uuid())
+  tenantId            String
+  installmentPurchaseId String
+  bankAccountId       String?
+  paymentMethodId     String?
+  installmentNumber   Int
+  dueDate             DateTime
+  amount              Decimal   @db.Decimal(15, 2)
+  paidDate            DateTime?
+  paidAmount          Decimal?  @db.Decimal(15, 2)
+  status              String    @default("pending") // pending, paid, overdue
+  notes               String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  tenant              Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  installmentPurchase InstallmentPurchase @relation(fields: [installmentPurchaseId], references: [id], onDelete: Cascade)
+  bankAccount         BankAccount? @relation(fields: [bankAccountId], references: [id])
+  paymentMethod       PaymentMethod? @relation(fields: [paymentMethodId], references: [id])
+
+  @@index([tenantId, dueDate, status])
+  @@index([installmentPurchaseId])
+  @@index([tenantId, status, dueDate])
+}
+
+// ==================== ORÇAMENTOS ====================
+
+model Budget {
+  id              String    @id @default(uuid())
+  tenantId        String
+  categoryId      String
+  name            String
+  amount          Decimal   @db.Decimal(15, 2)
+  period          String    @default("monthly") // monthly, quarterly, semester, annual
+  startDate       DateTime
+  endDate         DateTime
+  alertAt80       Boolean   @default(true)
+  alertAt90       Boolean   @default(true)
+  alertAt100      Boolean   @default(true)
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  category        Category  @relation(fields: [categoryId], references: [id])
+
+  @@index([tenantId, categoryId, isActive])
+  @@index([startDate, endDate])
+  @@index([tenantId, isActive, startDate])
+  @@index([tenantId, period, isActive])
+}
+
+// ==================== CONTROLE DE VÍCIOS/GATILHOS ====================
+
+model TriggerCategory {
+  id              String    @id @default(uuid())
+  tenantId        String
+  categoryId      String
+  monthlyLimit    Decimal?  @db.Decimal(15, 2)
+  alertMessage    String?
+  trackingEnabled Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  category        Category  @relation(fields: [categoryId], references: [id])
+
+  @@unique([tenantId, categoryId])
+}
+
+model Notification {
+  id              String    @id @default(uuid())
+  tenantId        String
+  userId          String?
+  type            String    // budget_alert, bill_due, overdue, goal_reached, payment_due, low_balance
+  title           String
+  message         String
+  isRead          Boolean   @default(false)
+  priority        String    @default("normal") // low, normal, high, urgent
+  relatedId       String?   // ID do recurso relacionado
+  relatedType     String?   // budget, bill, transaction, recurring_bill, installment
+  actionUrl       String?   // URL para ação rápida
+  transactionId   String?   // Link direto para transação
+  createdAt       DateTime  @default(now())
+
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, userId, isRead])
+  @@index([createdAt])
+  @@index([tenantId, isRead, createdAt])
+  @@index([type, isRead])
+}
+
+// ==================== IMPORTAÇÕES ====================
+
+model Import {
+  id              String    @id @default(uuid())
+  tenantId        String
+  userId          String?
+  fileName        String
+  fileType        String    // csv, ofx, pdf
+  status          String    @default("pending") // pending, processing, completed, failed
+  totalRows       Int?
+  processedRows   Int       @default(0)
+  errorRows       Int       @default(0)
+  errorLog        String?   // JSON
+  createdAt       DateTime  @default(now())
+  completedAt     DateTime?
+
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status])
+}
+
+// ==================== FILTROS SALVOS ====================
+
+model SavedFilter {
+  id              String    @id @default(uuid())
+  tenantId        String
+  userId          String?
+  name            String
+  filterType      String    // transaction, report, budget
+  filterData      String    // JSON com os filtros
+  isPublic        Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, filterType])
+}
+
+// ==================== AUDIT LOG (SUPER MASTER) ====================
+
+model AuditLog {
+  id              String    @id @default(uuid())
+  tenantId        String?
+  userId          String
+  action          String    // login, view_as_user, create, update, delete
+  resourceType    String?   // user, tenant, transaction, etc
+  resourceId      String?
+  ipAddress       String?
+  userAgent       String?
+  changes         String?   // JSON com mudanças
+  createdAt       DateTime  @default(now())
+
+  tenant          Tenant?   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user            User      @relation(fields: [userId], references: [id])
+
+  @@index([tenantId, createdAt])
+  @@index([userId, action])
+  @@index([createdAt])
+}
+
+// ==================== REFRESH TOKENS ====================
+
+model RefreshToken {
+  id              String    @id @default(uuid())
+  userId          String
+  token           String    @unique
+  expiresAt       DateTime
+  isRevoked       Boolean   @default(false)
+  revokedAt       DateTime?
+  revokedReason   String?   // logout, security, password_change, etc
+  ipAddress       String?
+  userAgent       String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRevoked])
+  @@index([token])
+  @@index([expiresAt])
+  @@index([userId, isRevoked, expiresAt])
+}
