@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useAuth } from '@/stores/auth';
 
@@ -12,7 +12,7 @@ import {
   LineChart, Line, BarChart, Bar, PieChart as RePieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
-import { format, subMonths, startOfMonth, endOfMonth, parseISO } from 'date-fns';
+import { format, subMonths, startOfMonth, endOfMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 interface CashFlowData {
@@ -96,10 +96,8 @@ export default function ReportsPage() {
   const [incomeVsExpenseData, setIncomeVsExpenseData] = useState<IncomeVsExpenseData | null>(null);
 
   useEffect(() => {
-    if (accessToken) {
-      loadAllReports();
-    }
-  }, [startDate, endDate, accessToken]);
+    loadAllReports();
+  }, [startDate, endDate]);
 
   const loadAllReports = async () => {
     setLoading(true);
@@ -111,7 +109,7 @@ export default function ReportsPage() {
         loadCategoryFlowData()
       ]);
     } catch (error) {
-      console.error('Erro ao carregar relatórios:', error);
+      console.error('Erro ao carregar relatÃ³rios:', error);
     } finally {
       setLoading(false);
     }
@@ -145,7 +143,7 @@ export default function ReportsPage() {
         setCategoryData(data.data);
       }
     } catch (error) {
-      console.error('Erro ao carregar análise por categoria:', error);
+      console.error('Erro ao carregar anÃ¡lise por categoria:', error);
     }
   };
 
@@ -168,12 +166,8 @@ export default function ReportsPage() {
   const loadCategoryFlowData = async () => {
     try {
       const token = accessToken;
-      if (!token) {
-        console.warn('Token não disponível, ignorando carregamento de categorias');
-        return;
-      }
       
-      // Buscar transações
+      // Buscar transaÃ§Ãµes
       const transactionsResponse = await fetch(
         `http://localhost:3000/api/v1/transactions?startDate=${startDate}&endDate=${endDate}&limit=10000`,
         { headers: { 'Authorization': `Bearer ${token}` } }
@@ -187,26 +181,18 @@ export default function ReportsPage() {
       );
       const categoriesData = await categoriesResponse.json();
       
-      // Buscar orçamentos para ter o "esperado"
+      // Buscar orÃ§amentos para ter o "esperado"
       const budgetsResponse = await fetch(
         `http://localhost:3000/api/v1/budgets`,
         { headers: { 'Authorization': `Bearer ${token}` } }
       );
       const budgetsData = await budgetsResponse.json();
       
-      // API transactions retorna { success: true, data: { transactions: [...], pagination: {...} } }
-      const transactions = transactionsData.success && transactionsData.data ? (transactionsData.data.transactions || []) : [];
-      // API categories retorna { success: true, data: { categories: [...], count: X, summary: {...} } }
-      const categories = categoriesData.success && categoriesData.data ? (categoriesData.data.categories || []) : [];
-      // API budgets retorna { success: true, data: [...] }
+      const transactions = transactionsData.success ? (transactionsData.data || []) : [];
+      const categories = categoriesData.success ? (categoriesData.data || []) : [];
       const budgets = budgetsData.success ? (budgetsData.data || []) : [];
       
-      console.log('Transações carregadas:', transactions.length);
-      console.log('Categorias carregadas:', categories.length);
-      console.log('Budgets carregados:', budgets.length);
-      
       const flowData = processFluxoCaixaData(transactions, categories, budgets);
-      console.log('FlowData processado:', flowData);
       setCategoryFlowData(flowData);
     } catch (error) {
       console.error('Erro ao carregar fluxo por categoria:', error);
@@ -214,11 +200,11 @@ export default function ReportsPage() {
     }
   };
 
-  // Fluxo de Caixa por Categoria - Regime de Caixa com HIERARQUIA
+  // Fluxo de Caixa por Categoria - Regime de Caixa
   const processFluxoCaixaData = (transactions: any[], categories: any[], budgets: any[]) => {
-    // Gerar lista de meses no período - usar parseISO para evitar problemas de timezone
-    const start = parseISO(startDate);
-    const end = parseISO(endDate);
+    // Gerar lista de meses no perÃ­odo
+    const start = new Date(startDate);
+    const end = new Date(endDate);
     const allMonths: string[] = [];
     const current = new Date(start.getFullYear(), start.getMonth(), 1);
     while (current <= end) {
@@ -226,13 +212,20 @@ export default function ReportsPage() {
       current.setMonth(current.getMonth() + 1);
     }
 
-    // Criar mapa de orçamentos por categoria/mês
+    // Estrutura de grupos do Fluxo de Caixa
+    const groups = [
+      { id: 'entradas', name: 'ENTRADAS (Receitas)', icon: 'ðŸ’°', type: 'income', categories: [] as any[], isGroup: true },
+      { id: 'saidas', name: 'SAÃDAS (Despesas)', icon: 'ðŸ’¸', type: 'expense', categories: [] as any[], isGroup: true },
+      { id: 'saldo_periodo', name: 'SALDO DO PERÃODO', icon: 'ðŸ“Š', type: 'calculated', isCalculated: true },
+    ];
+
+    // Criar mapa de orÃ§amentos por categoria/mÃªs
     const budgetMap = new Map<string, number>();
     budgets.forEach((budget: any) => {
       budgetMap.set(budget.categoryId, budget.amount || 0);
     });
 
-    // Criar mapa de transações por categoria/mês
+    // Criar mapa de transaÃ§Ãµes por categoria/mÃªs
     const transactionMap = new Map<string, Map<string, number>>();
     transactions.forEach((transaction: any) => {
       if (transaction.deletedAt) return;
@@ -250,61 +243,28 @@ export default function ReportsPage() {
       catMap.set(monthKey, (catMap.get(monthKey) || 0) + amount);
     });
 
-    // Organizar categorias em hierarquia
-    const categoryMap = new Map<string, any>();
-    categories.forEach(cat => categoryMap.set(cat.id, cat));
-
-    // Separar categorias por nível e tipo
-    const l1Income: any[] = [];
-    const l1Expense: any[] = [];
-    
+    // Processar TODAS as categorias cadastradas
     categories.forEach((cat: any) => {
-      if (cat.level === 1) {
-        if (cat.type === 'income') {
-          l1Income.push(cat);
-        } else {
-          l1Expense.push(cat);
-        }
-      }
-    });
-
-    // Função para calcular dados de uma categoria (incluindo filhos)
-    const processCategoryHierarchy = (cat: any, allMonths: string[]): any => {
-      // Buscar filhos diretos
-      const children = categories.filter((c: any) => c.parentId === cat.id);
+      const isIncome = cat.type === 'income';
+      const groupId = isIncome ? 'entradas' : 'saidas';
+      const group = groups.find(g => g.id === groupId);
       
+      if (!group || group.isCalculated) return;
+
+      // Criar estrutura da categoria com todos os meses
       const categoryData: any = {
         id: cat.id,
         name: cat.name || 'Sem Nome',
-        icon: cat.icon || '📋',
+        icon: cat.icon || 'ðŸ“‹',
         type: cat.type,
-        level: cat.level,
         months: {} as any,
         totalRealizado: 0,
-        totalEsperado: budgetMap.get(cat.id) || 0,
-        children: [] as any[],
-        hasChildren: children.length > 0
+        totalEsperado: budgetMap.get(cat.id) || 0
       };
 
-      // Processar filhos recursivamente
-      children.forEach((child: any) => {
-        const childData = processCategoryHierarchy(child, allMonths);
-        categoryData.children.push(childData);
-      });
-
-      // Ordenar filhos por nome
-      categoryData.children.sort((a: any, b: any) => a.name.localeCompare(b.name));
-
-      // Preencher todos os meses
+      // Preencher todos os meses (mesmo zerados)
       allMonths.forEach(month => {
-        // Valor próprio da categoria
-        let realizado = transactionMap.get(cat.id)?.get(month) || 0;
-        
-        // Somar valores dos filhos
-        categoryData.children.forEach((child: any) => {
-          realizado += child.months[month]?.realizado || 0;
-        });
-        
+        const realizado = transactionMap.get(cat.id)?.get(month) || 0;
         const esperadoMensal = (budgetMap.get(cat.id) || 0) / allMonths.length;
         
         categoryData.months[month] = {
@@ -315,29 +275,17 @@ export default function ReportsPage() {
         categoryData.totalRealizado += realizado;
       });
 
-      // Se tem filhos, recalcular total como soma dos filhos
-      if (categoryData.children.length > 0) {
-        categoryData.totalRealizado = categoryData.children.reduce((sum: number, child: any) => sum + child.totalRealizado, 0);
-        categoryData.totalEsperado = categoryData.children.reduce((sum: number, child: any) => sum + child.totalEsperado, 0);
+      group.categories.push(categoryData);
+    });
+
+    // Ordenar categorias por nome
+    groups.forEach(group => {
+      if (!group.isCalculated) {
+        group.categories.sort((a: any, b: any) => a.name.localeCompare(b.name));
       }
+    });
 
-      return categoryData;
-    };
-
-    // Processar categorias L1 de cada tipo
-    const incomeCategories = l1Income.map(cat => processCategoryHierarchy(cat, allMonths))
-      .sort((a: any, b: any) => a.name.localeCompare(b.name));
-    const expenseCategories = l1Expense.map(cat => processCategoryHierarchy(cat, allMonths))
-      .sort((a: any, b: any) => a.name.localeCompare(b.name));
-
-    // Estrutura de grupos do Fluxo de Caixa
-    const groups = [
-      { id: 'entradas', name: 'ENTRADAS (Receitas)', icon: '💰', type: 'income', categories: incomeCategories, isGroup: true },
-      { id: 'saidas', name: 'SAÍDAS (Despesas)', icon: '💸', type: 'expense', categories: expenseCategories, isGroup: true },
-      { id: 'saldo_periodo', name: 'SALDO DO PERÍODO', icon: '📊', type: 'calculated', isCalculated: true },
-    ];
-
-    // Calcular totais por mês
+    // Calcular totais por mÃªs
     const monthlyTotals: any = {};
     allMonths.forEach(month => {
       let totalEntradas = 0;
@@ -345,14 +293,19 @@ export default function ReportsPage() {
       let esperadoEntradas = 0;
       let esperadoSaidas = 0;
 
-      incomeCategories.forEach((cat: any) => {
-        totalEntradas += cat.months[month]?.realizado || 0;
-        esperadoEntradas += cat.months[month]?.esperado || 0;
-      });
-
-      expenseCategories.forEach((cat: any) => {
-        totalSaidas += cat.months[month]?.realizado || 0;
-        esperadoSaidas += cat.months[month]?.esperado || 0;
+      groups.forEach(group => {
+        if (group.isCalculated) return;
+        
+        group.categories.forEach((cat: any) => {
+          const data = cat.months[month] || { realizado: 0, esperado: 0 };
+          if (group.id === 'entradas') {
+            totalEntradas += data.realizado;
+            esperadoEntradas += data.esperado;
+          } else {
+            totalSaidas += data.realizado;
+            esperadoSaidas += data.esperado;
+          }
+        });
       });
 
       monthlyTotals[month] = {
@@ -382,154 +335,6 @@ export default function ReportsPage() {
     setExpandedCategories(newExpanded);
   };
 
-  // Função recursiva para renderizar linhas de categoria com hierarquia
-  const renderCategoryRow = (category: any, group: any, groupTotalRealizado: number, catIndex: number, level: number): React.ReactNode => {
-    const isExpanded = expandedCategories.has(category.id);
-    const hasChildren = category.children && category.children.length > 0;
-    const paddingLeft = 10 + (level * 20); // Incrementa padding por nível
-    
-    // Calcular AV% (Análise Vertical) - percentual em relação ao total do grupo
-    const avTotal = groupTotalRealizado !== 0 
-      ? ((Math.abs(category.totalRealizado) / Math.abs(groupTotalRealizado)) * 100).toFixed(1) 
-      : '0.0';
-    
-    // Cores por nível
-    const levelBgColors = [
-      '', // nível 0 não usado
-      catIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50', // L1
-      'bg-blue-50/50', // L2
-      'bg-purple-50/30', // L3
-    ];
-    const bgColor = levelBgColors[level] || levelBgColors[1];
-    
-    return (
-      <React.Fragment key={category.id}>
-        <tr 
-          className={`border-b border-gray-100 text-sm ${bgColor} ${hasChildren ? 'cursor-pointer hover:bg-gray-100' : ''}`}
-          onClick={() => hasChildren && toggleCategory(category.id)}
-        >
-          <td 
-            className={`sticky left-0 z-10 px-4 py-2 border-r border-gray-200 ${bgColor}`}
-            style={{ paddingLeft: `${paddingLeft}px` }}
-          >
-            <div className="flex items-center gap-2">
-              {hasChildren && (
-                <svg 
-                  className={`w-3 h-3 text-gray-500 transition-transform flex-shrink-0 ${isExpanded ? 'rotate-90' : ''}`}
-                  fill="none" 
-                  stroke="currentColor" 
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              )}
-              {!hasChildren && <span className="w-3" />}
-              <span>{category.icon}</span>
-              <span className={`${level === 1 ? 'font-medium text-gray-800' : level === 2 ? 'text-gray-700' : 'text-gray-600'}`}>
-                {category.name}
-              </span>
-              {hasChildren && (
-                <span className="text-xs text-gray-400">({category.children.length})</span>
-              )}
-            </div>
-          </td>
-          {categoryFlowData?.allMonths.map((month: string, monthIdx: number) => {
-            const data = category.months?.[month] || { esperado: 0, realizado: 0 };
-            
-            // AV% mensal
-            const monthTotal = categoryFlowData.monthlyTotals?.[month]?.[group.id]?.realizado || 0;
-            const avMonth = monthTotal !== 0 
-              ? ((Math.abs(data.realizado) / Math.abs(monthTotal)) * 100).toFixed(1) 
-              : '0.0';
-            
-            // AH% (variação vs mês anterior)
-            let ahMonth = '-';
-            if (monthIdx > 0) {
-              const prevMonth = categoryFlowData.allMonths[monthIdx - 1];
-              const prevData = category.months?.[prevMonth] || { realizado: 0 };
-              if (prevData.realizado !== 0) {
-                const variation = ((data.realizado - prevData.realizado) / Math.abs(prevData.realizado)) * 100;
-                ahMonth = `${variation >= 0 ? '+' : ''}${variation.toFixed(1)}%`;
-              } else if (data.realizado !== 0) {
-                ahMonth = '+∞';
-              }
-            }
-            
-            return (
-              <React.Fragment key={`${category.id}-${month}`}>
-                <td className={`px-2 py-2 text-right border-l border-gray-100 text-xs ${
-                  hasChildren ? 'font-medium' : ''
-                } ${
-                  group.id === 'entradas' ? 'text-green-600' : 'text-red-600'
-                }`}>
-                  {data.realizado !== 0 ? formatCurrency(data.realizado) : '-'}
-                </td>
-                <td className="px-1 py-2 text-center text-xs text-gray-500 bg-gray-50/50">
-                  {data.realizado !== 0 ? `${avMonth}%` : '-'}
-                </td>
-                {monthIdx > 0 && (
-                  <td className={`px-1 py-2 text-center text-xs ${
-                    ahMonth.startsWith('+') && ahMonth !== '+∞' 
-                      ? (group.id === 'entradas' ? 'text-green-600 bg-green-50' : 'text-red-600 bg-red-50')
-                      : ahMonth.startsWith('-') 
-                        ? (group.id === 'entradas' ? 'text-red-600 bg-red-50' : 'text-green-600 bg-green-50')
-                        : 'text-gray-400'
-                  }`}>
-                    {ahMonth}
-                  </td>
-                )}
-                <td className="px-2 py-2 text-right text-gray-400 text-xs">
-                  {data.esperado !== 0 ? formatCurrency(data.esperado) : '-'}
-                </td>
-              </React.Fragment>
-            );
-          })}
-          <td className={`px-2 py-2 text-right border-l-2 border-gray-200 bg-gray-50/50 text-xs ${
-            hasChildren ? 'font-semibold' : 'font-medium'
-          } ${
-            group.id === 'entradas' ? 'text-green-600' : 'text-red-600'
-          }`}>
-            {category.totalRealizado !== 0 ? formatCurrency(category.totalRealizado) : '-'}
-          </td>
-          <td className="px-1 py-2 text-center bg-gray-100 text-xs text-gray-600 font-medium">
-            {category.totalRealizado !== 0 ? `${avTotal}%` : '-'}
-          </td>
-          <td className="px-2 py-2 text-right bg-gray-50/50 text-gray-400 text-xs">
-            {category.totalEsperado !== 0 ? formatCurrency(category.totalEsperado) : '-'}
-          </td>
-        </tr>
-        
-        {/* Renderizar filhos recursivamente */}
-        {isExpanded && hasChildren && category.children.map((child: any, childIdx: number) => 
-          renderCategoryRow(child, group, groupTotalRealizado, childIdx, level + 1)
-        )}
-      </React.Fragment>
-    );
-  };
-
-  // Função para expandir todas as categorias recursivamente
-  const expandAllCategories = () => {
-    if (!categoryFlowData) return;
-    
-    const allIds = new Set<string>();
-    
-    const addCategoryIds = (category: any) => {
-      allIds.add(category.id);
-      if (category.children) {
-        category.children.forEach((child: any) => addCategoryIds(child));
-      }
-    };
-    
-    categoryFlowData.groups.forEach((group: any) => {
-      allIds.add(group.id);
-      if (group.categories) {
-        group.categories.forEach((cat: any) => addCategoryIds(cat));
-      }
-    });
-    
-    setExpandedCategories(allIds);
-  };
-
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
@@ -538,17 +343,17 @@ export default function ReportsPage() {
   };
 
   const exportToPDF = () => {
-    alert('Funcionalidade de exportação PDF será implementada em breve!');
+    alert('Funcionalidade de exportaÃ§Ã£o PDF serÃ¡ implementada em breve!');
   };
 
   const exportToExcel = () => {
-    alert('Funcionalidade de exportação Excel será implementada em breve!');
+    alert('Funcionalidade de exportaÃ§Ã£o Excel serÃ¡ implementada em breve!');
   };
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="text-xl">Carregando relatórios...</div>
+        <div className="text-xl">Carregando relatÃ³rios...</div>
       </div>
     );
   }
@@ -566,8 +371,8 @@ export default function ReportsPage() {
             <ArrowLeft className="w-6 h-6 text-gray-600" />
           </button>
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">📊 Relatórios Financeiros</h1>
-            <p className="text-gray-600 mt-1">Análises e insights dos seus dados</p>
+            <h1 className="text-3xl font-bold text-gray-900">ðŸ“Š RelatÃ³rios Financeiros</h1>
+            <p className="text-gray-600 mt-1">AnÃ¡lises e insights dos seus dados</p>
           </div>
         </div>
         <div className="flex gap-2">
@@ -590,87 +395,35 @@ export default function ReportsPage() {
 
       {/* Filtros */}
       <div className="mb-6 bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-        <div className="flex flex-wrap items-center gap-4">
+        <div className="flex items-center gap-4">
           <Filter className="w-5 h-5 text-gray-600" />
-          <label className="text-sm font-medium text-gray-700">Período:</label>
+          <label className="text-sm font-medium text-gray-700">PerÃ­odo:</label>
           <input
             type="date"
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
             className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
             aria-label="Data inicial"
-            title="Data inicial do período"
+            title="Data inicial do perÃ­odo"
           />
-          <span className="text-gray-500">até</span>
+          <span className="text-gray-500">atÃ©</span>
           <input
             type="date"
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
             className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
             aria-label="Data final"
-            title="Data final do período"
+            title="Data final do perÃ­odo"
           />
-          
-          {/* Atalhos de período */}
-          <div className="flex items-center gap-2 ml-4 border-l pl-4 border-gray-200">
-            <span className="text-xs text-gray-500">Atalhos:</span>
-            <button
-              onClick={() => {
-                setStartDate(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
-                setEndDate(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
-              }}
-              className="px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition"
-            >
-              Este mês
-            </button>
-            <button
-              onClick={() => {
-                const lastMonth = subMonths(new Date(), 1);
-                setStartDate(format(startOfMonth(lastMonth), 'yyyy-MM-dd'));
-                setEndDate(format(endOfMonth(lastMonth), 'yyyy-MM-dd'));
-              }}
-              className="px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition"
-            >
-              Mês anterior
-            </button>
-            <button
-              onClick={() => {
-                setStartDate(format(startOfMonth(subMonths(new Date(), 2)), 'yyyy-MM-dd'));
-                setEndDate(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
-              }}
-              className="px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition"
-            >
-              3 meses
-            </button>
-            <button
-              onClick={() => {
-                setStartDate(format(startOfMonth(subMonths(new Date(), 5)), 'yyyy-MM-dd'));
-                setEndDate(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
-              }}
-              className="px-3 py-1.5 text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg transition font-medium"
-            >
-              6 meses
-            </button>
-            <button
-              onClick={() => {
-                setStartDate(format(new Date(new Date().getFullYear(), 0, 1), 'yyyy-MM-dd'));
-                setEndDate(format(new Date(new Date().getFullYear(), 11, 31), 'yyyy-MM-dd'));
-              }}
-              className="px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition"
-            >
-              Ano {new Date().getFullYear()}
-            </button>
-            <button
-              onClick={() => {
-                const lastYear = new Date().getFullYear() - 1;
-                setStartDate(format(new Date(lastYear, 0, 1), 'yyyy-MM-dd'));
-                setEndDate(format(new Date(lastYear, 11, 31), 'yyyy-MM-dd'));
-              }}
-              className="px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition"
-            >
-              Ano {new Date().getFullYear() - 1}
-            </button>
-          </div>
+          <button
+            onClick={() => {
+              setStartDate(format(startOfMonth(subMonths(new Date(), 5)), 'yyyy-MM-dd'));
+              setEndDate(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
+            }}
+            className="px-4 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition"
+          >
+            Ãšltimos 6 meses
+          </button>
         </div>
       </div>
 
@@ -722,7 +475,7 @@ export default function ReportsPage() {
                 : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
             }`}
           >
-            📈 Fluxo de Caixa
+            ðŸ“ˆ Fluxo de Caixa
           </button>
           <button
             onClick={() => setActiveTab('categories')}
@@ -732,7 +485,7 @@ export default function ReportsPage() {
                 : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
             }`}
           >
-            🍕 Por Categoria
+            ðŸ• Por Categoria
           </button>
           <button
             onClick={() => setActiveTab('comparison')}
@@ -742,7 +495,7 @@ export default function ReportsPage() {
                 : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
             }`}
           >
-            📊 Receitas x Despesas
+            ðŸ“Š Receitas x Despesas
           </button>
           <button
             onClick={() => {
@@ -755,7 +508,7 @@ export default function ReportsPage() {
                 : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
             }`}
           >
-            📊💰 Fluxo por Categoria
+            ðŸ“ŠðŸ’° Fluxo por Categoria
           </button>
           <button
             onClick={() => setActiveTab('budgets')}
@@ -765,7 +518,7 @@ export default function ReportsPage() {
                 : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
             }`}
           >
-            💰 Orçamentos
+            ðŸ’° OrÃ§amentos
           </button>
         </div>
 
@@ -773,7 +526,7 @@ export default function ReportsPage() {
           {/* Fluxo de Caixa */}
           {activeTab === 'cashflow' && cashFlowData && (
             <div className="space-y-6">
-              <h3 className="text-xl font-bold text-gray-900">Evolução do Fluxo de Caixa</h3>
+              <h3 className="text-xl font-bold text-gray-900">EvoluÃ§Ã£o do Fluxo de Caixa</h3>
               <ResponsiveContainer width="100%" height={400}>
                 <LineChart data={cashFlowData.timeline}>
                   <CartesianGrid strokeDasharray="3 3" />
@@ -807,7 +560,7 @@ export default function ReportsPage() {
 
               {cashFlowData.projection.length > 0 && (
                 <>
-                  <h3 className="text-xl font-bold text-gray-900 mt-8">Projeção (próximos 3 meses)</h3>
+                  <h3 className="text-xl font-bold text-gray-900 mt-8">ProjeÃ§Ã£o (prÃ³ximos 3 meses)</h3>
                   <ResponsiveContainer width="100%" height={300}>
                     <BarChart data={cashFlowData.projection}>
                       <CartesianGrid strokeDasharray="3 3" />
@@ -824,12 +577,12 @@ export default function ReportsPage() {
             </div>
           )}
 
-          {/* Análise por Categoria */}
+          {/* AnÃ¡lise por Categoria */}
           {activeTab === 'categories' && categoryData && (
             <div className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-4">Distribuição por Categoria</h3>
+                  <h3 className="text-xl font-bold text-gray-900 mb-4">DistribuiÃ§Ã£o por Categoria</h3>
                   <ResponsiveContainer width="100%" height={300}>
                     <RePieChart>
                       <Pie
@@ -882,7 +635,7 @@ export default function ReportsPage() {
                               cat.budgetUsed! > 80 ? 'text-yellow-600' :
                               'text-green-600'
                             }`}>
-                              {cat.budgetUsed!.toFixed(1)}% do orçamento
+                              {cat.budgetUsed!.toFixed(1)}% do orÃ§amento
                             </span>
                           </div>
                         )}
@@ -924,7 +677,7 @@ export default function ReportsPage() {
                   </div>
                 </div>
                 <div className="bg-green-50 p-4 rounded-lg">
-                  <div className="text-sm text-green-600 font-medium">Taxa Média de Economia</div>
+                  <div className="text-sm text-green-600 font-medium">Taxa MÃ©dia de Economia</div>
                   <div className="text-2xl font-bold text-green-900">
                     {incomeVsExpenseData.summary.avgSavingsRate.toFixed(1)}%
                   </div>
@@ -933,14 +686,14 @@ export default function ReportsPage() {
             </div>
           )}
 
-          {/* Fluxo de Caixa por Categoria */}
+          {/* DRE - Fluxo de Caixa por Categoria */}
           {activeTab === 'cashflow-categories' && categoryFlowData && categoryFlowData.groups && (
             <div className="space-y-4">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-xl font-bold text-gray-900">📊 Fluxo de Caixa por Categoria</h3>
+                <h3 className="text-xl font-bold text-gray-900">ðŸ“Š DRE - DemonstraÃ§Ã£o de Resultado</h3>
                 <div className="flex items-center gap-2">
                   <button 
-                    onClick={expandAllCategories}
+                    onClick={() => setExpandedCategories(new Set(categoryFlowData.groups.map((g: any) => g.id)))}
                     className="text-sm text-blue-600 hover:underline"
                   >
                     Expandir Tudo
@@ -958,40 +711,35 @@ export default function ReportsPage() {
               {/* Tabela Fluxo de Caixa */}
               <div className="bg-white border border-gray-200 rounded-lg overflow-x-auto shadow-lg">
                 <table className="w-full text-sm border-collapse">
-                  {/* Cabeçalho */}
+                  {/* CabeÃ§alho */}
                   <thead>
                     <tr className="bg-gradient-to-r from-teal-700 to-teal-800 text-white">
                       <th className="sticky left-0 z-20 bg-teal-700 px-4 py-3 text-left font-bold min-w-[280px] border-r border-teal-600">
-                        ▶ CATEGORIA
+                        â–¶ CATEGORIA
                       </th>
-                      {categoryFlowData.allMonths.map((month: string, monthIdx: number) => {
+                      {categoryFlowData.allMonths.map((month: string) => {
                         const [year, monthNum] = month.split('-');
                         const monthName = new Date(parseInt(year), parseInt(monthNum) - 1).toLocaleString('pt-BR', { month: 'short' }).toUpperCase();
                         return (
-                          <th key={month} colSpan={monthIdx === 0 ? 3 : 4} className="px-2 py-3 text-center font-bold border-l border-teal-600 min-w-[200px]">
+                          <th key={month} colSpan={2} className="px-2 py-3 text-center font-bold border-l border-teal-600 min-w-[160px]">
                             {monthName}/{year}
                           </th>
                         );
                       })}
-                      <th colSpan={3} className="px-2 py-3 text-center font-bold border-l-2 border-teal-500 bg-teal-900 min-w-[220px]">
-                        TOTAL PERÍODO
+                      <th colSpan={2} className="px-2 py-3 text-center font-bold border-l-2 border-teal-500 bg-teal-900 min-w-[180px]">
+                        TOTAL PERÃODO
                       </th>
                     </tr>
                     <tr className="bg-teal-600 text-white text-xs">
                       <th className="sticky left-0 z-20 bg-teal-600 px-4 py-2 border-r border-teal-500"></th>
-                      {categoryFlowData.allMonths.map((month: string, monthIdx: number) => (
+                      {categoryFlowData.allMonths.map((month: string) => (
                         <React.Fragment key={`sub-${month}`}>
-                          <th className="px-2 py-2 text-center border-l border-teal-500 w-16">REAL.</th>
-                          <th className="px-2 py-2 text-center w-12 bg-teal-500" title="Análise Vertical - % do total do grupo">AV%</th>
-                          {monthIdx > 0 && (
-                            <th className="px-2 py-2 text-center w-12 bg-teal-400" title="Análise Horizontal - Variação % vs mês anterior">AH%</th>
-                          )}
-                          <th className="px-2 py-2 text-center w-16 text-teal-200">PREV.</th>
+                          <th className="px-2 py-2 text-center border-l border-teal-500 w-20">PREVISTO</th>
+                          <th className="px-2 py-2 text-center w-20">REALIZADO</th>
                         </React.Fragment>
                       ))}
-                      <th className="px-2 py-2 text-center border-l-2 border-teal-500 bg-teal-800 w-16">REAL.</th>
-                      <th className="px-2 py-2 text-center bg-teal-700 w-12" title="Análise Vertical - % do total do grupo">AV%</th>
-                      <th className="px-2 py-2 text-center bg-teal-800 w-16 text-teal-200">PREV.</th>
+                      <th className="px-2 py-2 text-center border-l-2 border-teal-500 bg-teal-800 w-20">PREVISTO</th>
+                      <th className="px-2 py-2 text-center bg-teal-800 w-20">REALIZADO</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1054,7 +802,7 @@ export default function ReportsPage() {
                                 )}
                               </div>
                             </td>
-                            {categoryFlowData.allMonths.map((month: string, monthIdx: number) => {
+                            {categoryFlowData.allMonths.map((month: string) => {
                               let monthEsperado = 0;
                               let monthRealizado = 0;
                               
@@ -1070,118 +818,97 @@ export default function ReportsPage() {
                                 });
                               }
                               
-                              // AH% (variação vs mês anterior)
-                              let ahMonth = '-';
-                              if (monthIdx > 0) {
-                                const prevMonth = categoryFlowData.allMonths[monthIdx - 1];
-                                let prevRealizado = 0;
-                                if (isCalculated) {
-                                  prevRealizado = categoryFlowData.monthlyTotals?.[prevMonth]?.[group.id]?.realizado || 0;
-                                } else {
-                                  group.categories?.forEach((cat: any) => {
-                                    prevRealizado += cat.months?.[prevMonth]?.realizado || 0;
-                                  });
-                                }
-                                if (prevRealizado !== 0) {
-                                  const variation = ((monthRealizado - prevRealizado) / Math.abs(prevRealizado)) * 100;
-                                  ahMonth = `${variation >= 0 ? '+' : ''}${variation.toFixed(1)}%`;
-                                } else if (monthRealizado !== 0) {
-                                  ahMonth = '+∞';
-                                }
-                              }
-                              
                               return (
                                 <React.Fragment key={`${group.id}-${month}`}>
-                                  <td className={`px-2 py-3 text-right border-l border-gray-200 font-bold ${
+                                  <td className="px-2 py-3 text-right border-l border-gray-200 text-gray-600">
+                                    {formatCurrency(monthEsperado)}
+                                  </td>
+                                  <td className={`px-2 py-3 text-right font-bold ${
                                     group.id === 'entradas' ? 'text-green-700' : 
                                     group.id === 'saidas' ? 'text-red-700' : 
                                     monthRealizado >= 0 ? 'text-blue-700' : 'text-red-700'
                                   }`}>
                                     {formatCurrency(Math.abs(monthRealizado))}
                                   </td>
-                                  <td className={`px-1 py-3 text-center text-xs font-semibold ${
-                                    isCalculated ? 'bg-blue-50' : group.id === 'entradas' ? 'bg-green-50' : 'bg-red-50'
-                                  }`}>
-                                    100%
-                                  </td>
-                                  {monthIdx > 0 && (
-                                    <td className={`px-1 py-3 text-center text-xs font-semibold ${
-                                      ahMonth.startsWith('+') && ahMonth !== '+∞'
-                                        ? (group.id === 'saidas' ? 'text-red-700 bg-red-100' : 'text-green-700 bg-green-100')
-                                        : ahMonth.startsWith('-')
-                                          ? (group.id === 'saidas' ? 'text-green-700 bg-green-100' : 'text-red-700 bg-red-100')
-                                          : 'text-gray-500 bg-gray-100'
-                                    }`}>
-                                      {ahMonth}
-                                    </td>
-                                  )}
-                                  <td className="px-2 py-3 text-right text-gray-500">
-                                    {formatCurrency(monthEsperado)}
-                                  </td>
                                 </React.Fragment>
                               );
                             })}
                             {/* Totais */}
-                            <td className={`px-2 py-3 text-right border-l-2 border-gray-300 font-bold ${
-                              isCalculated ? 'bg-blue-50' : 'bg-gray-50'
-                            } ${
+                            <td className="px-2 py-3 text-right border-l-2 border-gray-300 bg-gray-50 text-gray-600">
+                              {formatCurrency(groupTotalEsperado)}
+                            </td>
+                            <td className={`px-2 py-3 text-right font-bold bg-gray-50 ${
                               group.id === 'entradas' ? 'text-green-700' : 
                               group.id === 'saidas' ? 'text-red-700' : 
                               groupTotalRealizado >= 0 ? 'text-blue-700' : 'text-red-700'
                             }`}>
                               {formatCurrency(Math.abs(groupTotalRealizado))}
                             </td>
-                            <td className={`px-1 py-3 text-center text-xs font-bold ${
-                              isCalculated ? 'bg-blue-100' : group.id === 'entradas' ? 'bg-green-100' : 'bg-red-100'
-                            }`}>
-                              100%
-                            </td>
-                            <td className={`px-2 py-3 text-right ${
-                              isCalculated ? 'bg-blue-50' : 'bg-gray-50'
-                            } text-gray-500`}>
-                              {formatCurrency(groupTotalEsperado)}
-                            </td>
                           </tr>
                           
-                          {/* Categorias L1 (quando grupo expandido) */}
-                          {isGroupExpanded && !isCalculated && group.categories?.map((category: any, catIndex: number) => 
-                            renderCategoryRow(category, group, groupTotalRealizado, catIndex, 1)
-                          )}
+                          {/* Categorias filhas (quando expandido) */}
+                          {isGroupExpanded && !isCalculated && group.categories?.map((category: any, catIndex: number) => (
+                            <tr 
+                              key={category.id}
+                              className={`border-b border-gray-100 text-sm ${
+                                catIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50'
+                              }`}
+                            >
+                              <td className={`sticky left-0 z-10 px-4 py-2 pl-10 border-r border-gray-200 ${
+                                catIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50'
+                              }`}>
+                                <div className="flex items-center gap-2">
+                                  <span>{category.icon}</span>
+                                  <span className="text-gray-700">{category.name}</span>
+                                </div>
+                              </td>
+                              {categoryFlowData.allMonths.map((month: string) => {
+                                const data = category.months?.[month] || { esperado: 0, realizado: 0 };
+                                
+                                return (
+                                  <React.Fragment key={`${category.id}-${month}`}>
+                                    <td className="px-2 py-2 text-right border-l border-gray-100 text-gray-500 text-xs">
+                                      {data.esperado !== 0 ? formatCurrency(data.esperado) : '-'}
+                                    </td>
+                                    <td className={`px-2 py-2 text-right text-xs ${
+                                      group.id === 'entradas' ? 'text-green-600' : 'text-red-600'
+                                    }`}>
+                                      {data.realizado !== 0 ? formatCurrency(data.realizado) : '-'}
+                                    </td>
+                                  </React.Fragment>
+                                );
+                              })}
+                              <td className="px-2 py-2 text-right border-l-2 border-gray-200 bg-gray-50/50 text-gray-500 text-xs">
+                                {category.totalEsperado !== 0 ? formatCurrency(category.totalEsperado) : '-'}
+                              </td>
+                              <td className={`px-2 py-2 text-right bg-gray-50/50 text-xs font-medium ${
+                                group.id === 'entradas' ? 'text-green-600' : 'text-red-600'
+                              }`}>
+                                {category.totalRealizado !== 0 ? formatCurrency(category.totalRealizado) : '-'}
+                              </td>
+                            </tr>
+                          ))}
                         </React.Fragment>
                       );
                     })}
                   </tbody>
                 </table>
-              </div>
-
               {/* Legenda */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600 bg-gray-50 p-4 rounded-lg">
-                <div className="flex flex-wrap items-center gap-6">
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 bg-green-500 rounded"></div>
-                    <span>Entradas (Receitas)</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 bg-red-500 rounded"></div>
-                    <span>Saídas (Despesas)</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 bg-blue-500 rounded"></div>
-                    <span>Saldo do Período</span>
-                  </div>
+              <div className="flex flex-wrap items-center gap-6 text-sm text-gray-600 bg-gray-50 p-4 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-green-500 rounded"></div>
+                  <span>Entradas (Receitas)</span>
                 </div>
-                <div className="space-y-1 text-xs">
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-teal-600 w-10">AV%</span>
-                    <span>Análise Vertical - Participação % da categoria no total do grupo</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-teal-500 w-10">AH%</span>
-                    <span>Análise Horizontal - Variação % em relação ao mês anterior</span>
-                  </div>
-                  <div className="text-gray-400 mt-2">
-                    💡 Clique nos grupos para expandir/recolher categorias
-                  </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-red-500 rounded"></div>
+                  <span>SaÃ­das (Despesas)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-blue-500 rounded"></div>
+                  <span>Saldo do PerÃ­odo</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-500">Clique nos grupos para expandir/recolher categorias</span>
                 </div>
               </div>
             </div>
@@ -1194,12 +921,12 @@ export default function ReportsPage() {
             </div>
           )}
 
-          {/* Análise por Categoria */}
+          {/* AnÃ¡lise por Categoria */}
           {activeTab === 'categories' && categoryData && (
             <div className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-4">Distribuição por Categoria</h3>
+                  <h3 className="text-xl font-bold text-gray-900 mb-4">DistribuiÃ§Ã£o por Categoria</h3>
                   <ResponsiveContainer width="100%" height={300}>
                     <RePieChart>
                       <Pie
@@ -1252,7 +979,7 @@ export default function ReportsPage() {
                               cat.budgetUsed! > 80 ? 'text-yellow-600' :
                               'text-green-600'
                             }`}>
-                              {cat.budgetUsed!.toFixed(1)}% do orçamento
+                              {cat.budgetUsed!.toFixed(1)}% do orÃ§amento
                             </span>
                           </div>
                         )}
@@ -1284,7 +1011,7 @@ export default function ReportsPage() {
                               <div className="flex items-center gap-2">
                                 <span className="text-2xl">{category.icon}</span>
                                 <span className="font-semibold text-gray-900">{category.name}</span>
-                                <span className="text-sm text-gray-500">({category.transactionCount} transações)</span>
+                                <span className="text-sm text-gray-500">({category.transactionCount} transaÃ§Ãµes)</span>
                               </div>
                             </div>
                           </div>
@@ -1305,13 +1032,13 @@ export default function ReportsPage() {
                           </div>
                         </button>
 
-                        {/* Conteúdo Expandido */}
+                        {/* ConteÃºdo Expandido */}
                         {isExpanded && (
                           <div className="border-t border-gray-200 p-6 bg-gray-50">
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                              {/* Estatísticas Detalhadas */}
+                              {/* EstatÃ­sticas Detalhadas */}
                               <div className="space-y-4">
-                                <h4 className="font-semibold text-gray-700 mb-3">📊 Estatísticas</h4>
+                                <h4 className="font-semibold text-gray-700 mb-3">ðŸ“Š EstatÃ­sticas</h4>
                                 
                                 <div className="bg-white p-4 rounded-lg border border-gray-200">
                                   <div className="text-sm text-gray-600 mb-1">Valor Total</div>
@@ -1319,12 +1046,12 @@ export default function ReportsPage() {
                                 </div>
 
                                 <div className="bg-white p-4 rounded-lg border border-gray-200">
-                                  <div className="text-sm text-gray-600 mb-1">Média por Transação</div>
+                                  <div className="text-sm text-gray-600 mb-1">MÃ©dia por TransaÃ§Ã£o</div>
                                   <div className="text-lg font-bold text-gray-900">{formatCurrency(category.avgPerTransaction)}</div>
                                 </div>
 
                                 <div className="bg-white p-4 rounded-lg border border-gray-200">
-                                  <div className="text-sm text-gray-600 mb-1">Total de Transações</div>
+                                  <div className="text-sm text-gray-600 mb-1">Total de TransaÃ§Ãµes</div>
                                   <div className="text-lg font-bold text-gray-900">{category.transactionCount}</div>
                                 </div>
 
@@ -1335,7 +1062,7 @@ export default function ReportsPage() {
                                     category.budgetUsed! > 80 ? 'bg-yellow-50 border-yellow-200' :
                                     'bg-green-50 border-green-200'
                                   }`}>
-                                    <div className="text-sm text-gray-600 mb-1">Orçamento Utilizado</div>
+                                    <div className="text-sm text-gray-600 mb-1">OrÃ§amento Utilizado</div>
                                     <div className="text-lg font-bold mb-2">{category.budgetUsed!.toFixed(1)}%</div>
                                     <div className="text-xs text-gray-600">
                                       {formatCurrency(category.total)} de {formatCurrency(category.budget)}
@@ -1355,9 +1082,9 @@ export default function ReportsPage() {
                                 )}
                               </div>
 
-                              {/* Gráfico de Pizza Individual */}
+                              {/* GrÃ¡fico de Pizza Individual */}
                               <div className="md:col-span-2">
-                                <h4 className="font-semibold text-gray-700 mb-3">📈 Distribuição</h4>
+                                <h4 className="font-semibold text-gray-700 mb-3">ðŸ“ˆ DistribuiÃ§Ã£o</h4>
                                 <div className="bg-white p-4 rounded-lg border border-gray-200">
                                   <div className="flex items-center justify-center h-64">
                                     <div className="text-center">
@@ -1382,7 +1109,7 @@ export default function ReportsPage() {
                                       <span className="font-semibold text-gray-900">{formatCurrency(category.total)}</span>
                                     </div>
                                     <div className="flex justify-between items-center mt-2">
-                                      <span className="text-sm text-gray-600">Em {category.transactionCount} transações</span>
+                                      <span className="text-sm text-gray-600">Em {category.transactionCount} transaÃ§Ãµes</span>
                                       <span className="font-semibold text-gray-900">~{formatCurrency(category.avgPerTransaction)} cada</span>
                                     </div>
                                   </div>
@@ -1393,7 +1120,7 @@ export default function ReportsPage() {
                             {/* Barra de Progresso Visual */}
                             <div className="mt-6">
                               <div className="flex items-center justify-between text-sm mb-2">
-                                <span className="text-gray-600">Participação no Total</span>
+                                <span className="text-gray-600">ParticipaÃ§Ã£o no Total</span>
                                 <span className="font-semibold" style={{ color: categoryColor }}>{category.percentage.toFixed(1)}%</span>
                               </div>
                               <div className="bg-gray-200 rounded-full h-3">
@@ -1415,11 +1142,11 @@ export default function ReportsPage() {
             </div>
           )}
 
-          {/* Orçamentos */}
+          {/* OrÃ§amentos */}
           {activeTab === 'budgets' && (
             <div className="text-center py-12 text-gray-500">
               <BarChart3 className="w-16 h-16 mx-auto mb-4 opacity-50" />
-              <p>Análise de orçamentos será carregada aqui</p>
+              <p>AnÃ¡lise de orÃ§amentos serÃ¡ carregada aqui</p>
             </div>
           )}
         </div>
@@ -1427,3 +1154,4 @@ export default function ReportsPage() {
     </div>
   );
 }
+

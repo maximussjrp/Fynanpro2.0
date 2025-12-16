@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authMiddleware } from '../middleware/auth';
+import { log } from '../utils/logger';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -47,10 +48,11 @@ router.get('/events', authMiddleware, async (req: Request, res: Response) => {
     const end = new Date(endDate as string);
     end.setHours(23, 59, 59, 999); // Final do dia
 
-    // Buscar transações no período
+    // Buscar transações no período (excluindo deletadas)
     const transactions = await prisma.transaction.findMany({
       where: {
         tenantId,
+        deletedAt: null,
         transactionDate: {
           gte: start,
           lte: end
@@ -65,10 +67,11 @@ router.get('/events', authMiddleware, async (req: Request, res: Response) => {
       }
     });
 
-    // Buscar ocorrências de recorrências no período
+    // Buscar ocorrências de recorrências no período (apenas pendentes)
     const recurringOccurrences = await prisma.recurringBillOccurrence.findMany({
       where: {
         tenantId,
+        status: 'pending',
         dueDate: {
           gte: start,
           lte: end
@@ -95,8 +98,8 @@ router.get('/events', authMiddleware, async (req: Request, res: Response) => {
         recurringOccurrences
       }
     });
-  } catch (error) {
-    console.error('Erro ao buscar eventos do calendário:', error);
+  } catch (error: any) {
+    log.error('Erro ao buscar eventos do calendário:', { error: error.message });
     res.status(500).json({ 
       message: 'Erro ao buscar eventos do calendário' 
     });

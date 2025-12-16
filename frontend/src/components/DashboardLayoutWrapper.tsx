@@ -2,6 +2,7 @@
 
 import Sidebar from '@/components/Sidebar';
 import DashboardHeader from '@/components/DashboardHeader';
+import ChatbotWidget from '@/components/ChatbotWidget';
 
 interface DashboardLayoutWrapperProps {
   children: React.ReactNode;
@@ -31,6 +32,9 @@ export default function DashboardLayoutWrapper({
           {children}
         </main>
       </div>
+
+      {/* Chatbot Isis */}
+      <ChatbotWidget />
     </div>
   );
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import { useAuth } from '@/stores/auth';
-
+import { toast } from 'sonner';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { PlusCircle, TrendingUp, AlertTriangle, CheckCircle, ArrowLeft } from 'lucide-react';
@@ -118,14 +118,15 @@ export default function BudgetsPage() {
 
       const data = await response.json();
       if (data.success) {
+        toast.success(editingBudget ? 'Orçamento atualizado!' : 'Orçamento criado!');
         loadBudgets();
         closeModal();
       } else {
-        alert(data.error?.message || 'Erro ao salvar orçamento');
+        toast.error(data.error?.message || 'Erro ao salvar orçamento');
       }
     } catch (error) {
       console.error('Erro ao salvar:', error);
-      alert('Erro ao salvar orçamento');
+      toast.error('Erro ao salvar orçamento');
     }
   };
 
@@ -141,13 +142,14 @@ export default function BudgetsPage() {
       
       const data = await response.json();
       if (data.success) {
+        toast.success('Orçamento excluído!');
         loadBudgets();
       } else {
-        alert(data.error?.message || 'Erro ao deletar');
+        toast.error(data.error?.message || 'Erro ao deletar');
       }
     } catch (error) {
       console.error('Erro ao deletar:', error);
-      alert('Erro ao deletar orçamento');
+      toast.error('Erro ao deletar orçamento');
     }
   };
 
@@ -237,6 +239,7 @@ export default function BudgetsPage() {
           <select
             value={selectedMonth}
             onChange={(e) => setSelectedMonth(e.target.value)}
+            aria-label="Mês"
             className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           >
             <option value="1">Janeiro</option>
@@ -255,6 +258,7 @@ export default function BudgetsPage() {
           <select
             value={selectedYear}
             onChange={(e) => setSelectedYear(e.target.value)}
+            aria-label="Ano"
             className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           >
             {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i).map(year => (
@@ -407,6 +411,7 @@ export default function BudgetsPage() {
                 <select
                   value={formData.categoryId}
                   onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
+                  aria-label="Categoria do orçamento"
                   className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                   required
                   disabled={!!editingBudget}
@@ -442,6 +447,7 @@ export default function BudgetsPage() {
                 <select
                   value={formData.period}
                   onChange={(e) => setFormData({ ...formData, period: e.target.value })}
+                  aria-label="Período do orçamento"
                   className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                   required
                 >

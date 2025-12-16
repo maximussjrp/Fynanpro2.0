@@ -15,6 +15,7 @@ import budgetRoutes from './routes/budgets';
 import calendarRoutes from './routes/calendar';
 import reportRoutes from './routes/reports';
 import notificationRoutes from './routes/notifications';
+import importRoutes from './routes/import';
 
 dotenv.config();
 
@@ -80,6 +81,7 @@ apiRouter.use('/budgets', budgetRoutes);
 apiRouter.use('/calendar', calendarRoutes);
 apiRouter.use('/reports', reportRoutes);
 apiRouter.use('/notifications', notificationRoutes);
+apiRouter.use('/import', importRoutes);
 
 app.use('/api/v1', apiRouter);
 

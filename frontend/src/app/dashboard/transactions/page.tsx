@@ -1,13 +1,13 @@
 'use client';
 
 import { useAuth } from '@/stores/auth';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/api';
 import { toast } from 'sonner';
 import TransactionModal from '@/components/NewTransactionModal';
 import UnifiedTransactionModal from '@/components/UnifiedTransactionModal';
-import { Receipt, Filter, Edit2, Trash2, Calendar, TrendingDown, TrendingUp, CheckCircle, XCircle, Clock, Plus, ArrowLeft, Repeat, CreditCard } from 'lucide-react';
+import { Receipt, Filter, Edit2, Trash2, Calendar, TrendingDown, TrendingUp, CheckCircle, XCircle, Clock, Plus, ArrowLeft, Repeat, CreditCard, ChevronUp, ChevronDown, ChevronsUpDown, Search, X } from 'lucide-react';
 
 interface Transaction {
   id: string;
@@ -67,20 +67,140 @@ export default function TransactionsPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
-  const [showFilters, setShowFilters] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [showUnifiedModal, setShowUnifiedModal] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   
-  // Filtros
+  // Filtros de coluna (inline)
+  const [columnFilters, setColumnFilters] = useState<{
+    categories: string[];
+    accounts: string[];
+    statuses: string[];
+    paymentMethods: string[];
+  }>({
+    categories: [],
+    accounts: [],
+    statuses: [],
+    paymentMethods: [],
+  });
+  
+  // Popover states
+  const [activePopover, setActivePopover] = useState<'category' | 'account' | 'status' | 'paymentMethod' | null>(null);
+  const [popoverSearch, setPopoverSearch] = useState('');
+  const popoverRef = useRef<HTMLDivElement>(null);
+  
+  // Fechar popover ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (popoverRef.current && !popoverRef.current.contains(event.target as Node)) {
+        setActivePopover(null);
+        setPopoverSearch('');
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+  
+  // Filtros principais (apenas datas e tipo)
   const [filters, setFilters] = useState({
     startDate: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
     endDate: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().split('T')[0],
-    categoryId: '',
-    bankAccountId: '',
     type: 'all' as 'all' | 'income' | 'expense',
-    status: 'all' as 'all' | 'completed' | 'pending',
   });
+
+  // Ordenação
+  type SortField = 'date' | 'description' | 'category' | 'account' | 'amount' | 'status';
+  type SortDirection = 'asc' | 'desc';
+  const [sortField, setSortField] = useState<SortField>('date');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('desc');
+    }
+  };
+
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortField !== field) {
+      return <ChevronsUpDown className="w-4 h-4 text-gray-400" />;
+    }
+    return sortDirection === 'asc' 
+      ? <ChevronUp className="w-4 h-4 text-blue-600" />
+      : <ChevronDown className="w-4 h-4 text-blue-600" />;
+  };
+
+  // Ordenar e filtrar transações
+  const filteredAndSortedTransactions = [...transactions]
+    // Aplicar filtros de coluna
+    .filter(t => {
+      // Filtro de categorias
+      if (columnFilters.categories.length > 0) {
+        if (!t.category || !columnFilters.categories.includes(t.category.id)) {
+          return false;
+        }
+      }
+      // Filtro de contas
+      if (columnFilters.accounts.length > 0) {
+        if (!t.bankAccount || !columnFilters.accounts.includes(t.bankAccount.id)) {
+          return false;
+        }
+      }
+      // Filtro de status
+      if (columnFilters.statuses.length > 0) {
+        if (!columnFilters.statuses.includes(t.status)) {
+          return false;
+        }
+      }
+      // Filtro de meios de pagamento
+      if (columnFilters.paymentMethods.length > 0) {
+        const paymentName = t.paymentMethod?.name || 'Não informado';
+        if (!columnFilters.paymentMethods.includes(paymentName)) {
+          return false;
+        }
+      }
+      return true;
+    })
+    // Ordenar
+    .sort((a, b) => {
+    let comparison = 0;
+    
+    switch (sortField) {
+      case 'date':
+        comparison = new Date(a.transactionDate).getTime() - new Date(b.transactionDate).getTime();
+        break;
+      case 'description':
+        comparison = a.description.localeCompare(b.description);
+        break;
+      case 'category':
+        comparison = (a.category?.name || '').localeCompare(b.category?.name || '');
+        break;
+      case 'account':
+        comparison = (a.bankAccount?.name || '').localeCompare(b.bankAccount?.name || '');
+        break;
+      case 'amount':
+        comparison = Number(a.amount) - Number(b.amount);
+        break;
+      case 'status':
+        comparison = a.status.localeCompare(b.status);
+        break;
+    }
+    
+    return sortDirection === 'asc' ? comparison : -comparison;
+  });
+  
+  // Obter lista única de meios de pagamento das transações
+  const uniquePaymentMethods = [...new Set(transactions.map(t => t.paymentMethod?.name || 'Não informado'))].sort();
+  
+  // Contar filtros ativos
+  const activeFiltersCount = columnFilters.categories.length + columnFilters.accounts.length + columnFilters.statuses.length + columnFilters.paymentMethods.length;
+  
+  // Limpar todos os filtros de coluna
+  const clearAllColumnFilters = () => {
+    setColumnFilters({ categories: [], accounts: [], statuses: [], paymentMethods: [] });
+  };
 
   // Verificar se há data na URL
   useEffect(() => {
@@ -94,7 +214,6 @@ export default function TransactionsPage() {
         startDate: dateParam,
         endDate: dateParam
       }));
-      setShowFilters(true);
     }
   }, []);
 
@@ -115,10 +234,7 @@ export default function TransactionsPage() {
         endDate: filters.endDate,
       };
 
-      if (filters.categoryId) params.categoryId = filters.categoryId;
-      if (filters.bankAccountId) params.bankAccountId = filters.bankAccountId;
       if (filters.type !== 'all') params.type = filters.type;
-      if (filters.status !== 'all') params.status = filters.status;
 
       // Buscar transações realizadas + ocorrências pendentes
       const [transactionsRes, occurrencesRes, categoriesRes, accountsRes] = await Promise.all([
@@ -242,29 +358,44 @@ export default function TransactionsPage() {
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('pt-BR');
+    // Parse date string as local date to avoid timezone issues
+    const dateOnly = dateString.split('T')[0];
+    const [year, month, day] = dateOnly.split('-').map(Number);
+    return new Date(year, month - 1, day).toLocaleDateString('pt-BR');
   };
 
   const getTotals = () => {
-    // Receitas realizadas (completadas)
+    // Usar o type da transação, ou fallback para o sinal do amount
+    // Transferências são neutras (não afetam receita nem despesa total)
+    const getTransactionType = (t: any) => {
+      if (t.type === 'transfer') return 'transfer';
+      if (t.type === 'income') return 'income';
+      if (t.type === 'expense') return 'expense';
+      // Fallback: usar categoria se disponível
+      if (t.category?.type) return t.category.type;
+      // Último fallback: usar sinal do amount
+      return Number(t.amount) >= 0 ? 'income' : 'expense';
+    };
+
+    // Receitas realizadas (completadas) - excluindo transferências
     const completedIncome = transactions
-      .filter(t => t.category && t.category.type === 'income' && t.status === 'completed')
-      .reduce((sum, t) => sum + Number(t.amount), 0);
+      .filter(t => getTransactionType(t) === 'income' && t.status === 'completed')
+      .reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
     
     // Receitas pendentes
     const pendingIncome = transactions
-      .filter(t => t.category && t.category.type === 'income' && t.status === 'pending')
-      .reduce((sum, t) => sum + Number(t.amount), 0);
+      .filter(t => getTransactionType(t) === 'income' && t.status === 'pending')
+      .reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
     
-    // Despesas realizadas (completadas)
+    // Despesas realizadas (completadas) - excluindo transferências
     const completedExpense = transactions
-      .filter(t => t.category && t.category.type === 'expense' && t.status === 'completed')
-      .reduce((sum, t) => sum + Number(t.amount), 0);
+      .filter(t => getTransactionType(t) === 'expense' && t.status === 'completed')
+      .reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
     
     // Despesas pendentes
     const pendingExpense = transactions
-      .filter(t => t.category && t.category.type === 'expense' && t.status === 'pending')
-      .reduce((sum, t) => sum + Number(t.amount), 0);
+      .filter(t => getTransactionType(t) === 'expense' && t.status === 'pending')
+      .reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
 
     const totalIncome = completedIncome + pendingIncome;
     const totalExpense = completedExpense + pendingExpense;
@@ -314,21 +445,15 @@ export default function TransactionsPage() {
                 <Receipt className="w-8 h-8" />
                 Histórico de Transações
               </h1>
-              <p className="text-gray-600 mt-1">{transactions.length} transações encontradas</p>
+              <p className="text-gray-600 mt-1">
+                {filteredAndSortedTransactions.length === transactions.length 
+                  ? `${transactions.length} transações encontradas`
+                  : `${filteredAndSortedTransactions.length} de ${transactions.length} transações`
+                }
+              </p>
             </div>
           </div>
           <div className="flex gap-3">
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${
-                showFilters 
-                  ? 'bg-blue-600 text-white' 
-                  : 'bg-white border-2 border-blue-600 text-blue-600 hover:bg-blue-50'
-              }`}
-            >
-              <Filter className="w-5 h-5" />
-              Filtros
-            </button>
             <button
               onClick={handleAddNew}
               className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors flex items-center gap-2"
@@ -408,99 +533,56 @@ export default function TransactionsPage() {
           </div>
         </div>
 
-        {/* Filtros */}
-        {showFilters && (
-          <div className="bg-white rounded-lg shadow-md p-6 mb-6 animate-fadeIn">
-            <h3 className="text-lg font-semibold mb-4">Filtros</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Data Inicial</label>
-                <input
-                  type="date"
-                  value={filters.startDate}
-                  onChange={(e) => setFilters({ ...filters, startDate: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  title="Data inicial do filtro"
-                  aria-label="Data inicial do filtro"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Data Final</label>
-                <input
-                  type="date"
-                  value={filters.endDate}
-                  onChange={(e) => setFilters({ ...filters, endDate: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  title="Data final do filtro"
-                  aria-label="Data final do filtro"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Categoria</label>
-                <select
-                  value={filters.categoryId}
-                  onChange={(e) => setFilters({ ...filters, categoryId: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  title="Filtrar por categoria"
-                >
-                  <option value="">Todas</option>
-                  {categories.filter(c => c.type === filters.type || filters.type === 'all').map((cat) => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.icon} {cat.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Conta</label>
-                <select
-                  value={filters.bankAccountId}
-                  onChange={(e) => setFilters({ ...filters, bankAccountId: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  title="Filtrar por conta bancária"
-                >
-                  <option value="">Todas</option>
-                  {bankAccounts.map((account) => (
-                    <option key={account.id} value={account.id}>
-                      {account.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Tipo</label>
-                <select
-                  value={filters.type}
-                  onChange={(e) => setFilters({ ...filters, type: e.target.value as any })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  title="Filtrar por tipo de transação"
-                >
-                  <option value="all">Todas</option>
-                  <option value="income">Receitas</option>
-                  <option value="expense">Despesas</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-                <select
-                  value={filters.status}
-                  onChange={(e) => setFilters({ ...filters, status: e.target.value as any })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  title="Filtrar por status"
-                >
-                  <option value="all">Todas</option>
-                  <option value="completed">Pagas</option>
-                  <option value="pending">Pendentes</option>
-                </select>
-              </div>
-            </div>
+        {/* Barra de filtros compacta */}
+        <div className="bg-white rounded-lg shadow-md p-4 mb-6 flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Calendar className="w-5 h-5 text-gray-500" />
+            <input
+              type="date"
+              value={filters.startDate}
+              onChange={(e) => setFilters({ ...filters, startDate: e.target.value })}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+              title="Data inicial"
+            />
+            <span className="text-gray-400">até</span>
+            <input
+              type="date"
+              value={filters.endDate}
+              onChange={(e) => setFilters({ ...filters, endDate: e.target.value })}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+              title="Data final"
+            />
           </div>
-        )}
+          
+          <div className="flex items-center gap-2">
+            <select
+              value={filters.type}
+              onChange={(e) => setFilters({ ...filters, type: e.target.value as any })}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+              title="Tipo"
+            >
+              <option value="all">Todos os tipos</option>
+              <option value="income">Receitas</option>
+              <option value="expense">Despesas</option>
+            </select>
+          </div>
+          
+          {/* Indicador de filtros ativos */}
+          {activeFiltersCount > 0 && (
+            <div className="flex items-center gap-2 ml-auto">
+              <span className="text-sm text-blue-600 font-medium">
+                {activeFiltersCount} filtro{activeFiltersCount > 1 ? 's' : ''} ativo{activeFiltersCount > 1 ? 's' : ''}
+              </span>
+              <button
+                onClick={clearAllColumnFilters}
+                className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors flex items-center gap-1"
+              >
+                <X className="w-4 h-4" />
+                Limpar
+              </button>
+            </div>
+          )}
+        </div>
 
         {/* Lista de Transações */}
         <div className="bg-white rounded-lg shadow-md overflow-hidden">
@@ -509,31 +591,424 @@ export default function TransactionsPage() {
               <table className="w-full">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Data
+                    <th 
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors select-none"
+                      onClick={() => handleSort('date')}
+                    >
+                      <div className="flex items-center gap-1">
+                        Data
+                        <SortIcon field="date" />
+                      </div>
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Descrição
+                    <th 
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors select-none"
+                      onClick={() => handleSort('description')}
+                    >
+                      <div className="flex items-center gap-1">
+                        Descrição
+                        <SortIcon field="description" />
+                      </div>
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Categoria
+                    
+                    {/* Categoria com filtro inline */}
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider relative">
+                      <div className="flex items-center gap-2">
+                        <div 
+                          className="flex items-center gap-1 cursor-pointer hover:text-gray-700"
+                          onClick={() => handleSort('category')}
+                        >
+                          Categoria
+                          <SortIcon field="category" />
+                        </div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActivePopover(activePopover === 'category' ? null : 'category');
+                            setPopoverSearch('');
+                          }}
+                          className={`p-1 rounded hover:bg-gray-200 transition-colors ${
+                            columnFilters.categories.length > 0 ? 'text-blue-600 bg-blue-100' : 'text-gray-400'
+                          }`}
+                          title="Filtrar categorias"
+                        >
+                          <Filter className="w-4 h-4" />
+                          {columnFilters.categories.length > 0 && (
+                            <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-600 text-white text-[10px] rounded-full flex items-center justify-center">
+                              {columnFilters.categories.length}
+                            </span>
+                          )}
+                        </button>
+                      </div>
+                      
+                      {/* Popover de filtro */}
+                      {activePopover === 'category' && (
+                        <div 
+                          ref={popoverRef}
+                          className="absolute top-full left-0 mt-1 w-64 bg-white rounded-lg shadow-xl border border-gray-200 z-50 animate-fadeIn"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <div className="p-3 border-b border-gray-100">
+                            <div className="relative">
+                              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                              <input
+                                type="text"
+                                placeholder="Buscar categoria..."
+                                value={popoverSearch}
+                                onChange={(e) => setPopoverSearch(e.target.value)}
+                                className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                autoFocus
+                              />
+                            </div>
+                          </div>
+                          <div className="max-h-48 overflow-y-auto p-2">
+                            {categories
+                              .filter(c => c.name.toLowerCase().includes(popoverSearch.toLowerCase()))
+                              .sort((a, b) => a.name.localeCompare(b.name))
+                              .map(cat => (
+                                <label
+                                  key={cat.id}
+                                  className="flex items-center gap-2 px-2 py-2 hover:bg-gray-50 rounded-lg cursor-pointer"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={columnFilters.categories.includes(cat.id)}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setColumnFilters(prev => ({
+                                          ...prev,
+                                          categories: [...prev.categories, cat.id]
+                                        }));
+                                      } else {
+                                        setColumnFilters(prev => ({
+                                          ...prev,
+                                          categories: prev.categories.filter(id => id !== cat.id)
+                                        }));
+                                      }
+                                    }}
+                                    className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                                  />
+                                  <span className="text-sm">{cat.icon}</span>
+                                  <span className="text-sm text-gray-700">{cat.name}</span>
+                                </label>
+                              ))}
+                            {categories.filter(c => c.name.toLowerCase().includes(popoverSearch.toLowerCase())).length === 0 && (
+                              <p className="text-sm text-gray-500 text-center py-2">Nenhuma categoria encontrada</p>
+                            )}
+                          </div>
+                          {columnFilters.categories.length > 0 && (
+                            <div className="p-2 border-t border-gray-100">
+                              <button
+                                onClick={() => setColumnFilters(prev => ({ ...prev, categories: [] }))}
+                                className="w-full px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              >
+                                Limpar seleção
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Conta
+                    
+                    {/* Conta com filtro inline */}
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider relative">
+                      <div className="flex items-center gap-2">
+                        <div 
+                          className="flex items-center gap-1 cursor-pointer hover:text-gray-700"
+                          onClick={() => handleSort('account')}
+                        >
+                          Conta
+                          <SortIcon field="account" />
+                        </div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActivePopover(activePopover === 'account' ? null : 'account');
+                            setPopoverSearch('');
+                          }}
+                          className={`p-1 rounded hover:bg-gray-200 transition-colors ${
+                            columnFilters.accounts.length > 0 ? 'text-blue-600 bg-blue-100' : 'text-gray-400'
+                          }`}
+                          title="Filtrar contas"
+                        >
+                          <Filter className="w-4 h-4" />
+                          {columnFilters.accounts.length > 0 && (
+                            <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-600 text-white text-[10px] rounded-full flex items-center justify-center">
+                              {columnFilters.accounts.length}
+                            </span>
+                          )}
+                        </button>
+                      </div>
+                      
+                      {/* Popover de filtro */}
+                      {activePopover === 'account' && (
+                        <div 
+                          ref={popoverRef}
+                          className="absolute top-full left-0 mt-1 w-64 bg-white rounded-lg shadow-xl border border-gray-200 z-50 animate-fadeIn"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <div className="p-3 border-b border-gray-100">
+                            <div className="relative">
+                              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                              <input
+                                type="text"
+                                placeholder="Buscar conta..."
+                                value={popoverSearch}
+                                onChange={(e) => setPopoverSearch(e.target.value)}
+                                className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                autoFocus
+                              />
+                            </div>
+                          </div>
+                          <div className="max-h-48 overflow-y-auto p-2">
+                            {bankAccounts
+                              .filter(acc => acc.name.toLowerCase().includes(popoverSearch.toLowerCase()))
+                              .sort((a, b) => a.name.localeCompare(b.name))
+                              .map(acc => (
+                                <label
+                                  key={acc.id}
+                                  className="flex items-center gap-2 px-2 py-2 hover:bg-gray-50 rounded-lg cursor-pointer"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={columnFilters.accounts.includes(acc.id)}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setColumnFilters(prev => ({
+                                          ...prev,
+                                          accounts: [...prev.accounts, acc.id]
+                                        }));
+                                      } else {
+                                        setColumnFilters(prev => ({
+                                          ...prev,
+                                          accounts: prev.accounts.filter(id => id !== acc.id)
+                                        }));
+                                      }
+                                    }}
+                                    className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                                  />
+                                  <span className="text-sm text-gray-700">{acc.name}</span>
+                                </label>
+                              ))}
+                            {bankAccounts.filter(acc => acc.name.toLowerCase().includes(popoverSearch.toLowerCase())).length === 0 && (
+                              <p className="text-sm text-gray-500 text-center py-2">Nenhuma conta encontrada</p>
+                            )}
+                          </div>
+                          {columnFilters.accounts.length > 0 && (
+                            <div className="p-2 border-t border-gray-100">
+                              <button
+                                onClick={() => setColumnFilters(prev => ({ ...prev, accounts: [] }))}
+                                className="w-full px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              >
+                                Limpar seleção
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Valor
+                    
+                    <th 
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors select-none"
+                      onClick={() => handleSort('amount')}
+                    >
+                      <div className="flex items-center gap-1">
+                        Valor
+                        <SortIcon field="amount" />
+                      </div>
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
+                    
+                    {/* Status com filtro inline */}
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider relative">
+                      <div className="flex items-center gap-2">
+                        <div 
+                          className="flex items-center gap-1 cursor-pointer hover:text-gray-700"
+                          onClick={() => handleSort('status')}
+                        >
+                          Status
+                          <SortIcon field="status" />
+                        </div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActivePopover(activePopover === 'status' ? null : 'status');
+                          }}
+                          className={`p-1 rounded hover:bg-gray-200 transition-colors ${
+                            columnFilters.statuses.length > 0 ? 'text-blue-600 bg-blue-100' : 'text-gray-400'
+                          }`}
+                          title="Filtrar status"
+                        >
+                          <Filter className="w-4 h-4" />
+                          {columnFilters.statuses.length > 0 && (
+                            <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-600 text-white text-[10px] rounded-full flex items-center justify-center">
+                              {columnFilters.statuses.length}
+                            </span>
+                          )}
+                        </button>
+                      </div>
+                      
+                      {/* Popover de filtro */}
+                      {activePopover === 'status' && (
+                        <div 
+                          ref={popoverRef}
+                          className="absolute top-full left-0 mt-1 w-48 bg-white rounded-lg shadow-xl border border-gray-200 z-50 animate-fadeIn"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <div className="p-2">
+                            <label className="flex items-center gap-2 px-2 py-2 hover:bg-gray-50 rounded-lg cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={columnFilters.statuses.includes('completed')}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setColumnFilters(prev => ({
+                                      ...prev,
+                                      statuses: [...prev.statuses, 'completed']
+                                    }));
+                                  } else {
+                                    setColumnFilters(prev => ({
+                                      ...prev,
+                                      statuses: prev.statuses.filter(s => s !== 'completed')
+                                    }));
+                                  }
+                                }}
+                                className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                              />
+                              <CheckCircle className="w-4 h-4 text-green-600" />
+                              <span className="text-sm text-gray-700">Pago</span>
+                            </label>
+                            <label className="flex items-center gap-2 px-2 py-2 hover:bg-gray-50 rounded-lg cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={columnFilters.statuses.includes('pending')}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setColumnFilters(prev => ({
+                                      ...prev,
+                                      statuses: [...prev.statuses, 'pending']
+                                    }));
+                                  } else {
+                                    setColumnFilters(prev => ({
+                                      ...prev,
+                                      statuses: prev.statuses.filter(s => s !== 'pending')
+                                    }));
+                                  }
+                                }}
+                                className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                              />
+                              <Clock className="w-4 h-4 text-yellow-600" />
+                              <span className="text-sm text-gray-700">Pendente</span>
+                            </label>
+                          </div>
+                          {columnFilters.statuses.length > 0 && (
+                            <div className="p-2 border-t border-gray-100">
+                              <button
+                                onClick={() => setColumnFilters(prev => ({ ...prev, statuses: [] }))}
+                                className="w-full px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              >
+                                Limpar seleção
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </th>
+                    
+                    {/* Meio de Pagamento com filtro inline */}
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider relative">
+                      <div className="flex items-center gap-2">
+                        <span>Pagamento</span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActivePopover(activePopover === 'paymentMethod' ? null : 'paymentMethod');
+                            setPopoverSearch('');
+                          }}
+                          className={`p-1 rounded hover:bg-gray-200 transition-colors ${
+                            columnFilters.paymentMethods.length > 0 ? 'text-blue-600 bg-blue-100' : 'text-gray-400'
+                          }`}
+                          title="Filtrar meio de pagamento"
+                        >
+                          <Filter className="w-4 h-4" />
+                          {columnFilters.paymentMethods.length > 0 && (
+                            <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-600 text-white text-[10px] rounded-full flex items-center justify-center">
+                              {columnFilters.paymentMethods.length}
+                            </span>
+                          )}
+                        </button>
+                      </div>
+                      
+                      {/* Popover de filtro */}
+                      {activePopover === 'paymentMethod' && (
+                        <div 
+                          ref={popoverRef}
+                          className="absolute top-full left-0 mt-1 w-56 bg-white rounded-lg shadow-xl border border-gray-200 z-50 animate-fadeIn"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <div className="p-2 border-b border-gray-100">
+                            <div className="relative">
+                              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                              <input
+                                type="text"
+                                placeholder="Buscar..."
+                                value={popoverSearch}
+                                onChange={(e) => setPopoverSearch(e.target.value)}
+                                className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                aria-label="Buscar meio de pagamento"
+                              />
+                            </div>
+                          </div>
+                          <div className="max-h-48 overflow-y-auto p-2">
+                            {uniquePaymentMethods
+                              .filter(pm => pm.toLowerCase().includes(popoverSearch.toLowerCase()))
+                              .map((pm) => (
+                                <label key={pm} className="flex items-center gap-2 px-2 py-2 hover:bg-gray-50 rounded-lg cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={columnFilters.paymentMethods.includes(pm)}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setColumnFilters(prev => ({
+                                          ...prev,
+                                          paymentMethods: [...prev.paymentMethods, pm]
+                                        }));
+                                      } else {
+                                        setColumnFilters(prev => ({
+                                          ...prev,
+                                          paymentMethods: prev.paymentMethods.filter(p => p !== pm)
+                                        }));
+                                      }
+                                    }}
+                                    className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                                  />
+                                  <CreditCard className="w-4 h-4 text-gray-500" />
+                                  <span className="text-sm text-gray-700 truncate">{pm}</span>
+                                </label>
+                              ))}
+                            {uniquePaymentMethods.filter(pm => pm.toLowerCase().includes(popoverSearch.toLowerCase())).length === 0 && (
+                              <p className="text-sm text-gray-500 text-center py-2">Nenhum encontrado</p>
+                            )}
+                          </div>
+                          {columnFilters.paymentMethods.length > 0 && (
+                            <div className="p-2 border-t border-gray-100">
+                              <button
+                                onClick={() => setColumnFilters(prev => ({ ...prev, paymentMethods: [] }))}
+                                className="w-full px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              >
+                                Limpar seleção
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </th>
+                    
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Ações
                     </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {transactions.map((transaction) => (
+                  {filteredAndSortedTransactions.map((transaction) => (
                     <tr key={transaction.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                         <div className="flex items-center gap-2">
@@ -587,8 +1062,8 @@ export default function TransactionsPage() {
                         {transaction.bankAccount?.name || 'Não informada'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold">
-                        <span className={transaction.category?.type === 'income' ? 'text-green-600' : 'text-red-600'}>
-                          {transaction.category?.type === 'income' ? '+' : '-'} {formatCurrency(Number(transaction.amount))}
+                        <span className={Number(transaction.amount) >= 0 ? 'text-green-600' : 'text-red-600'}>
+                          {Number(transaction.amount) >= 0 ? '' : '- '}{formatCurrency(Math.abs(Number(transaction.amount)))}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
@@ -612,6 +1087,12 @@ export default function TransactionsPage() {
                             </>
                           )}
                         </button>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                        <div className="flex items-center gap-2">
+                          <CreditCard className="w-4 h-4 text-gray-400" />
+                          <span>{transaction.paymentMethod?.name || 'Não informado'}</span>
+                        </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <div className="flex justify-end gap-2">

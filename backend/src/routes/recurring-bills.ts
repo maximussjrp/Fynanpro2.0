@@ -79,7 +79,7 @@ router.get('/templates', async (req: AuthRequest, res: Response) => {
     });
     
   } catch (error: any) {
-    console.error('Error fetching templates:', error);
+    log.error('Error fetching templates:', { error: error.message });
     return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao buscar templates', 500);
   }
 });
@@ -174,8 +174,8 @@ router.get('/', async (req: AuthRequest, res: Response) => {
         cancelled: recurringBills.filter(b => b.status === 'cancelled').length,
       },
     });
-  } catch (error) {
-    console.error('Get recurring bills error:', error);
+  } catch (error: any) {
+    log.error('Get recurring bills error:', { error: error.message });
     return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao buscar contas fixas', 500);
   }
 });
@@ -256,8 +256,8 @@ router.get('/occurrences', async (req: AuthRequest, res: Response) => {
       occurrences,
       total: occurrences.length,
     });
-  } catch (error) {
-    console.error('Get occurrences error:', error);
+  } catch (error: any) {
+    log.error('Get occurrences error:', { error: error.message });
     return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao buscar ocorrências', 500);
   }
 });
@@ -293,8 +293,8 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
     }
 
     return successResponse(res, recurringBill);
-  } catch (error) {
-    console.error('Get recurring bill error:', error);
+  } catch (error: any) {
+    log.error('Get recurring bill error:', { error: error.message });
     return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao buscar conta fixa', 500);
   }
 });
@@ -386,8 +386,8 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     }
 
     return successResponse(res, recurringBill, 201);
-  } catch (error) {
-    console.error('Create recurring bill error:', error);
+  } catch (error: any) {
+    log.error('Create recurring bill error:', { error: error.message });
     return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao criar conta fixa', 500);
   }
 });
@@ -466,8 +466,8 @@ router.post('/activate-templates', async (req: AuthRequest, res: Response) => {
       failed: errors.length,
     }, 201);
     
-  } catch (error) {
-    console.error('Error activating templates:', error);
+  } catch (error: any) {
+    log.error('Error activating templates:', { error: error.message });
     return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao ativar templates', 500);
   }
 });
@@ -544,8 +544,8 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
     });
 
     return successResponse(res, updated);
-  } catch (error) {
-    console.error('Update recurring bill error:', error);
+  } catch (error: any) {
+    log.error('Update recurring bill error:', { error: error.message });
     return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao atualizar conta fixa', 500);
   }
 });
@@ -579,8 +579,8 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
     });
 
     return successResponse(res, { message: 'Conta fixa excluída com sucesso' });
-  } catch (error) {
-    console.error('Delete recurring bill error:', error);
+  } catch (error: any) {
+    log.error('Delete recurring bill error:', { error: error.message });
     return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao excluir conta fixa', 500);
   }
 });

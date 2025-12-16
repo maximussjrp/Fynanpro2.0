@@ -60,7 +60,10 @@ export default function RecurringBillCard({
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('pt-BR', {
+    // Parse date string as local date to avoid timezone issues
+    const dateOnly = dateString.split('T')[0];
+    const [year, month, day] = dateOnly.split('-').map(Number);
+    return new Date(year, month - 1, day).toLocaleDateString('pt-BR', {
       day: '2-digit',
       month: 'short',
     });

@@ -116,14 +116,16 @@ export default function Dashboard() {
   // Filtros de período
   const [startDate, setStartDate] = useState(() => {
     const date = new Date();
-    date.setDate(1); // Primeiro dia do mês
-    return date.toISOString().split('T')[0];
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    return `${year}-${month}-01`; // Primeiro dia do mês
   });
   const [endDate, setEndDate] = useState(() => {
     const date = new Date();
-    date.setMonth(date.getMonth() + 1);
-    date.setDate(0); // Último dia do mês
-    return date.toISOString().split('T')[0];
+    const year = date.getFullYear();
+    const month = date.getMonth() + 1;
+    const lastDay = new Date(year, month, 0).getDate(); // Último dia do mês
+    return `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
   });
 
   useEffect(() => {
@@ -363,7 +365,11 @@ export default function Dashboard() {
           <div className="flex items-center gap-3 text-sm text-gray-600 font-inter">
             <Calendar className="w-4 h-4" />
             <span>
-              {new Date(startDate).toLocaleDateString('pt-BR')} - {new Date(endDate).toLocaleDateString('pt-BR')}
+              {(() => {
+                const [sy, sm, sd] = startDate.split('-').map(Number);
+                const [ey, em, ed] = endDate.split('-').map(Number);
+                return `${new Date(sy, sm - 1, sd).toLocaleDateString('pt-BR')} - ${new Date(ey, em - 1, ed).toLocaleDateString('pt-BR')}`;
+              })()}
             </span>
           </div>
           <button
@@ -608,6 +614,95 @@ export default function Dashboard() {
           ) : (
             <p className="text-[#4F4F4F] text-center py-8 font-inter">Nenhum dado disponível para o período</p>
           )}
+        </div>
+
+        {/* 5. Contas Bancárias e Meios de Pagamento */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
+          {/* Contas Bancárias */}
+          <div className="bg-white rounded-xl shadow-sm border p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Wallet className="text-blue-600" size={20} />
+                <h3 className="text-lg font-semibold text-[#1A1A1A] font-poppins">Contas Bancárias</h3>
+              </div>
+              <button
+                onClick={() => setShowBankAccountModal(true)}
+                className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium flex items-center gap-1"
+              >
+                <span>+</span> Nova Conta
+              </button>
+            </div>
+            {bankAccounts.length > 0 ? (
+              <div className="space-y-3">
+                {bankAccounts.map(account => (
+                  <div key={account.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div>
+                      <p className="font-medium text-[#1A1A1A]">{account.name}</p>
+                      <p className="text-xs text-gray-500">{account.institution || account.type}</p>
+                    </div>
+                    <p className={`font-semibold ${account.currentBalance >= 0 ? 'text-[#22C39A]' : 'text-[#E74C3C]'}`}>
+                      {formatCurrency(account.currentBalance)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <Wallet className="mx-auto text-gray-300 mb-2" size={40} />
+                <p className="text-gray-500 text-sm">Nenhuma conta cadastrada</p>
+                <button
+                  onClick={() => setShowBankAccountModal(true)}
+                  className="mt-3 text-blue-600 text-sm hover:underline"
+                >
+                  Adicionar primeira conta
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Meios de Pagamento */}
+          <div className="bg-white rounded-xl shadow-sm border p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <CreditCard className="text-purple-600" size={20} />
+                <h3 className="text-lg font-semibold text-[#1A1A1A] font-poppins">Meios de Pagamento</h3>
+              </div>
+              <button
+                onClick={() => setShowPaymentMethodModal(true)}
+                className="px-3 py-1.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm font-medium flex items-center gap-1"
+              >
+                <span>+</span> Novo Método
+              </button>
+            </div>
+            {paymentMethods.length > 0 ? (
+              <div className="space-y-3">
+                {paymentMethods.map(method => (
+                  <div key={method.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
+                        <CreditCard className="text-purple-600" size={16} />
+                      </div>
+                      <div>
+                        <p className="font-medium text-[#1A1A1A]">{method.name}</p>
+                        <p className="text-xs text-gray-500 capitalize">{method.type.replace('_', ' ')}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <CreditCard className="mx-auto text-gray-300 mb-2" size={40} />
+                <p className="text-gray-500 text-sm">Nenhum método cadastrado</p>
+                <button
+                  onClick={() => setShowPaymentMethodModal(true)}
+                  className="mt-3 text-purple-600 text-sm hover:underline"
+                >
+                  Adicionar primeiro método
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
       {/* Modal de Período */}

@@ -80,6 +80,12 @@ export default function TransactionModal({
   const [categorySearch, setCategorySearch] = useState('');
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
 
+  // Estados para criação rápida
+  const [showQuickBankAccount, setShowQuickBankAccount] = useState(false);
+  const [showQuickPaymentMethod, setShowQuickPaymentMethod] = useState(false);
+  const [quickBankAccount, setQuickBankAccount] = useState({ name: '', type: 'bank', institution: '' });
+  const [quickPaymentMethod, setQuickPaymentMethod] = useState({ name: '', type: 'pix' });
+
   useEffect(() => {
     if (isOpen) {
       loadFormData();
@@ -131,6 +137,60 @@ export default function TransactionModal({
     } catch (error: any) {
       console.error('Erro ao carregar dados do formulário:', error);
       toast.error('Erro ao carregar dados do formulário');
+    }
+  };
+
+  // Função para criar conta bancária rapidamente
+  const handleQuickCreateBankAccount = async () => {
+    if (!quickBankAccount.name || !quickBankAccount.institution) {
+      toast.error('Preencha nome e instituição');
+      return;
+    }
+    try {
+      const response = await api.post('/bank-accounts', {
+        name: quickBankAccount.name,
+        type: quickBankAccount.type,
+        institution: quickBankAccount.institution,
+        initialBalance: 0,
+      });
+      const newAccount = response.data?.data;
+      if (!newAccount || !newAccount.id) {
+        toast.error('Erro: resposta inválida da API');
+        return;
+      }
+      setBankAccounts(prev => [...prev, newAccount]);
+      setFormData(prev => ({ ...prev, bankAccountId: newAccount.id }));
+      setShowQuickBankAccount(false);
+      setQuickBankAccount({ name: '', type: 'bank', institution: '' });
+      toast.success('Conta criada com sucesso!');
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Erro ao criar conta');
+    }
+  };
+
+  // Função para criar meio de pagamento rapidamente
+  const handleQuickCreatePaymentMethod = async () => {
+    if (!quickPaymentMethod.name) {
+      toast.error('Preencha o nome do método');
+      return;
+    }
+    try {
+      const response = await api.post('/payment-methods', {
+        name: quickPaymentMethod.name,
+        type: quickPaymentMethod.type,
+      });
+      const newMethod = response.data?.data;
+      if (!newMethod || !newMethod.id) {
+        toast.error('Erro: resposta inválida da API');
+        return;
+      }
+      setPaymentMethods(prev => [...prev, newMethod]);
+      setFormData(prev => ({ ...prev, paymentMethodId: newMethod.id }));
+      setShowQuickPaymentMethod(false);
+      setQuickPaymentMethod({ name: '', type: 'pix' });
+      toast.success('Método criado com sucesso!');
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Erro ao criar método');
     }
   };
 
@@ -352,9 +412,66 @@ export default function TransactionModal({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {/* Conta Bancária */}
             <div>
-              <label className="block text-sm font-semibold text-[#1A1A1A] mb-2">
-                Conta Bancária *
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm font-semibold text-[#1A1A1A]">
+                  Conta Bancária *
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowQuickBankAccount(!showQuickBankAccount)}
+                  className="text-xs text-[#1C6DD0] hover:underline flex items-center gap-1"
+                >
+                  <Plus size={12} /> Nova Conta
+                </button>
+              </div>
+              
+              {showQuickBankAccount && (
+                <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-2">
+                  <input
+                    type="text"
+                    placeholder="Nome da conta"
+                    value={quickBankAccount.name}
+                    onChange={(e) => setQuickBankAccount({ ...quickBankAccount, name: e.target.value })}
+                    className="w-full px-3 py-2 text-sm border rounded-lg"
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <select
+                      value={quickBankAccount.type}
+                      onChange={(e) => setQuickBankAccount({ ...quickBankAccount, type: e.target.value })}
+                      className="px-3 py-2 text-sm border rounded-lg"
+                      title="Tipo de conta"
+                    >
+                      <option value="bank">Conta Bancária</option>
+                      <option value="wallet">Carteira Digital</option>
+                      <option value="investment">Investimento</option>
+                    </select>
+                    <input
+                      type="text"
+                      placeholder="Instituição"
+                      value={quickBankAccount.institution}
+                      onChange={(e) => setQuickBankAccount({ ...quickBankAccount, institution: e.target.value })}
+                      className="px-3 py-2 text-sm border rounded-lg"
+                    />
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowQuickBankAccount(false)}
+                      className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleQuickCreateBankAccount}
+                      className="px-3 py-1.5 text-sm bg-[#1C6DD0] text-white rounded hover:bg-[#1557A8]"
+                    >
+                      Criar
+                    </button>
+                  </div>
+                </div>
+              )}
+              
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                   <Wallet className="w-5 h-5 text-[#1C6DD0]" />
@@ -379,9 +496,48 @@ export default function TransactionModal({
 
             {/* Meio de Pagamento (opcional) */}
             <div>
-              <label className="block text-sm font-semibold text-[#1A1A1A] mb-2">
-                Meio de Pagamento <span className="text-gray-400 font-normal">(opcional)</span>
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm font-semibold text-[#1A1A1A]">
+                  Meio de Pagamento <span className="text-gray-400 font-normal">(opcional)</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowQuickPaymentMethod(!showQuickPaymentMethod)}
+                  className="text-xs text-[#1C6DD0] hover:underline flex items-center gap-1"
+                >
+                  <Plus size={12} /> Novo Método
+                </button>
+              </div>
+              
+              {showQuickPaymentMethod && (
+                <div className="mb-3 p-3 bg-purple-50 border border-purple-200 rounded-lg space-y-2">
+                  <input
+                    type="text"
+                    placeholder="Ex: PIX Nubank, Cartão Inter, Dinheiro..."
+                    value={quickPaymentMethod.name}
+                    onChange={(e) => setQuickPaymentMethod({ ...quickPaymentMethod, name: e.target.value })}
+                    className="w-full px-3 py-2 text-sm border rounded-lg"
+                    aria-label="Nome do meio de pagamento"
+                  />
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowQuickPaymentMethod(false)}
+                      className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleQuickCreatePaymentMethod}
+                      className="px-3 py-1.5 text-sm bg-purple-600 text-white rounded hover:bg-purple-700"
+                    >
+                      Criar
+                    </button>
+                  </div>
+                </div>
+              )}
+              
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                   <CreditCard className="w-5 h-5 text-[#1C6DD0]" />

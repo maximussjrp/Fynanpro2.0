@@ -132,21 +132,12 @@ export class AuthService {
           },
         });
 
-        // Importa categorias padrão
-        const { defaultCategories } = await import('../utils/default-categories');
-        await tx.category.createMany({
-          data: defaultCategories.map((cat: any) => ({
-            tenantId: tenant.id,
-            name: cat.name,
-            type: cat.type,
-            icon: cat.icon,
-            color: cat.color,
-            parentId: null,
-          })),
-        });
-
         return { user, tenant };
       });
+
+      // Cria categorias padrão FORA da transação (usa prisma principal)
+      const { createDefaultCategories } = await import('../utils/default-categories');
+      await createDefaultCategories(result.tenant.id);
 
       // Gera tokens
       const tokens = await this.generateTokenPair(result.user.id, result.user.email, result.tenant.id);

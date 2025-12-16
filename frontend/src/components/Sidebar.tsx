@@ -7,7 +7,6 @@ import {
   Receipt,
   Wallet,
   Tag,
-  CreditCard,
   Repeat,
   PieChart,
   Calendar,
@@ -17,7 +16,8 @@ import {
   TrendingUp,
   Settings,
   LogOut,
-  Bell
+  Bell,
+  Upload
 } from 'lucide-react';
 import Logo from './Logo';
 import { logout } from '@/lib/api';
@@ -39,12 +39,12 @@ const menuItems: MenuItem[] = [
   { icon: Receipt, label: 'Transações', href: '/dashboard/transactions' },
   { icon: Wallet, label: 'Contas Bancárias', href: '/dashboard/bank-accounts' },
   { icon: Tag, label: 'Categorias', href: '/dashboard/categories' },
-  { icon: CreditCard, label: 'Meios de Pagamento', href: '/dashboard/payment-methods' },
   { icon: Repeat, label: 'Contas Recorrentes', href: '/dashboard/recurring-bills' },
   { icon: PieChart, label: 'Parcelamentos', href: '/dashboard/installments' },
   { icon: TrendingUp, label: 'Orçamentos', href: '/dashboard/budgets' },
   { icon: Calendar, label: 'Calendário', href: '/dashboard/calendar' },
   { icon: FileText, label: 'Relatórios', href: '/dashboard/reports' },
+  { icon: Upload, label: 'Importar CSV', href: '/dashboard/imports' },
 ];
 
 export default function Sidebar({ className = '' }: SidebarProps) {

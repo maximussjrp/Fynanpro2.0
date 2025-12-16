@@ -137,6 +137,7 @@ model BankAccount {
   paymentMethods  PaymentMethod[]
   recurringBills  RecurringBill[]
   installments    Installment[]
+  importHistory   ImportHistory[]
 
   @@index([tenantId, isActive])
   @@index([tenantId, type])
@@ -218,6 +219,9 @@ model Transaction {
   originalAmount      Decimal?  @db.Decimal(15, 2) // Valor total original
   hasDownPayment      Boolean   @default(false) // Tem entrada? (1+X)
   downPaymentAmount   Decimal?  @db.Decimal(15, 2) // Valor da entrada
+  
+  // Campo para importação
+  importedFrom        String?   // Nome do arquivo que originou a transação
 
   // Self-relation para hierarquia
   parent          Transaction?  @relation("TransactionChildren", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -452,6 +456,24 @@ model Import {
   tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, status])
+}
+
+model ImportHistory {
+  id              String    @id @default(uuid())
+  tenantId        String
+  userId          String
+  fileName        String
+  fileType        String    // csv, ofx
+  bankAccountId   String?
+  totalImported   Int       @default(0)
+  totalSkipped    Int       @default(0)
+  totalDuplicates Int       @default(0)
+  status          String    @default("completed") // completed, partial, failed, undone
+  createdAt       DateTime  @default(now())
+
+  bankAccount     BankAccount? @relation(fields: [bankAccountId], references: [id])
+
+  @@index([tenantId, createdAt])
 }
 
 // ==================== FILTROS SALVOS ====================

@@ -398,7 +398,7 @@ router.post('/transfer/execute', async (req: AuthRequest, res: Response) => {
     // Todas as operações abaixo são executadas como uma única transação.
     // Se qualquer uma falhar, TODAS são revertidas automaticamente.
     const result = await prisma.$transaction(async (tx) => {
-      // 1. Criar transação de SAÍDA (da conta origem)
+      // 1. Criar transação de SAÍDA (da conta origem) - valor NEGATIVO
       const outTransaction = await tx.transaction.create({
         data: {
           tenantId,
@@ -406,7 +406,7 @@ router.post('/transfer/execute', async (req: AuthRequest, res: Response) => {
           type: 'transfer',
           bankAccountId: fromAccountId,
           destinationAccountId: toAccountId,
-          amount,
+          amount: -Math.abs(amount), // Valor negativo para saída
           description: transferDescription,
           transactionDate: transferDate,
           status: 'completed',
@@ -414,7 +414,7 @@ router.post('/transfer/execute', async (req: AuthRequest, res: Response) => {
         },
       });
 
-      // 2. Criar transação de ENTRADA (na conta destino)
+      // 2. Criar transação de ENTRADA (na conta destino) - valor POSITIVO
       const inTransaction = await tx.transaction.create({
         data: {
           tenantId,
@@ -422,7 +422,7 @@ router.post('/transfer/execute', async (req: AuthRequest, res: Response) => {
           type: 'transfer',
           bankAccountId: toAccountId,
           destinationAccountId: fromAccountId,
-          amount,
+          amount: Math.abs(amount), // Valor positivo para entrada
           description: transferDescription,
           transactionDate: transferDate,
           status: 'completed',

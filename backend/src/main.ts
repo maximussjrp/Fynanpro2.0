@@ -14,6 +14,9 @@ import installmentRoutes from './routes/installments';
 import budgetRoutes from './routes/budgets';
 import reportRoutes from './routes/reports';
 import calendarRoutes from './routes/calendar';
+import notificationRoutes from './routes/notifications';
+import importRoutes from './routes/import';
+import chatbotRoutes from './routes/chatbot';
 import { createDefaultCategories } from './utils/default-categories';
 import { env } from './config/env';
 import { swaggerSpec } from './config/swagger';
@@ -182,6 +185,15 @@ apiRouter.use('/reports', reportRoutes);
 
 // Calendar routes
 apiRouter.use('/calendar', calendarRoutes);
+
+// Notifications routes
+apiRouter.use('/notifications', notificationRoutes);
+
+// Imports routes (CSV, OFX, etc)
+apiRouter.use('/import', importRoutes);
+
+// Chatbot routes (Isis)
+apiRouter.use('/chatbot', chatbotRoutes);
 
 // Auth routes com rate limiting
 

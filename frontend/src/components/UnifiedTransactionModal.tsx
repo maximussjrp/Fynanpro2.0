@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import { 
   X, DollarSign, Calendar, Tag, CreditCard, Wallet,
-  Repeat, CreditCard as CardIcon, ArrowRight, RefreshCw
+  Repeat, CreditCard as CardIcon, ArrowRight, RefreshCw,
+  Plus
 } from 'lucide-react';
 import api from '@/lib/api';
 import { toast } from 'sonner';
@@ -108,6 +109,12 @@ export default function UnifiedTransactionModal({
   const [categorySearch, setCategorySearch] = useState('');
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
 
+  // Estados para criação rápida de conta bancária e meio de pagamento
+  const [showQuickBankAccount, setShowQuickBankAccount] = useState(false);
+  const [showQuickPaymentMethod, setShowQuickPaymentMethod] = useState(false);
+  const [quickBankAccount, setQuickBankAccount] = useState({ name: '', type: 'bank', institution: '' });
+  const [quickPaymentMethod, setQuickPaymentMethod] = useState({ name: '', type: 'pix', lastFourDigits: '' });
+
   useEffect(() => {
     if (isOpen) {
       loadFormData();
@@ -164,6 +171,77 @@ export default function UnifiedTransactionModal({
     }
   };
 
+  // Função para criar conta bancária rapidamente
+  const handleQuickCreateBankAccount = async () => {
+    if (!quickBankAccount.name || !quickBankAccount.institution) {
+      toast.error('Preencha nome e instituição');
+      return;
+    }
+    
+    try {
+      const response = await api.post('/bank-accounts', {
+        name: quickBankAccount.name,
+        type: quickBankAccount.type,
+        institution: quickBankAccount.institution,
+        initialBalance: 0,
+      });
+      
+      const newAccount = response.data?.data;
+      if (!newAccount || !newAccount.id) {
+        toast.error('Erro: resposta inválida da API');
+        return;
+      }
+      setBankAccounts(prev => [...prev, newAccount]);
+      setFormData(prev => ({ ...prev, bankAccountId: newAccount.id }));
+      setShowQuickBankAccount(false);
+      setQuickBankAccount({ name: '', type: 'bank', institution: '' });
+      toast.success('Conta criada com sucesso!');
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Erro ao criar conta');
+    }
+  };
+
+  // Função para criar meio de pagamento rapidamente
+  const handleQuickCreatePaymentMethod = async () => {
+    if (!quickPaymentMethod.name) {
+      toast.error('Preencha o nome do método');
+      return;
+    }
+    
+    try {
+      const payload: any = {
+        name: quickPaymentMethod.name,
+        type: quickPaymentMethod.type,
+      };
+      
+      // Adicionar finais do cartão se informado
+      if (quickPaymentMethod.lastFourDigits && quickPaymentMethod.lastFourDigits.trim()) {
+        payload.lastFourDigits = quickPaymentMethod.lastFourDigits.trim();
+      }
+      
+      console.log('🔵 Criando meio de pagamento:', payload);
+      const response = await api.post('/payment-methods', payload);
+      console.log('✅ Resposta da API:', response.data);
+      
+      const newMethod = response.data?.data || response.data;
+      if (!newMethod || !newMethod.id) {
+        console.error('❌ Resposta inválida:', response.data);
+        toast.error('Erro: resposta inválida da API');
+        return;
+      }
+      
+      console.log('✅ Método criado:', newMethod);
+      setPaymentMethods(prev => [...prev, newMethod]);
+      setFormData(prev => ({ ...prev, paymentMethodId: newMethod.id }));
+      setShowQuickPaymentMethod(false);
+      setQuickPaymentMethod({ name: '', type: 'pix', lastFourDigits: '' });
+      toast.success('Método criado com sucesso!');
+    } catch (error: any) {
+      console.error('❌ Erro ao criar método:', error);
+      toast.error(error.response?.data?.message || 'Erro ao criar método');
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -191,8 +269,8 @@ export default function UnifiedTransactionModal({
         amount: parseFloat(formData.amount.replace(',', '.')),
         description: formData.description,
         transactionDate: formData.transactionDate,
-        categoryId: formData.categoryId,
-        bankAccountId: formData.bankAccountId,
+        categoryId: formData.categoryId || undefined,
+        bankAccountId: formData.bankAccountId || undefined,
         paymentMethodId: formData.paymentMethodId || undefined,
         status: formData.status,
         notes: formData.notes || undefined,
@@ -208,7 +286,7 @@ export default function UnifiedTransactionModal({
           transactionType: 'recurring',
           frequency: recurringData.frequency,
           frequencyInterval: recurringData.frequencyInterval,
-          totalInstallments: recurringData.hasEndDate && recurringData.totalOccurrences 
+          totalOccurrences: recurringData.hasEndDate && recurringData.totalOccurrences 
             ? recurringData.totalOccurrences 
             : undefined,
         };
@@ -225,6 +303,7 @@ export default function UnifiedTransactionModal({
         };
       }
 
+      console.log('📤 Enviando payload:', { endpoint, payload });
       const response = await api.post(endpoint, payload);
 
       if (transactionType === 'recurring') {
@@ -663,9 +742,66 @@ export default function UnifiedTransactionModal({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {/* Conta Bancária */}
             <div>
-              <label className="block text-sm font-semibold text-[#1A1A1A] mb-2">
-                Conta Bancária *
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm font-semibold text-[#1A1A1A]">
+                  Conta Bancária *
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowQuickBankAccount(!showQuickBankAccount)}
+                  className="text-xs text-[#1C6DD0] hover:underline flex items-center gap-1"
+                >
+                  <Plus size={12} /> Nova Conta
+                </button>
+              </div>
+              
+              {showQuickBankAccount && (
+                <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-2">
+                  <input
+                    type="text"
+                    placeholder="Nome da conta"
+                    value={quickBankAccount.name}
+                    onChange={(e) => setQuickBankAccount({ ...quickBankAccount, name: e.target.value })}
+                    className="w-full px-3 py-2 text-sm border rounded-lg"
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <select
+                      value={quickBankAccount.type}
+                      onChange={(e) => setQuickBankAccount({ ...quickBankAccount, type: e.target.value })}
+                      className="px-3 py-2 text-sm border rounded-lg"
+                      title="Tipo de conta"
+                    >
+                      <option value="bank">Conta Bancária</option>
+                      <option value="wallet">Carteira Digital</option>
+                      <option value="investment">Investimento</option>
+                    </select>
+                    <input
+                      type="text"
+                      placeholder="Instituição"
+                      value={quickBankAccount.institution}
+                      onChange={(e) => setQuickBankAccount({ ...quickBankAccount, institution: e.target.value })}
+                      className="px-3 py-2 text-sm border rounded-lg"
+                    />
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowQuickBankAccount(false)}
+                      className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleQuickCreateBankAccount}
+                      className="px-3 py-1.5 text-sm bg-[#1C6DD0] text-white rounded hover:bg-[#1557A8]"
+                    >
+                      Criar
+                    </button>
+                  </div>
+                </div>
+              )}
+              
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                   <Wallet className="w-5 h-5 text-[#1C6DD0]" />
@@ -689,9 +825,48 @@ export default function UnifiedTransactionModal({
 
             {/* Meio de Pagamento */}
             <div>
-              <label className="block text-sm font-semibold text-[#1A1A1A] mb-2">
-                Meio de Pagamento <span className="text-gray-400 font-normal">(opcional)</span>
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm font-semibold text-[#1A1A1A]">
+                  Meio de Pagamento <span className="text-gray-400 font-normal">(opcional)</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowQuickPaymentMethod(!showQuickPaymentMethod)}
+                  className="text-xs text-[#1C6DD0] hover:underline flex items-center gap-1"
+                >
+                  <Plus size={12} /> Novo Método
+                </button>
+              </div>
+              
+              {showQuickPaymentMethod && (
+                <div className="mb-3 p-3 bg-purple-50 border border-purple-200 rounded-lg space-y-2">
+                  <input
+                    type="text"
+                    placeholder="Ex: PIX Nubank, Cartão Inter, Dinheiro..."
+                    value={quickPaymentMethod.name}
+                    onChange={(e) => setQuickPaymentMethod({ ...quickPaymentMethod, name: e.target.value })}
+                    className="w-full px-3 py-2 text-sm border rounded-lg"
+                    aria-label="Nome do meio de pagamento"
+                  />
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowQuickPaymentMethod(false)}
+                      className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleQuickCreatePaymentMethod}
+                      className="px-3 py-1.5 text-sm bg-purple-600 text-white rounded hover:bg-purple-700"
+                    >
+                      Criar
+                    </button>
+                  </div>
+                </div>
+              )}
+              
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                   <CreditCard className="w-5 h-5 text-[#1C6DD0]" />

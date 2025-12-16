@@ -277,19 +277,22 @@ export default function CalendarPage() {
                       {day}
                     </div>
                     <div className="flex-1 overflow-hidden">
-                      {dayEvents.slice(0, 2).map(event => (
+                      {dayEvents.slice(0, 2).map(event => {
+                        const isPositive = Number(event.amount) >= 0;
+                        return (
                         <div
                           key={event.id}
                           className={`text-xs px-1 py-0.5 rounded mb-1 truncate ${
-                            event.type === 'income'
+                            isPositive
                               ? 'bg-green-100 text-green-700'
                               : 'bg-red-100 text-red-700'
                           }`}
-                          title={`${event.title} - ${formatCurrency(event.amount)}`}
+                          title={`${event.title} - ${formatCurrency(Math.abs(Number(event.amount)))}`}
                         >
-                          {formatCurrency(event.amount)}
+                          {isPositive ? '' : '-'}{formatCurrency(Math.abs(Number(event.amount)))}
                         </div>
-                      ))}
+                        );
+                      })}
                       {dayEvents.length > 2 && (
                         <div className="text-xs text-gray-500">
                           +{dayEvents.length - 2} mais

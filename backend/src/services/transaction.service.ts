@@ -7,6 +7,28 @@ import { log } from '../utils/logger';
 import { CreateTransactionDTO, UpdateTransactionDTO, TransactionFiltersDTO } from '../dtos/transaction.dto';
 import { cacheService, CacheNamespace } from './cache.service';
 
+/**
+ * Helper para converter string de data (YYYY-MM-DD) para Date local
+ * Evita problema de timezone onde new Date('2024-12-13') interpreta como UTC
+ * e resulta em 2024-12-12 21:00:00 no horário de Brasília
+ */
+function parseLocalDate(dateInput: string | Date | undefined | null): Date {
+  if (!dateInput) {
+    return new Date();
+  }
+  
+  if (dateInput instanceof Date) {
+    return dateInput;
+  }
+  
+  // Se for string no formato YYYY-MM-DD ou YYYY-MM-DDTHH:MM:SS
+  const dateStr = dateInput.split('T')[0];
+  const [year, month, day] = dateStr.split('-').map(Number);
+  
+  // Criar data com meio-dia local para evitar problema de timezone
+  return new Date(year, month - 1, day, 12, 0, 0);
+}
+
 // Interfaces
 interface TransactionSummary {
   totalIncome: number;
@@ -257,7 +279,7 @@ export class TransactionService {
       }
 
       // Determine status based on date
-      const transactionDate = new Date(data.transactionDate);
+      const transactionDate = parseLocalDate(data.transactionDate);
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
@@ -453,7 +475,7 @@ export class TransactionService {
             paymentMethodId: data.paymentMethodId !== undefined ? data.paymentMethodId : existingTransaction.paymentMethodId,
             amount: data.amount !== undefined ? data.amount : existingTransaction.amount,
             description: data.description !== undefined ? data.description : existingTransaction.description,
-            transactionDate: data.transactionDate ? new Date(data.transactionDate) : existingTransaction.transactionDate,
+            transactionDate: data.transactionDate ? parseLocalDate(data.transactionDate) : existingTransaction.transactionDate,
             status: data.status !== undefined ? data.status : existingTransaction.status,
             notes: data.notes !== undefined ? data.notes : existingTransaction.notes,
             tags: data.tags !== undefined ? data.tags : existingTransaction.tags,
@@ -843,12 +865,15 @@ export class TransactionService {
         throw new Error('Frequência é obrigatória para transações recorrentes');
       }
 
-      const startDate = data.transactionDate ? new Date(data.transactionDate) : new Date();
-      const nextDueDate = this.calculateNextDueDate(startDate, data.frequency, data.frequencyInterval || 1);
+      // Usar parseLocalDate para evitar problema de timezone
+      const startDate = parseLocalDate(data.transactionDate);
+      
+      const frequency = data.frequency || 'monthly';
+      const nextDueDate = this.calculateNextDueDate(startDate, frequency, data.frequencyInterval || 1);
 
       // Criar transação pai (template)
       const result = await prisma.$transaction(async (tx) => {
-        // Criar transação pai
+        // Criar transação pai (template invisível - marcado como deletado)
         const parentTransaction = await tx.transaction.create({
           data: {
             tenantId,
@@ -865,10 +890,10 @@ export class TransactionService {
             status: 'scheduled', // Pai sempre fica como template
             frequency: data.frequency,
             frequencyInterval: data.frequencyInterval || 1,
-            totalOccurrences: data.totalInstallments || null, // null = infinito
+            totalOccurrences: data.totalOccurrences || null, // null = infinito
             startDate: startDate,
-            endDate: data.totalInstallments && data.frequency
-              ? this.calculateEndDate(startDate, data.frequency, data.frequencyInterval || 1, data.totalInstallments)
+            endDate: data.totalOccurrences && data.frequency
+              ? this.calculateEndDate(startDate, data.frequency, data.frequencyInterval || 1, data.totalOccurrences)
               : null,
             nextDueDate: nextDueDate,
             alertDaysBefore: 3,
@@ -877,6 +902,7 @@ export class TransactionService {
             isFixed: true,
             notes: data.notes || null,
             tags: data.tags || null,
+            deletedAt: new Date(), // Marcar como deletado para não aparecer no histórico
           },
         });
 
@@ -895,7 +921,7 @@ export class TransactionService {
             description: data.description,
             transactionDate: startDate,
             dueDate: startDate,
-            status: 'pending',
+            status: data.status || 'pending',
             frequency: data.frequency,
             occurrenceNumber: 1,
             isRecurring: true,
@@ -910,18 +936,61 @@ export class TransactionService {
           },
         });
 
+        // Se totalOccurrences foi definido, gerar todas as ocorrências de uma vez
+        const allOccurrences: any[] = [firstOccurrence];
+        
+        if (data.totalOccurrences && data.totalOccurrences > 1) {
+          let currentDate = new Date(startDate);
+          
+          for (let i = 2; i <= data.totalOccurrences; i++) {
+            currentDate = this.calculateNextDueDate(currentDate, frequency, data.frequencyInterval || 1);
+            
+            const occurrence = await tx.transaction.create({
+              data: {
+                tenantId,
+                userId,
+                type: data.type,
+                transactionType: 'recurring',
+                parentId: parentTransaction.id,
+                categoryId: data.categoryId || null,
+                bankAccountId: data.bankAccountId || null,
+                paymentMethodId: data.paymentMethodId || null,
+                amount: data.amount,
+                description: data.description,
+                transactionDate: currentDate,
+                dueDate: currentDate,
+                status: 'pending',
+                frequency: data.frequency,
+                occurrenceNumber: i,
+                isRecurring: true,
+                isFixed: true,
+                notes: data.notes || null,
+                tags: data.tags || null,
+              },
+              include: {
+                category: true,
+                bankAccount: true,
+                paymentMethod: true,
+              },
+            });
+            
+            allOccurrences.push(occurrence);
+          }
+        }
+
         // Atualizar pai com referência ao próximo vencimento
         await tx.transaction.update({
           where: { id: parentTransaction.id },
           data: { nextDueDate },
         });
 
-        return { parent: parentTransaction, firstOccurrence };
+        return { parent: parentTransaction, firstOccurrence, allOccurrences };
       });
 
       log.info('TransactionService.createRecurring success', { 
         parentId: result.parent.id,
         firstOccurrenceId: result.firstOccurrence.id,
+        totalOccurrences: result.allOccurrences.length,
         tenantId 
       });
 
@@ -959,7 +1028,7 @@ export class TransactionService {
         throw new Error('Número máximo de parcelas é 72');
       }
 
-      const startDate = data.transactionDate ? new Date(data.transactionDate) : new Date();
+      const startDate = parseLocalDate(data.transactionDate);
       const originalAmount = data.amount;
       const hasDownPayment = data.hasDownPayment || false;
       const downPaymentAmount = hasDownPayment ? (data.downPaymentAmount || originalAmount / data.totalInstallments) : 0;
