@@ -14,6 +14,7 @@ interface Transaction {
   amount: string;
   description: string;
   transactionDate: string;
+  type: 'income' | 'expense' | 'transfer';
   dueDate?: string; // Para ocorrências
   paidDate?: string; // Data real do pagamento
   isPaidEarly?: boolean;
@@ -53,6 +54,10 @@ interface Category {
   name: string;
   type: string;
   icon: string;
+  level?: number;
+  parentId?: string | null;
+  parent?: { id: string; name: string; icon?: string } | null;
+  children?: Category[];
 }
 
 interface BankAccount {
@@ -107,6 +112,14 @@ export default function TransactionsPage() {
     endDate: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().split('T')[0],
     type: 'all' as 'all' | 'income' | 'expense',
   });
+  
+  // Estados temporários para os inputs de data (só aplica ao clicar no botão)
+  const [tempStartDate, setTempStartDate] = useState(filters.startDate);
+  const [tempEndDate, setTempEndDate] = useState(filters.endDate);
+  
+  const handleApplyDateFilter = () => {
+    setFilters({ ...filters, startDate: tempStartDate, endDate: tempEndDate });
+  };
 
   // Ordenação
   type SortField = 'date' | 'description' | 'category' | 'account' | 'amount' | 'status';
@@ -539,19 +552,26 @@ export default function TransactionsPage() {
             <Calendar className="w-5 h-5 text-gray-500" />
             <input
               type="date"
-              value={filters.startDate}
-              onChange={(e) => setFilters({ ...filters, startDate: e.target.value })}
+              value={tempStartDate}
+              onChange={(e) => setTempStartDate(e.target.value)}
               className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
               title="Data inicial"
             />
             <span className="text-gray-400">até</span>
             <input
               type="date"
-              value={filters.endDate}
-              onChange={(e) => setFilters({ ...filters, endDate: e.target.value })}
+              value={tempEndDate}
+              onChange={(e) => setTempEndDate(e.target.value)}
               className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
               title="Data final"
             />
+            <button
+              onClick={handleApplyDateFilter}
+              className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+              title="Aplicar filtro de data"
+            >
+              Filtrar
+            </button>
           </div>
           
           <div className="flex items-center gap-2">
@@ -585,9 +605,9 @@ export default function TransactionsPage() {
         </div>
 
         {/* Lista de Transações */}
-        <div className="bg-white rounded-lg shadow-md overflow-hidden">
+        <div className="bg-white rounded-lg shadow-md" style={{ minHeight: '400px' }}>
           {transactions.length > 0 ? (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto" style={{ overflow: 'visible' }}>
               <table className="w-full">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
@@ -660,37 +680,150 @@ export default function TransactionsPage() {
                               />
                             </div>
                           </div>
-                          <div className="max-h-48 overflow-y-auto p-2">
-                            {categories
-                              .filter(c => c.name.toLowerCase().includes(popoverSearch.toLowerCase()))
-                              .sort((a, b) => a.name.localeCompare(b.name))
-                              .map(cat => (
-                                <label
-                                  key={cat.id}
-                                  className="flex items-center gap-2 px-2 py-2 hover:bg-gray-50 rounded-lg cursor-pointer"
-                                >
-                                  <input
-                                    type="checkbox"
-                                    checked={columnFilters.categories.includes(cat.id)}
-                                    onChange={(e) => {
-                                      if (e.target.checked) {
-                                        setColumnFilters(prev => ({
-                                          ...prev,
-                                          categories: [...prev.categories, cat.id]
-                                        }));
-                                      } else {
-                                        setColumnFilters(prev => ({
-                                          ...prev,
-                                          categories: prev.categories.filter(id => id !== cat.id)
-                                        }));
-                                      }
-                                    }}
-                                    className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                                  />
-                                  <span className="text-sm">{cat.icon}</span>
-                                  <span className="text-sm text-gray-700">{cat.name}</span>
-                                </label>
-                              ))}
+                          <div className="max-h-64 overflow-y-auto p-2">
+                            {/* Organizar categorias hierarquicamente */}
+                            {(() => {
+                              // Filtrar categorias pela busca
+                              const filteredCategories = categories.filter(c => 
+                                c.name.toLowerCase().includes(popoverSearch.toLowerCase())
+                              );
+                              
+                              // Se está buscando, mostrar lista flat filtrada
+                              if (popoverSearch.trim()) {
+                                return filteredCategories.sort((a, b) => a.name.localeCompare(b.name)).map(cat => (
+                                  <label
+                                    key={cat.id}
+                                    className="flex items-center gap-2 px-2 py-2 hover:bg-gray-50 rounded-lg cursor-pointer"
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={columnFilters.categories.includes(cat.id)}
+                                      onChange={(e) => {
+                                        if (e.target.checked) {
+                                          setColumnFilters(prev => ({
+                                            ...prev,
+                                            categories: [...prev.categories, cat.id]
+                                          }));
+                                        } else {
+                                          setColumnFilters(prev => ({
+                                            ...prev,
+                                            categories: prev.categories.filter(id => id !== cat.id)
+                                          }));
+                                        }
+                                      }}
+                                      className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                                    />
+                                    <span className="text-sm">{cat.icon}</span>
+                                    <span className="text-sm text-gray-700">
+                                      {cat.parent ? `${cat.parent.name} > ${cat.name}` : cat.name}
+                                    </span>
+                                  </label>
+                                ));
+                              }
+                              
+                              // Separar por níveis
+                              const level1 = categories.filter(c => c.level === 1 || (!c.level && !c.parentId));
+                              
+                              // Renderizar hierarquia
+                              return level1.sort((a, b) => a.name.localeCompare(b.name)).map(l1 => {
+                                // Filhos de L1 (level 2)
+                                const l1Children = categories.filter(c => c.parentId === l1.id);
+                                
+                                return (
+                                  <div key={l1.id} className="mb-1">
+                                    {/* Categoria L1 */}
+                                    <label
+                                      className="flex items-center gap-2 px-2 py-2 hover:bg-gray-50 rounded-lg cursor-pointer font-medium"
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={columnFilters.categories.includes(l1.id)}
+                                        onChange={(e) => {
+                                          if (e.target.checked) {
+                                            setColumnFilters(prev => ({
+                                              ...prev,
+                                              categories: [...prev.categories, l1.id]
+                                            }));
+                                          } else {
+                                            setColumnFilters(prev => ({
+                                              ...prev,
+                                              categories: prev.categories.filter(id => id !== l1.id)
+                                            }));
+                                          }
+                                        }}
+                                        className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                                      />
+                                      <span className="text-sm">{l1.icon}</span>
+                                      <span className="text-sm text-gray-700">{l1.name}</span>
+                                    </label>
+                                    
+                                    {/* Subcategorias L2 */}
+                                    {l1Children.sort((a, b) => a.name.localeCompare(b.name)).map(l2 => {
+                                      // Filhos de L2 (level 3)
+                                      const l2Children = categories.filter(c => c.parentId === l2.id);
+                                      
+                                      return (
+                                        <div key={l2.id}>
+                                          <label
+                                            className="flex items-center gap-2 px-2 py-1.5 ml-4 hover:bg-gray-50 rounded-lg cursor-pointer text-gray-600"
+                                          >
+                                            <input
+                                              type="checkbox"
+                                              checked={columnFilters.categories.includes(l2.id)}
+                                              onChange={(e) => {
+                                                if (e.target.checked) {
+                                                  setColumnFilters(prev => ({
+                                                    ...prev,
+                                                    categories: [...prev.categories, l2.id]
+                                                  }));
+                                                } else {
+                                                  setColumnFilters(prev => ({
+                                                    ...prev,
+                                                    categories: prev.categories.filter(id => id !== l2.id)
+                                                  }));
+                                                }
+                                              }}
+                                              className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                                            />
+                                            <span className="text-sm">{l2.icon}</span>
+                                            <span className="text-sm">{l2.name}</span>
+                                          </label>
+                                          
+                                          {/* Subcategorias L3 */}
+                                          {l2Children.sort((a, b) => a.name.localeCompare(b.name)).map(l3 => (
+                                            <label
+                                              key={l3.id}
+                                              className="flex items-center gap-2 px-2 py-1 ml-8 hover:bg-gray-50 rounded-lg cursor-pointer text-gray-500 text-xs"
+                                            >
+                                              <input
+                                                type="checkbox"
+                                                checked={columnFilters.categories.includes(l3.id)}
+                                                onChange={(e) => {
+                                                  if (e.target.checked) {
+                                                    setColumnFilters(prev => ({
+                                                      ...prev,
+                                                      categories: [...prev.categories, l3.id]
+                                                    }));
+                                                  } else {
+                                                    setColumnFilters(prev => ({
+                                                      ...prev,
+                                                      categories: prev.categories.filter(id => id !== l3.id)
+                                                    }));
+                                                  }
+                                                }}
+                                                className="w-3 h-3 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                                              />
+                                              <span className="text-xs">{l3.icon}</span>
+                                              <span className="text-xs">{l3.name}</span>
+                                            </label>
+                                          ))}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                );
+                              });
+                            })()}
                             {categories.filter(c => c.name.toLowerCase().includes(popoverSearch.toLowerCase())).length === 0 && (
                               <p className="text-sm text-gray-500 text-center py-2">Nenhuma categoria encontrada</p>
                             )}
@@ -1062,9 +1195,25 @@ export default function TransactionsPage() {
                         {transaction.bankAccount?.name || 'Não informada'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold">
-                        <span className={Number(transaction.amount) >= 0 ? 'text-green-600' : 'text-red-600'}>
-                          {Number(transaction.amount) >= 0 ? '' : '- '}{formatCurrency(Math.abs(Number(transaction.amount)))}
-                        </span>
+                        {(() => {
+                          const amount = Number(transaction.amount);
+                          // Para transferências, usar o sinal do valor
+                          if (transaction.type === 'transfer') {
+                            const isPositive = amount >= 0;
+                            return (
+                              <span className={isPositive ? 'text-green-600' : 'text-red-600'}>
+                                {isPositive ? '' : '- '}{formatCurrency(Math.abs(amount))}
+                              </span>
+                            );
+                          }
+                          // Para income/expense, usar o type
+                          const isIncome = transaction.type === 'income' || transaction.category?.type === 'income';
+                          return (
+                            <span className={isIncome ? 'text-green-600' : 'text-red-600'}>
+                              {isIncome ? '' : '- '}{formatCurrency(Math.abs(amount))}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
                         <button

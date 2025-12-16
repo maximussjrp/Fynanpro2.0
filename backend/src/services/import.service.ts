@@ -310,16 +310,27 @@ export class ImportService {
       const amount = parseFloat(trnAmt);
       
       if (date && !isNaN(amount)) {
-        // Determinar tipo baseado no valor E no TRNTYPE
+        // Determinar tipo baseado no valor, TRNTYPE e descrição
         // No OFX: valores positivos = crédito (receita), negativos = débito (despesa)
         // TRNTYPE pode ser: CREDIT, DEBIT, INT, DIV, FEE, SRVCHG, DEP, ATM, POS, XFER, CHECK, PAYMENT, CASH, DIRECTDEP, DIRECTDEBIT, REPEATPMT, OTHER
         let type: 'income' | 'expense';
         
-        const incomeTypes = ['CREDIT', 'DEP', 'INT', 'DIV', 'DIRECTDEP', 'XFER'];
-        const expenseTypes = ['DEBIT', 'FEE', 'SRVCHG', 'ATM', 'POS', 'CHECK', 'PAYMENT', 'DIRECTDEBIT', 'REPEATPMT', 'CASH'];
+        // Verificar descrição para identificar transferências enviadas/recebidas
+        const descLower = name.toLowerCase();
+        const isEnviada = descLower.includes('enviada') || descLower.includes('envio') || descLower.includes('pagamento');
+        const isRecebida = descLower.includes('recebida') || descLower.includes('recebido') || descLower.includes('deposito');
         
-        if (trnType) {
+        if (isEnviada) {
+          // Transferência enviada = DESPESA
+          type = 'expense';
+        } else if (isRecebida) {
+          // Transferência recebida = RECEITA
+          type = 'income';
+        } else if (trnType) {
           const upperType = trnType.toUpperCase();
+          const incomeTypes = ['CREDIT', 'DEP', 'INT', 'DIV', 'DIRECTDEP'];
+          const expenseTypes = ['DEBIT', 'FEE', 'SRVCHG', 'ATM', 'POS', 'CHECK', 'PAYMENT', 'DIRECTDEBIT', 'REPEATPMT', 'CASH', 'XFER'];
+          
           if (incomeTypes.includes(upperType)) {
             type = 'income';
           } else if (expenseTypes.includes(upperType)) {

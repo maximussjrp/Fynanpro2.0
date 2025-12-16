@@ -127,6 +127,10 @@ export default function Dashboard() {
     const lastDay = new Date(year, month, 0).getDate(); // Último dia do mês
     return `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
   });
+  
+  // Estados temporários para o modal (só aplica quando clicar em Aplicar)
+  const [tempStartDate, setTempStartDate] = useState(startDate);
+  const [tempEndDate, setTempEndDate] = useState(endDate);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -318,8 +322,24 @@ export default function Dashboard() {
         break;
     }
 
-    setStartDate(start.toISOString().split('T')[0]);
-    setEndDate(end.toISOString().split('T')[0]);
+    const newStart = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')}`;
+    const newEnd = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`;
+    setTempStartDate(newStart);
+    setTempEndDate(newEnd);
+    setStartDate(newStart);
+    setEndDate(newEnd);
+    setShowPeriodModal(false);
+  };
+
+  const handleOpenPeriodModal = () => {
+    setTempStartDate(startDate);
+    setTempEndDate(endDate);
+    setShowPeriodModal(true);
+  };
+
+  const handleApplyPeriod = () => {
+    setStartDate(tempStartDate);
+    setEndDate(tempEndDate);
     setShowPeriodModal(false);
   };
 
@@ -373,7 +393,7 @@ export default function Dashboard() {
             </span>
           </div>
           <button
-            onClick={() => setShowPeriodModal(true)}
+            onClick={handleOpenPeriodModal}
             className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium font-inter"
           >
             <Filter className="w-4 h-4" />
@@ -721,8 +741,8 @@ export default function Dashboard() {
                 <label className="block text-sm font-medium text-[#1A1A1A] mb-2 font-inter">Data Inicial</label>
                 <input
                   type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
+                  value={tempStartDate}
+                  onChange={(e) => setTempStartDate(e.target.value)}
                   className="w-full px-4 py-2 border border-[#D9D9D9] rounded-lg focus:ring-2 focus:ring-[#1C6DD0] focus:border-[#1C6DD0] font-inter"
                   title="Data inicial do período"
                 />
@@ -731,8 +751,8 @@ export default function Dashboard() {
                 <label className="block text-sm font-medium text-[#1A1A1A] mb-2 font-inter">Data Final</label>
                 <input
                   type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
+                  value={tempEndDate}
+                  onChange={(e) => setTempEndDate(e.target.value)}
                   className="w-full px-4 py-2 border border-[#D9D9D9] rounded-lg focus:ring-2 focus:ring-[#1C6DD0] focus:border-[#1C6DD0] font-inter"
                   title="Data final do período"
                 />
@@ -765,7 +785,7 @@ export default function Dashboard() {
                 Cancelar
               </button>
               <button
-                onClick={() => setShowPeriodModal(false)}
+                onClick={handleApplyPeriod}
                 className="flex-1 px-4 py-2 bg-[#1C6DD0] text-white rounded-lg hover:bg-[#1557A8] shadow-md font-inter"
               >
                 Aplicar

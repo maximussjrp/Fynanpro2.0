@@ -86,6 +86,15 @@ export default function ReportsPage() {
   const [startDate, setStartDate] = useState(format(startOfMonth(subMonths(new Date(), 5)), 'yyyy-MM-dd'));
   const [endDate, setEndDate] = useState(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
   
+  // Estados temporários para os inputs de data (só aplica ao clicar no botão)
+  const [tempStartDate, setTempStartDate] = useState(startDate);
+  const [tempEndDate, setTempEndDate] = useState(endDate);
+  
+  const handleApplyDateFilter = () => {
+    setStartDate(tempStartDate);
+    setEndDate(tempEndDate);
+  };
+  
   // Estado para categorias expansivas
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [categoryFlowData, setCategoryFlowData] = useState<any>(null);
@@ -595,8 +604,8 @@ export default function ReportsPage() {
           <label className="text-sm font-medium text-gray-700">Período:</label>
           <input
             type="date"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
+            value={tempStartDate}
+            onChange={(e) => setTempStartDate(e.target.value)}
             className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
             aria-label="Data inicial"
             title="Data inicial do período"
@@ -604,20 +613,31 @@ export default function ReportsPage() {
           <span className="text-gray-500">até</span>
           <input
             type="date"
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
+            value={tempEndDate}
+            onChange={(e) => setTempEndDate(e.target.value)}
             className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
             aria-label="Data final"
             title="Data final do período"
           />
+          <button
+            onClick={handleApplyDateFilter}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+            title="Aplicar filtro de data"
+          >
+            Filtrar
+          </button>
           
           {/* Atalhos de período */}
           <div className="flex items-center gap-2 ml-4 border-l pl-4 border-gray-200">
             <span className="text-xs text-gray-500">Atalhos:</span>
             <button
               onClick={() => {
-                setStartDate(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
-                setEndDate(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
+                const newStart = format(startOfMonth(new Date()), 'yyyy-MM-dd');
+                const newEnd = format(endOfMonth(new Date()), 'yyyy-MM-dd');
+                setTempStartDate(newStart);
+                setTempEndDate(newEnd);
+                setStartDate(newStart);
+                setEndDate(newEnd);
               }}
               className="px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition"
             >
@@ -626,8 +646,12 @@ export default function ReportsPage() {
             <button
               onClick={() => {
                 const lastMonth = subMonths(new Date(), 1);
-                setStartDate(format(startOfMonth(lastMonth), 'yyyy-MM-dd'));
-                setEndDate(format(endOfMonth(lastMonth), 'yyyy-MM-dd'));
+                const newStart = format(startOfMonth(lastMonth), 'yyyy-MM-dd');
+                const newEnd = format(endOfMonth(lastMonth), 'yyyy-MM-dd');
+                setTempStartDate(newStart);
+                setTempEndDate(newEnd);
+                setStartDate(newStart);
+                setEndDate(newEnd);
               }}
               className="px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition"
             >
@@ -635,8 +659,12 @@ export default function ReportsPage() {
             </button>
             <button
               onClick={() => {
-                setStartDate(format(startOfMonth(subMonths(new Date(), 2)), 'yyyy-MM-dd'));
-                setEndDate(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
+                const newStart = format(startOfMonth(subMonths(new Date(), 2)), 'yyyy-MM-dd');
+                const newEnd = format(endOfMonth(new Date()), 'yyyy-MM-dd');
+                setTempStartDate(newStart);
+                setTempEndDate(newEnd);
+                setStartDate(newStart);
+                setEndDate(newEnd);
               }}
               className="px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition"
             >
@@ -644,8 +672,12 @@ export default function ReportsPage() {
             </button>
             <button
               onClick={() => {
-                setStartDate(format(startOfMonth(subMonths(new Date(), 5)), 'yyyy-MM-dd'));
-                setEndDate(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
+                const newStart = format(startOfMonth(subMonths(new Date(), 5)), 'yyyy-MM-dd');
+                const newEnd = format(endOfMonth(new Date()), 'yyyy-MM-dd');
+                setTempStartDate(newStart);
+                setTempEndDate(newEnd);
+                setStartDate(newStart);
+                setEndDate(newEnd);
               }}
               className="px-3 py-1.5 text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg transition font-medium"
             >
@@ -653,8 +685,12 @@ export default function ReportsPage() {
             </button>
             <button
               onClick={() => {
-                setStartDate(format(new Date(new Date().getFullYear(), 0, 1), 'yyyy-MM-dd'));
-                setEndDate(format(new Date(new Date().getFullYear(), 11, 31), 'yyyy-MM-dd'));
+                const newStart = format(new Date(new Date().getFullYear(), 0, 1), 'yyyy-MM-dd');
+                const newEnd = format(new Date(new Date().getFullYear(), 11, 31), 'yyyy-MM-dd');
+                setTempStartDate(newStart);
+                setTempEndDate(newEnd);
+                setStartDate(newStart);
+                setEndDate(newEnd);
               }}
               className="px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition"
             >
@@ -663,8 +699,12 @@ export default function ReportsPage() {
             <button
               onClick={() => {
                 const lastYear = new Date().getFullYear() - 1;
-                setStartDate(format(new Date(lastYear, 0, 1), 'yyyy-MM-dd'));
-                setEndDate(format(new Date(lastYear, 11, 31), 'yyyy-MM-dd'));
+                const newStart = format(new Date(lastYear, 0, 1), 'yyyy-MM-dd');
+                const newEnd = format(new Date(lastYear, 11, 31), 'yyyy-MM-dd');
+                setTempStartDate(newStart);
+                setTempEndDate(newEnd);
+                setStartDate(newStart);
+                setEndDate(newEnd);
               }}
               className="px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition"
             >
