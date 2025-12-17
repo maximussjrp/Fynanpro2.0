@@ -33,7 +33,7 @@ export default function ConfirmationModal({
         return {
           icon: 'text-red-600',
           iconBg: 'bg-red-100',
-          button: 'bg-gradient-to-r from-[#E74C3C] to-[#C0392B] hover:shadow-lg',
+          button: 'bg-gradient-to-r from-[#EF4444] to-[#DC2626] hover:shadow-lg',
         };
       case 'warning':
         return {
@@ -43,15 +43,15 @@ export default function ConfirmationModal({
         };
       case 'info':
         return {
-          icon: 'text-blue-600',
-          iconBg: 'bg-blue-100',
-          button: 'bg-gradient-to-r from-[#1C6DD0] to-[#1557A8] hover:shadow-lg',
+          icon: 'text-[#1F4FD8]',
+          iconBg: 'bg-[#DBEAFE]',
+          button: 'bg-gradient-to-r from-[#1F4FD8] to-[#1A44BF] hover:shadow-lg',
         };
       default:
         return {
           icon: 'text-red-600',
           iconBg: 'bg-red-100',
-          button: 'bg-gradient-to-r from-[#E74C3C] to-[#C0392B] hover:shadow-lg',
+          button: 'bg-gradient-to-r from-[#EF4444] to-[#DC2626] hover:shadow-lg',
         };
     }
   };

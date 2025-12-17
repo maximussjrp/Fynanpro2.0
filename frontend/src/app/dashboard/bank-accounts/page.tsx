@@ -237,7 +237,7 @@ export default function BankAccountsPage() {
             </button>
             <button
               onClick={() => setShowCreateModal(true)}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+              className="px-4 py-2 bg-[#1F4FD8] text-white rounded-lg hover:bg-[#1A44BF] transition-colors flex items-center gap-2"
             >
               <Plus className="w-5 h-5" />
               Nova Conta
@@ -254,8 +254,8 @@ export default function BankAccountsPage() {
             >
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center gap-3">
-                  <div className="p-3 bg-blue-100 rounded-lg">
-                    <Building2 className="w-6 h-6 text-blue-600" />
+                  <div className="p-3 bg-[#DBEAFE] rounded-lg">
+                    <Building2 className="w-6 h-6 text-[#1F4FD8]" />
                   </div>
                   <div>
                     <h3 className="font-semibold text-lg text-gray-800">{account.name}</h3>
@@ -300,7 +300,7 @@ export default function BankAccountsPage() {
             <p className="text-gray-500 text-lg">Nenhuma conta bancária cadastrada</p>
             <button
               onClick={() => setShowCreateModal(true)}
-              className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              className="mt-4 px-6 py-2 bg-[#1F4FD8] text-white rounded-lg hover:bg-[#1A44BF] transition-colors"
             >
               Criar primeira conta
             </button>
@@ -327,7 +327,7 @@ export default function BankAccountsPage() {
                   required
                   value={accountForm.name}
                   onChange={(e) => setAccountForm({ ...accountForm, name: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
                   placeholder="Ex: Nubank, Inter, Bradesco..."
                 />
               </div>
@@ -339,7 +339,7 @@ export default function BankAccountsPage() {
                   value={accountForm.type}
                   onChange={(e) => setAccountForm({ ...accountForm, type: e.target.value })}
                   aria-label="Tipo de conta"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
                 >
                   <option value="bank">Conta Bancária</option>
                   <option value="wallet">Carteira/Dinheiro</option>
@@ -355,7 +355,7 @@ export default function BankAccountsPage() {
                   type="text"
                   value={accountForm.institution}
                   onChange={(e) => setAccountForm({ ...accountForm, institution: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
                   placeholder="Ex: Nubank, Banco Inter..."
                 />
               </div>
@@ -368,7 +368,7 @@ export default function BankAccountsPage() {
                   step="0.01"
                   value={accountForm.initialBalance}
                   onChange={(e) => setAccountForm({ ...accountForm, initialBalance: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
                   placeholder="0.00"
                 />
               </div>
@@ -384,7 +384,7 @@ export default function BankAccountsPage() {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                  className="flex-1 px-4 py-2 bg-[#1F4FD8] text-white rounded-lg hover:bg-[#1A44BF] transition-colors disabled:opacity-50"
                 >
                   {submitting ? 'Criando...' : 'Criar Conta'}
                 </button>
@@ -415,7 +415,7 @@ export default function BankAccountsPage() {
                   onChange={(e) => setAccountForm({ ...accountForm, name: e.target.value })}
                   aria-label="Nome da Conta"
                   placeholder="Digite o nome da conta"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
                 />
               </div>
 
@@ -426,7 +426,7 @@ export default function BankAccountsPage() {
                   value={accountForm.type}
                   onChange={(e) => setAccountForm({ ...accountForm, type: e.target.value })}
                   aria-label="Tipo de Conta"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
                 >
                   <option value="bank">Conta Bancária</option>
                   <option value="wallet">Carteira/Dinheiro</option>
@@ -444,7 +444,7 @@ export default function BankAccountsPage() {
                   onChange={(e) => setAccountForm({ ...accountForm, institution: e.target.value })}
                   aria-label="Saldo Inicial"
                   placeholder="Digite o saldo inicial"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
                 />
               </div>
 
@@ -459,7 +459,7 @@ export default function BankAccountsPage() {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                  className="flex-1 px-4 py-2 bg-[#1F4FD8] text-white rounded-lg hover:bg-[#1A44BF] transition-colors disabled:opacity-50"
                 >
                   {submitting ? 'Salvando...' : 'Salvar'}
                 </button>
@@ -488,7 +488,7 @@ export default function BankAccountsPage() {
                   value={transferForm.fromAccountId}
                   onChange={(e) => setTransferForm({ ...transferForm, fromAccountId: e.target.value })}
                   aria-label="Conta Origem"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
                 >
                   <option value="">Selecione a conta de origem</option>
                   {Array.isArray(accounts) && accounts.map((account) => (
@@ -506,7 +506,7 @@ export default function BankAccountsPage() {
                   value={transferForm.toAccountId}
                   onChange={(e) => setTransferForm({ ...transferForm, toAccountId: e.target.value })}
                   aria-label="Conta Destino"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
                 >
                   <option value="">Selecione a conta de destino</option>
                   {Array.isArray(accounts) && accounts
@@ -528,7 +528,7 @@ export default function BankAccountsPage() {
                   min="0.01"
                   value={transferForm.amount}
                   onChange={(e) => setTransferForm({ ...transferForm, amount: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
                   placeholder="0.00"
                 />
               </div>
@@ -539,7 +539,7 @@ export default function BankAccountsPage() {
                   type="text"
                   value={transferForm.description}
                   onChange={(e) => setTransferForm({ ...transferForm, description: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
                   placeholder="Ex: Transferência para reserva de emergência"
                 />
               </div>

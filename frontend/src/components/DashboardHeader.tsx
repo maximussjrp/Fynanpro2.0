@@ -103,7 +103,7 @@ export default function DashboardHeader({ onAddTransaction, showAddButton = true
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Buscar transações..."
-                className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1C6DD0] focus:border-transparent w-64 font-sans"
+                className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1F4FD8] focus:border-transparent w-64 font-sans"
               />
               {searchQuery && (
                 <button
@@ -131,7 +131,7 @@ export default function DashboardHeader({ onAddTransaction, showAddButton = true
             {showAddButton && onAddTransaction && (
               <button
                 onClick={onAddTransaction}
-                className="flex items-center gap-2 px-4 py-2 bg-[#1C6DD0] text-white rounded-lg hover:bg-[#1557A8] transition-all font-medium font-sans"
+                className="flex items-center gap-2 px-4 py-2 bg-[#1F4FD8] text-white rounded-lg hover:bg-[#1A44BF] transition-all font-medium font-sans"
               >
                 <Plus className="w-4 h-4" />
                 <span className="hidden sm:inline">Nova Transação</span>

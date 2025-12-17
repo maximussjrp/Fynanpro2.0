@@ -1,6 +1,8 @@
-# FYNANPRO 2.0 - API Backend
+# 🚀 UTOP - API Backend
 
 Sistema completo de gestão financeira pessoal e empresarial com suporte multi-tenant, desenvolvido com Node.js, TypeScript, Express e Prisma ORM.
+
+> **Slogan**: Seu dinheiro em equilíbrio
 
 ## 🚀 Funcionalidades
 
@@ -41,8 +43,8 @@ Sistema completo de gestão financeira pessoal e empresarial com suporte multi-t
 ### 1. Clone o repositório
 
 ```bash
-git clone https://github.com/seu-usuario/fynanpro2.0.git
-cd fynanpro2.0/backend
+git clone https://github.com/seu-usuario/utop.git
+cd utop/backend
 ```
 
 ### 2. Instale as dependências

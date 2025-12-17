@@ -3,25 +3,25 @@ version: '3.8'
 services:
   postgres:
     image: postgres:15-alpine
-    container_name: fynanpro-postgres
+    container_name: utop-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: fynanpro
-      POSTGRES_PASSWORD: fynanpro123
-      POSTGRES_DB: fynanpro_dev
+      POSTGRES_USER: utop
+      POSTGRES_PASSWORD: utop123
+      POSTGRES_DB: utop_dev
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
-      - fynanpro-network
+      - utop-network
 
   pgadmin:
     image: dpage/pgadmin4:latest
-    container_name: fynanpro-pgadmin
+    container_name: utop-pgadmin
     restart: unless-stopped
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@fynanpro.com
+      PGADMIN_DEFAULT_EMAIL: admin@utop.app
       PGADMIN_DEFAULT_PASSWORD: admin123
       PGADMIN_CONFIG_SERVER_MODE: 'False'
     ports:
@@ -29,20 +29,20 @@ services:
     volumes:
       - pgadmin_data:/var/lib/pgadmin
     networks:
-      - fynanpro-network
+      - utop-network
     depends_on:
       - postgres
 
   redis:
     image: redis:7-alpine
-    container_name: fynanpro-redis
+    container_name: utop-redis
     restart: unless-stopped
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
     networks:
-      - fynanpro-network
+      - utop-network
 
 volumes:
   postgres_data:
@@ -53,5 +53,5 @@ volumes:
     driver: local
 
 networks:
-  fynanpro-network:
+  utop-network:
     driver: bridge

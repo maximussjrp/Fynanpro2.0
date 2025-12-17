@@ -274,7 +274,7 @@ export default function TransactionModal({
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
       <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col animate-in slide-in-from-bottom-4 duration-300">
         {/* Header */}
-        <div className="bg-gradient-to-r from-[#1C6DD0] to-[#1557A8] px-6 py-5 flex items-center justify-between">
+        <div className="bg-gradient-to-r from-[#1F4FD8] to-[#1A44BF] px-6 py-5 flex items-center justify-between">
           <h2 className="text-2xl font-bold text-white flex items-center gap-3 font-poppins">
             <div className="bg-white/20 p-2 rounded-lg backdrop-blur-sm">
               <DollarSign className="w-6 h-6" />
@@ -301,14 +301,14 @@ export default function TransactionModal({
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                  <span className="text-[#1C6DD0] font-semibold">R$</span>
+                  <span className="text-[#1F4FD8] font-semibold">R$</span>
                 </div>
                 <input
                   type="number"
                   step="0.01"
                   value={formData.amount}
                   onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                  className="w-full pl-14 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1C6DD0] focus:border-[#1C6DD0] transition-all bg-[#F9FAFB]"
+                  className="w-full pl-14 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] transition-all bg-[#F9FAFB]"
                   placeholder="0,00"
                   required
                 />
@@ -322,13 +322,13 @@ export default function TransactionModal({
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                  <Calendar className="w-5 h-5 text-[#1C6DD0]" />
+                  <Calendar className="w-5 h-5 text-[#1F4FD8]" />
                 </div>
                 <input
                   type="date"
                   value={formData.transactionDate}
                   onChange={(e) => setFormData({ ...formData, transactionDate: e.target.value })}
-                  className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1C6DD0] focus:border-[#1C6DD0] transition-all bg-[#F9FAFB]"
+                  className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] transition-all bg-[#F9FAFB]"
                   required
                   title="Data da transação"
                   aria-label="Data da transação"
@@ -346,7 +346,7 @@ export default function TransactionModal({
               type="text"
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1C6DD0] focus:border-[#1C6DD0] transition-all bg-[#F9FAFB]"
+              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] transition-all bg-[#F9FAFB]"
               placeholder="Ex: Salário, Aluguel, Compras..."
               required
             />
@@ -359,7 +359,7 @@ export default function TransactionModal({
             </label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                <Tag className="w-5 h-5 text-[#1C6DD0]" />
+                <Tag className="w-5 h-5 text-[#1F4FD8]" />
               </div>
               <input
                 type="text"
@@ -369,7 +369,7 @@ export default function TransactionModal({
                   setShowCategoryDropdown(true);
                 }}
                 onFocus={() => setShowCategoryDropdown(true)}
-                className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1C6DD0] focus:border-[#1C6DD0] transition-all bg-[#F9FAFB]"
+                className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] transition-all bg-[#F9FAFB]"
                 placeholder="Buscar categoria..."
                 required
               />
@@ -419,14 +419,14 @@ export default function TransactionModal({
                 <button
                   type="button"
                   onClick={() => setShowQuickBankAccount(!showQuickBankAccount)}
-                  className="text-xs text-[#1C6DD0] hover:underline flex items-center gap-1"
+                  className="text-xs text-[#1F4FD8] hover:underline flex items-center gap-1"
                 >
                   <Plus size={12} /> Nova Conta
                 </button>
               </div>
               
               {showQuickBankAccount && (
-                <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-2">
+                <div className="mb-3 p-3 bg-[#EFF6FF] border border-blue-200 rounded-lg space-y-2">
                   <input
                     type="text"
                     placeholder="Nome da conta"
@@ -464,7 +464,7 @@ export default function TransactionModal({
                     <button
                       type="button"
                       onClick={handleQuickCreateBankAccount}
-                      className="px-3 py-1.5 text-sm bg-[#1C6DD0] text-white rounded hover:bg-[#1557A8]"
+                      className="px-3 py-1.5 text-sm bg-[#1F4FD8] text-white rounded hover:bg-[#1A44BF]"
                     >
                       Criar
                     </button>
@@ -474,12 +474,12 @@ export default function TransactionModal({
               
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                  <Wallet className="w-5 h-5 text-[#1C6DD0]" />
+                  <Wallet className="w-5 h-5 text-[#1F4FD8]" />
                 </div>
                 <select
                   value={formData.bankAccountId}
                   onChange={(e) => setFormData({ ...formData, bankAccountId: e.target.value })}
-                  className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1C6DD0] focus:border-[#1C6DD0] transition-all bg-[#F9FAFB] appearance-none cursor-pointer"
+                  className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] transition-all bg-[#F9FAFB] appearance-none cursor-pointer"
                   required
                   title="Selecione conta bancária"
                   aria-label="Conta Bancária"
@@ -503,7 +503,7 @@ export default function TransactionModal({
                 <button
                   type="button"
                   onClick={() => setShowQuickPaymentMethod(!showQuickPaymentMethod)}
-                  className="text-xs text-[#1C6DD0] hover:underline flex items-center gap-1"
+                  className="text-xs text-[#1F4FD8] hover:underline flex items-center gap-1"
                 >
                   <Plus size={12} /> Novo Método
                 </button>
@@ -540,12 +540,12 @@ export default function TransactionModal({
               
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                  <CreditCard className="w-5 h-5 text-[#1C6DD0]" />
+                  <CreditCard className="w-5 h-5 text-[#1F4FD8]" />
                 </div>
                 <select
                   value={formData.paymentMethodId}
                   onChange={(e) => setFormData({ ...formData, paymentMethodId: e.target.value })}
-                  className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1C6DD0] focus:border-[#1C6DD0] transition-all bg-[#F9FAFB] appearance-none cursor-pointer"
+                  className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] transition-all bg-[#F9FAFB] appearance-none cursor-pointer"
                   title="Selecione meio de pagamento"
                   aria-label="Meio de Pagamento"
                 >
@@ -568,7 +568,7 @@ export default function TransactionModal({
             <div className="flex gap-3">
               <label className="flex-1 flex items-center gap-3 p-4 border-2 rounded-xl cursor-pointer transition-all hover:shadow-md ${
                 formData.status === 'completed'
-                  ? 'border-[#22C39A] bg-[#E8F9F4]'
+                  ? 'border-[#2ECC9A] bg-[#DCFCE7]'
                   : 'border-gray-200 bg-white hover:border-gray-300'
               }">
                 <input
@@ -576,9 +576,9 @@ export default function TransactionModal({
                   value="completed"
                   checked={formData.status === 'completed'}
                   onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                  className="w-5 h-5 text-[#22C39A] focus:ring-[#22C39A]"
+                  className="w-5 h-5 text-[#2ECC9A] focus:ring-[#2ECC9A]"
                 />
-                <span className={`font-semibold ${formData.status === 'completed' ? 'text-[#22C39A]' : 'text-gray-700'}`}>Pago</span>
+                <span className={`font-semibold ${formData.status === 'completed' ? 'text-[#2ECC9A]' : 'text-gray-700'}`}>Pago</span>
               </label>
               <label className="flex-1 flex items-center gap-3 p-4 border-2 rounded-xl cursor-pointer transition-all hover:shadow-md ${
                 formData.status === 'pending'
@@ -605,7 +605,7 @@ export default function TransactionModal({
             <textarea
               value={formData.notes}
               onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1C6DD0] focus:border-[#1C6DD0] transition-all bg-[#F9FAFB] resize-none"
+              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] transition-all bg-[#F9FAFB] resize-none"
               rows={3}
               placeholder="Adicione notas ou observações..."
             />
@@ -628,8 +628,8 @@ export default function TransactionModal({
               onClick={handleSubmit}
               className={`flex-1 px-6 py-3.5 rounded-xl font-bold transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5 text-white ${
                 formData.type === 'income'
-                  ? 'bg-gradient-to-r from-[#22C39A] to-[#1EA87E] hover:from-[#1EA87E] hover:to-[#16865C]'
-                  : 'bg-gradient-to-r from-[#E74C3C] to-[#C0392B] hover:from-[#C0392B] hover:to-[#A93226]'
+                  ? 'bg-gradient-to-r from-[#2ECC9A] to-[#27B589] hover:from-[#27B589] hover:to-[#1D9A6B]'
+                  : 'bg-gradient-to-r from-[#EF4444] to-[#DC2626] hover:from-[#DC2626] hover:to-[#B91C1C]'
               } disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none`}
               disabled={loading}
             >

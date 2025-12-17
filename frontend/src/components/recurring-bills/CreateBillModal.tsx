@@ -72,7 +72,7 @@ export default function CreateBillModal({
       {/* Modal */}
       <div className="relative bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header com Gradiente */}
-        <div className="bg-gradient-to-r from-[#1C6DD0] to-[#1557A8] p-6">
+        <div className="bg-gradient-to-r from-[#1F4FD8] to-[#1A44BF] p-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
@@ -103,7 +103,7 @@ export default function CreateBillModal({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="md:col-span-2">
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  <Tag className="w-4 h-4 inline mr-1 text-[#1C6DD0]" />
+                  <Tag className="w-4 h-4 inline mr-1 text-[#1F4FD8]" />
                   Nome da Conta *
                 </label>
                 <input
@@ -111,7 +111,7 @@ export default function CreateBillModal({
                   required
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1C6DD0] focus:border-transparent bg-[#F9FAFB] transition-all"
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-transparent bg-[#F9FAFB] transition-all"
                   placeholder="Ex: Aluguel, Netflix, Salário..."
                 />
               </div>
@@ -124,7 +124,7 @@ export default function CreateBillModal({
                   type="text"
                   value={form.description}
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1C6DD0] focus:border-transparent bg-[#F9FAFB] transition-all"
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-transparent bg-[#F9FAFB] transition-all"
                   placeholder="Detalhes adicionais..."
                 />
               </div>
@@ -141,7 +141,7 @@ export default function CreateBillModal({
                   onClick={() => setForm({ ...form, type: 'expense' })}
                   className={`px-6 py-4 rounded-xl border-2 font-semibold transition-all duration-200 ${
                     form.type === 'expense'
-                      ? 'border-[#E74C3C] bg-red-50 text-[#E74C3C] shadow-md'
+                      ? 'border-[#EF4444] bg-red-50 text-[#EF4444] shadow-md'
                       : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
                   }`}
                 >
@@ -153,7 +153,7 @@ export default function CreateBillModal({
                   onClick={() => setForm({ ...form, type: 'income' })}
                   className={`px-6 py-4 rounded-xl border-2 font-semibold transition-all duration-200 ${
                     form.type === 'income'
-                      ? 'border-[#22C39A] bg-green-50 text-[#22C39A] shadow-md'
+                      ? 'border-[#2ECC9A] bg-green-50 text-[#2ECC9A] shadow-md'
                       : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
                   }`}
                 >
@@ -167,7 +167,7 @@ export default function CreateBillModal({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  <DollarSign className="w-4 h-4 inline mr-1 text-[#1C6DD0]" />
+                  <DollarSign className="w-4 h-4 inline mr-1 text-[#1F4FD8]" />
                   Valor *
                 </label>
                 <input
@@ -177,21 +177,21 @@ export default function CreateBillModal({
                   min="0"
                   value={form.amount}
                   onChange={(e) => setForm({ ...form, amount: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1C6DD0] focus:border-transparent bg-[#F9FAFB] transition-all"
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-transparent bg-[#F9FAFB] transition-all"
                   placeholder="0,00"
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  <Calendar className="w-4 h-4 inline mr-1 text-[#1C6DD0]" />
+                  <Calendar className="w-4 h-4 inline mr-1 text-[#1F4FD8]" />
                   Frequência *
                 </label>
                 <select
                   required
                   value={form.frequency}
                   onChange={(e) => setForm({ ...form, frequency: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1C6DD0] focus:border-transparent bg-[#F9FAFB] transition-all"
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-transparent bg-[#F9FAFB] transition-all"
                 >
                   <option value="daily">📅 Diário</option>
                   <option value="weekly">📅 Semanal</option>
@@ -211,7 +211,7 @@ export default function CreateBillModal({
                   required
                   value={form.dayOfWeek}
                   onChange={(e) => setForm({ ...form, dayOfWeek: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1C6DD0] focus:border-transparent bg-[#F9FAFB] transition-all"
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-transparent bg-[#F9FAFB] transition-all"
                 >
                   <option value="0">Domingo</option>
                   <option value="1">Segunda-feira</option>
@@ -235,7 +235,7 @@ export default function CreateBillModal({
                   required
                   value={form.startDate}
                   onChange={(e) => setForm({ ...form, startDate: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1C6DD0] focus:border-transparent bg-[#F9FAFB] transition-all"
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-transparent bg-[#F9FAFB] transition-all"
                 />
                 {form.frequency === 'monthly' && form.startDate && (
                   <p className="text-xs text-gray-500 mt-1">
@@ -252,7 +252,7 @@ export default function CreateBillModal({
                   type="date"
                   value={form.endDate}
                   onChange={(e) => setForm({ ...form, endDate: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1C6DD0] focus:border-transparent bg-[#F9FAFB] transition-all"
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-transparent bg-[#F9FAFB] transition-all"
                 />
               </div>
             </div>
@@ -261,14 +261,14 @@ export default function CreateBillModal({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  <Tag className="w-4 h-4 inline mr-1 text-[#1C6DD0]" />
+                  <Tag className="w-4 h-4 inline mr-1 text-[#1F4FD8]" />
                   Categoria *
                 </label>
                 <select
                   required
                   value={form.categoryId}
                   onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1C6DD0] focus:border-transparent bg-[#F9FAFB] transition-all"
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-transparent bg-[#F9FAFB] transition-all"
                 >
                   <option value="">Selecione uma categoria</option>
                   {categories.map((cat) => (
@@ -281,14 +281,14 @@ export default function CreateBillModal({
 
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  <Building className="w-4 h-4 inline mr-1 text-[#1C6DD0]" />
+                  <Building className="w-4 h-4 inline mr-1 text-[#1F4FD8]" />
                   Conta Bancária *
                 </label>
                 <select
                   required
                   value={form.bankAccountId}
                   onChange={(e) => setForm({ ...form, bankAccountId: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1C6DD0] focus:border-transparent bg-[#F9FAFB] transition-all"
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-transparent bg-[#F9FAFB] transition-all"
                 >
                   <option value="">Selecione uma conta</option>
                   {bankAccounts.map((account) => (
@@ -301,13 +301,13 @@ export default function CreateBillModal({
 
               <div className="md:col-span-2">
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  <CreditCard className="w-4 h-4 inline mr-1 text-[#1C6DD0]" />
+                  <CreditCard className="w-4 h-4 inline mr-1 text-[#1F4FD8]" />
                   Meio de Pagamento (opcional)
                 </label>
                 <select
                   value={form.paymentMethodId}
                   onChange={(e) => setForm({ ...form, paymentMethodId: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1C6DD0] focus:border-transparent bg-[#F9FAFB] transition-all"
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-transparent bg-[#F9FAFB] transition-all"
                 >
                   <option value="">Selecione (opcional)</option>
                   {paymentMethods.map((method) => (
@@ -327,7 +327,7 @@ export default function CreateBillModal({
               <textarea
                 value={form.notes}
                 onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1C6DD0] focus:border-transparent bg-[#F9FAFB] transition-all resize-none"
+                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-transparent bg-[#F9FAFB] transition-all resize-none"
                 rows={3}
                 placeholder="Informações adicionais sobre esta conta recorrente..."
               />
@@ -349,7 +349,7 @@ export default function CreateBillModal({
             type="submit"
             onClick={onSubmit}
             disabled={submitting}
-            className="flex-1 px-6 py-3 bg-gradient-to-r from-[#1C6DD0] to-[#1557A8] text-white rounded-xl font-semibold hover:shadow-xl transition-all duration-200 hover:-translate-y-0.5 disabled:opacity-50"
+            className="flex-1 px-6 py-3 bg-gradient-to-r from-[#1F4FD8] to-[#1A44BF] text-white rounded-xl font-semibold hover:shadow-xl transition-all duration-200 hover:-translate-y-0.5 disabled:opacity-50"
           >
             {submitting ? 'Criando...' : 'Criar Conta Recorrente'}
           </button>

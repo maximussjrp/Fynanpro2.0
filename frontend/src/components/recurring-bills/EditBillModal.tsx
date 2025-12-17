@@ -141,7 +141,7 @@ export default function EditBillModal({
                   onClick={() => setForm({ ...form, type: 'expense' })}
                   className={`px-6 py-4 rounded-xl border-2 font-semibold transition-all duration-200 ${
                     form.type === 'expense'
-                      ? 'border-[#E74C3C] bg-red-50 text-[#E74C3C] shadow-md'
+                      ? 'border-[#EF4444] bg-red-50 text-[#EF4444] shadow-md'
                       : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
                   }`}
                 >
@@ -153,7 +153,7 @@ export default function EditBillModal({
                   onClick={() => setForm({ ...form, type: 'income' })}
                   className={`px-6 py-4 rounded-xl border-2 font-semibold transition-all duration-200 ${
                     form.type === 'income'
-                      ? 'border-[#22C39A] bg-green-50 text-[#22C39A] shadow-md'
+                      ? 'border-[#2ECC9A] bg-green-50 text-[#2ECC9A] shadow-md'
                       : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
                   }`}
                 >

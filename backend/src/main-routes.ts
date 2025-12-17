@@ -16,6 +16,7 @@ import calendarRoutes from './routes/calendar';
 import reportRoutes from './routes/reports';
 import notificationRoutes from './routes/notifications';
 import importRoutes from './routes/import';
+import adminRoutes from './routes/admin';
 
 dotenv.config();
 
@@ -36,7 +37,7 @@ app.use(express.urlencoded({ extended: true }));
 app.get('/', (req, res) => {
   res.json({
     success: true,
-    message: '🚀 FYNANPRO 2.0 API está rodando!',
+    message: '🚀 UTOP API está rodando!',
     version: '2.0.0',
     timestamp: new Date().toISOString(),
     endpoints: {
@@ -82,6 +83,7 @@ apiRouter.use('/calendar', calendarRoutes);
 apiRouter.use('/reports', reportRoutes);
 apiRouter.use('/notifications', notificationRoutes);
 apiRouter.use('/import', importRoutes);
+apiRouter.use('/admin', adminRoutes);
 
 app.use('/api/v1', apiRouter);
 
@@ -105,7 +107,7 @@ app.listen(port, () => {
   console.log(`
 ╔═══════════════════════════════════════════════════════════╗
 ║                                                           ║
-║   🚀 FYNANPRO 2.0 - Backend API Completo                 ║
+║   🚀 UTOP - Backend API                                  ║
 ║                                                           ║
 ║   Status: ✅ Rodando                                     ║
 ║   Porta: ${port}                                        ║

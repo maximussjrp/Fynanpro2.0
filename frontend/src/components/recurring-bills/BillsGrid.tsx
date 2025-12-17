@@ -88,7 +88,7 @@ export default function BillsGrid({
     return (
       <div className="flex flex-col items-center justify-center py-16 px-4">
         <div className="w-32 h-32 bg-gradient-to-br from-blue-100 to-blue-200 rounded-full flex items-center justify-center mb-6">
-          <Repeat className="w-16 h-16 text-[#1C6DD0]" />
+          <Repeat className="w-16 h-16 text-[#1F4FD8]" />
         </div>
         <h3 className="text-2xl font-bold text-gray-900 mb-2 font-['Poppins']">
           Nenhuma conta recorrente
@@ -98,7 +98,7 @@ export default function BillsGrid({
         </p>
         <button
           onClick={onCreateNew}
-          className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[#1C6DD0] to-[#1557A8] text-white rounded-xl font-semibold hover:shadow-xl transition-all duration-200 hover:-translate-y-0.5"
+          className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[#1F4FD8] to-[#1A44BF] text-white rounded-xl font-semibold hover:shadow-xl transition-all duration-200 hover:-translate-y-0.5"
         >
           <Plus className="w-5 h-5" />
           Criar Primeira Conta Recorrente

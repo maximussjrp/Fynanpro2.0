@@ -17,6 +17,7 @@ import calendarRoutes from './routes/calendar';
 import notificationRoutes from './routes/notifications';
 import importRoutes from './routes/import';
 import chatbotRoutes from './routes/chatbot';
+import adminRoutes from './routes/admin';
 import { createDefaultCategories } from './utils/default-categories';
 import { env } from './config/env';
 import { swaggerSpec } from './config/swagger';
@@ -115,7 +116,7 @@ app.use(express.urlencoded({ extended: true }));
 app.get('/', (req: Request, res: Response) => {
   res.json({
     success: true,
-    message: '🚀 FYNANPRO 2.0 API está rodando!',
+    message: '🚀 UTOP API está rodando!',
     version: '1.0.0',
     timestamp: new Date().toISOString(),
     endpoints: {
@@ -129,7 +130,7 @@ app.get('/', (req: Request, res: Response) => {
 // Swagger Documentation
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
   customCss: '.swagger-ui .topbar { display: none }',
-  customSiteTitle: 'FYNANPRO 2.0 API Docs',
+  customSiteTitle: 'UTOP API Docs',
 }));
 
 app.get('/health', async (req: Request, res: Response) => {
@@ -194,6 +195,9 @@ apiRouter.use('/import', importRoutes);
 
 // Chatbot routes (Isis)
 apiRouter.use('/chatbot', chatbotRoutes);
+
+// Admin routes (super_master only)
+apiRouter.use('/admin', adminRoutes);
 
 // Auth routes com rate limiting
 
@@ -607,7 +611,7 @@ app.listen(port, () => {
   // Inicia o job de geração de transações
   startTransactionGeneratorJob();
   
-  log.info('Servidor FYNANPRO 2.0 iniciado', {
+  log.info('Servidor UTOP iniciado', {
     port,
     environment: env.NODE_ENV,
     url: `http://localhost:${port}`,
@@ -619,7 +623,7 @@ app.listen(port, () => {
   console.log(`
 ╔═══════════════════════════════════════════════════════════╗
 ║                                                           ║
-║   🚀 FYNANPRO 2.0 - Backend API                          ║
+║   🚀 UTOP - Backend API                                   ║
 ║                                                           ║
 ║   Status: ✅ Rodando                                     ║
 ║   Porta: ${port}                                        ║

@@ -137,7 +137,7 @@ export default function DashboardInsights() {
               R$ {comparison.balance.current.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </p>
             <p className={`text-xs ${
-              comparison.balance.current >= 0 ? 'text-blue-700' : 'text-orange-700'
+              comparison.balance.current >= 0 ? 'text-[#1A44BF]' : 'text-orange-700'
             }`}>
               Mês anterior: R$ {comparison.balance.last.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </p>
@@ -179,7 +179,7 @@ export default function DashboardInsights() {
                     ? 'bg-orange-100 text-orange-700'
                     : insight.type === 'projection'
                     ? 'bg-purple-100 text-purple-700'
-                    : 'bg-blue-100 text-blue-700'
+                    : 'bg-[#DBEAFE] text-[#1A44BF]'
                 }`}>
                   {insight.type === 'day_analysis' && (
                     <>
@@ -209,10 +209,10 @@ export default function DashboardInsights() {
       {/* Dica */}
       <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200">
         <div className="flex items-start gap-3">
-          <Lightbulb className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+          <Lightbulb className="w-5 h-5 text-[#1F4FD8] flex-shrink-0 mt-0.5" />
           <div>
             <p className="text-sm text-blue-900 font-medium mb-1">💡 Dica do Sistema</p>
-            <p className="text-sm text-blue-700">
+            <p className="text-sm text-[#1A44BF]">
               Os insights são atualizados automaticamente com base no seu comportamento financeiro. 
               Continue registrando suas transações para obter análises mais precisas!
             </p>

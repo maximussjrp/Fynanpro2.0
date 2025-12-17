@@ -32,21 +32,25 @@ export default function Logo({
   if (showText) {
     return (
       <div className={`flex items-center justify-center ${className}`}>
-        <img
-          src="/images/logo/logo-principal-sem-fundo.png"
-          alt="FynanPro 2.0"
-          style={{ height: '384px', width: 'auto' }}
-        />
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 bg-gradient-to-br from-[#1F4FD8] to-[#2ECC9A] rounded-xl flex items-center justify-center">
+            <span className="text-white font-bold text-xl">U</span>
+          </div>
+          <span className="text-3xl font-bold text-[#0F172A] font-poppins">UTOP</span>
+        </div>
       </div>
     );
   }
 
+  // UTOP Logo Icon
   return (
-    <img
-      src={src}
-      alt="FynanPro"
-      className={className}
-      style={style}
-    />
+    <div className={`flex items-center gap-2 ${className}`} style={style}>
+      <div className="w-8 h-8 bg-gradient-to-br from-[#1F4FD8] to-[#2ECC9A] rounded-lg flex items-center justify-center">
+        <span className="text-white font-bold text-sm">U</span>
+      </div>
+      {!style?.width || (style.width as number) > 50 ? (
+        <span className="text-xl font-bold text-[#0F172A] font-poppins">UTOP</span>
+      ) : null}
+    </div>
   );
 }

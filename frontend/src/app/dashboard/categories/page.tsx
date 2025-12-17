@@ -225,10 +225,10 @@ export default function CategoriesPage() {
             </button>
             <button
               onClick={() => openEditModal(category)}
-              className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
+              className="p-2 hover:bg-[#DBEAFE] rounded-lg transition-colors"
               title="Editar categoria"
             >
-              <Edit2 className="w-4 h-4 text-blue-600" />
+              <Edit2 className="w-4 h-4 text-[#1F4FD8]" />
             </button>
             <button
               onClick={() => handleDeleteCategory(category.id)}
@@ -293,7 +293,7 @@ export default function CategoriesPage() {
           </div>
           <button
             onClick={() => setShowCreateModal(true)}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+            className="px-4 py-2 bg-[#1F4FD8] text-white rounded-lg hover:bg-[#1A44BF] transition-colors flex items-center gap-2"
           >
             <Plus className="w-5 h-5" />
             Nova Categoria
@@ -305,7 +305,7 @@ export default function CategoriesPage() {
           <div className="flex gap-2">
             <button
               onClick={() => setFilterType('all')}
-              className={`px-4 py-2 rounded-lg transition-colors ${filterType === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+              className={`px-4 py-2 rounded-lg transition-colors ${filterType === 'all' ? 'bg-[#1F4FD8] text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
             >
               Todas
             </button>
@@ -356,7 +356,7 @@ export default function CategoriesPage() {
                   required
                   value={categoryForm.name}
                   onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
                   placeholder="Ex: Transporte, Alimentação..."
                 />
               </div>
@@ -368,7 +368,7 @@ export default function CategoriesPage() {
                   value={categoryForm.type}
                   onChange={(e) => setCategoryForm({ ...categoryForm, type: e.target.value, parentId: null })}
                   aria-label="Tipo de categoria"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
                 >
                   <option value="expense">Despesa</option>
                   <option value="income">Receita</option>
@@ -381,7 +381,7 @@ export default function CategoriesPage() {
                   value={categoryForm.parentId || ''}
                   onChange={(e) => setCategoryForm({ ...categoryForm, parentId: e.target.value || null })}
                   aria-label="Categoria pai"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
                 >
                   <option value="">Nenhuma (categoria raiz)</option>
                   {getRootCategories().map((cat) => (
@@ -398,7 +398,7 @@ export default function CategoriesPage() {
                   <button
                     type="button"
                     onClick={() => setShowIconPicker(!showIconPicker)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 flex items-center justify-between hover:bg-gray-50 transition-colors"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8] flex items-center justify-between hover:bg-gray-50 transition-colors"
                   >
                     <span className="flex items-center gap-3">
                       <span className="text-3xl">{categoryForm.icon || '📝'}</span>
@@ -421,7 +421,7 @@ export default function CategoriesPage() {
                                   setCategoryForm({ ...categoryForm, icon });
                                   setShowIconPicker(false);
                                 }}
-                                className={`w-10 h-10 text-xl rounded-lg hover:bg-blue-100 transition-colors flex items-center justify-center ${
+                                className={`w-10 h-10 text-xl rounded-lg hover:bg-[#DBEAFE] transition-colors flex items-center justify-center ${
                                   categoryForm.icon === icon ? 'bg-blue-200 ring-2 ring-blue-500' : 'bg-gray-50'
                                 }`}
                               >
@@ -459,7 +459,7 @@ export default function CategoriesPage() {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                  className="flex-1 px-4 py-2 bg-[#1F4FD8] text-white rounded-lg hover:bg-[#1A44BF] transition-colors disabled:opacity-50"
                 >
                   {submitting ? 'Criando...' : 'Criar'}
                 </button>
@@ -490,7 +490,7 @@ export default function CategoriesPage() {
                   onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })}
                   aria-label="Nome da categoria"
                   placeholder="Nome da categoria"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
                 />
               </div>
 
@@ -500,7 +500,7 @@ export default function CategoriesPage() {
                   <button
                     type="button"
                     onClick={() => setShowIconPicker(!showIconPicker)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 flex items-center justify-between hover:bg-gray-50 transition-colors"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8] flex items-center justify-between hover:bg-gray-50 transition-colors"
                   >
                     <span className="flex items-center gap-3">
                       <span className="text-3xl">{categoryForm.icon || '📝'}</span>
@@ -523,7 +523,7 @@ export default function CategoriesPage() {
                                   setCategoryForm({ ...categoryForm, icon });
                                   setShowIconPicker(false);
                                 }}
-                                className={`w-10 h-10 text-xl rounded-lg hover:bg-blue-100 transition-colors flex items-center justify-center ${
+                                className={`w-10 h-10 text-xl rounded-lg hover:bg-[#DBEAFE] transition-colors flex items-center justify-center ${
                                   categoryForm.icon === icon ? 'bg-blue-200 ring-2 ring-blue-500' : 'bg-gray-50'
                                 }`}
                               >
@@ -561,7 +561,7 @@ export default function CategoriesPage() {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                  className="flex-1 px-4 py-2 bg-[#1F4FD8] text-white rounded-lg hover:bg-[#1A44BF] transition-colors disabled:opacity-50"
                 >
                   {submitting ? 'Salvando...' : 'Salvar'}
                 </button>

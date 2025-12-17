@@ -175,40 +175,40 @@ export default function CalendarPage() {
 
           {/* Estatísticas do Mês */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-[#22C39A]">
+            <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-[#2ECC9A]">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-600 mb-1">Receitas do Mês</p>
-                  <p className="text-3xl font-bold text-[#22C39A]">{formatCurrency(monthIncome)}</p>
+                  <p className="text-3xl font-bold text-[#2ECC9A]">{formatCurrency(monthIncome)}</p>
                 </div>
                 <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                  <DollarSign className="w-6 h-6 text-[#22C39A]" />
+                  <DollarSign className="w-6 h-6 text-[#2ECC9A]" />
                 </div>
               </div>
             </div>
 
-            <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-[#E74C3C]">
+            <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-[#EF4444]">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-600 mb-1">Despesas do Mês</p>
-                  <p className="text-3xl font-bold text-[#E74C3C]">{formatCurrency(monthExpense)}</p>
+                  <p className="text-3xl font-bold text-[#EF4444]">{formatCurrency(monthExpense)}</p>
                 </div>
                 <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
-                  <DollarSign className="w-6 h-6 text-[#E74C3C]" />
+                  <DollarSign className="w-6 h-6 text-[#EF4444]" />
                 </div>
               </div>
             </div>
 
-            <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-[#1C6DD0]">
+            <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-[#1F4FD8]">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-600 mb-1">Saldo do Mês</p>
-                  <p className={`text-3xl font-bold ${monthTotal >= 0 ? 'text-[#22C39A]' : 'text-[#E74C3C]'}`}>
+                  <p className={`text-3xl font-bold ${monthTotal >= 0 ? 'text-[#2ECC9A]' : 'text-[#EF4444]'}`}>
                     {formatCurrency(monthTotal)}
                   </p>
                 </div>
-                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <Calendar className="w-6 h-6 text-[#1C6DD0]" />
+                <div className="w-12 h-12 bg-[#DBEAFE] rounded-lg flex items-center justify-center">
+                  <Calendar className="w-6 h-6 text-[#1F4FD8]" />
                 </div>
               </div>
             </div>
@@ -268,28 +268,28 @@ export default function CalendarPage() {
                   onClick={() => handleDayClick(day)}
                   className={`aspect-square border-2 rounded-xl p-2 cursor-pointer transition-all hover:shadow-lg ${
                     isToday
-                      ? 'border-[#1C6DD0] bg-blue-50'
-                      : 'border-gray-200 hover:border-[#1C6DD0]'
+                      ? 'border-[#1F4FD8] bg-[#EFF6FF]'
+                      : 'border-gray-200 hover:border-[#1F4FD8]'
                   }`}
                 >
                   <div className="flex flex-col h-full">
-                    <div className={`text-sm font-semibold mb-1 ${isToday ? 'text-[#1C6DD0]' : 'text-gray-700'}`}>
+                    <div className={`text-sm font-semibold mb-1 ${isToday ? 'text-[#1F4FD8]' : 'text-gray-700'}`}>
                       {day}
                     </div>
                     <div className="flex-1 overflow-hidden">
                       {dayEvents.slice(0, 2).map(event => {
-                        const isPositive = Number(event.amount) >= 0;
+                        const isIncome = event.type === 'income';
                         return (
                         <div
                           key={event.id}
                           className={`text-xs px-1 py-0.5 rounded mb-1 truncate ${
-                            isPositive
+                            isIncome
                               ? 'bg-green-100 text-green-700'
                               : 'bg-red-100 text-red-700'
                           }`}
                           title={`${event.title} - ${formatCurrency(Math.abs(Number(event.amount)))}`}
                         >
-                          {isPositive ? '' : '-'}{formatCurrency(Math.abs(Number(event.amount)))}
+                          {isIncome ? '' : '-'}{formatCurrency(Math.abs(Number(event.amount)))}
                         </div>
                         );
                       })}
@@ -307,7 +307,7 @@ export default function CalendarPage() {
 
           {loading && (
             <div className="text-center py-8">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#1C6DD0] mx-auto"></div>
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#1F4FD8] mx-auto"></div>
               <p className="text-gray-600 mt-4">Carregando eventos...</p>
             </div>
           )}

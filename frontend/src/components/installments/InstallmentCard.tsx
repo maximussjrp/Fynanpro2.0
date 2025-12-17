@@ -108,7 +108,7 @@ export default function InstallmentCard({
           </div>
           <div>
             <p className="text-xs text-gray-500 mb-1">Restante</p>
-            <p className="text-xl font-bold text-[#E74C3C]">
+            <p className="text-xl font-bold text-[#EF4444]">
               {formatCurrency(Number(purchase.remainingBalance))}
             </p>
           </div>
@@ -216,7 +216,7 @@ export default function InstallmentCard({
                   {inst.status === 'pending' && (
                     <button
                       onClick={() => onPayInstallment(purchase.id, inst.id)}
-                      className="px-4 py-2 bg-gradient-to-r from-[#22C39A] to-[#16A085] text-white rounded-lg hover:shadow-lg transition-all duration-200 text-sm font-semibold"
+                      className="px-4 py-2 bg-gradient-to-r from-[#2ECC9A] to-[#22C55E] text-white rounded-lg hover:shadow-lg transition-all duration-200 text-sm font-semibold"
                     >
                       Pagar
                     </button>

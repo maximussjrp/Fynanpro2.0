@@ -36,7 +36,7 @@ export default function RecurringBillsHeader({
         </div>
         <button
           onClick={onCreateNew}
-          className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[#1C6DD0] to-[#1557A8] text-white rounded-xl font-semibold hover:shadow-xl transition-all duration-200 hover:-translate-y-0.5"
+          className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[#1F4FD8] to-[#1A44BF] text-white rounded-xl font-semibold hover:shadow-xl transition-all duration-200 hover:-translate-y-0.5"
         >
           <Plus className="w-5 h-5" />
           Nova Conta Recorrente
@@ -46,27 +46,27 @@ export default function RecurringBillsHeader({
       {/* Cards de Estatísticas */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Total de Contas Ativas */}
-        <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-[#1C6DD0]">
+        <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-[#1F4FD8]">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600 mb-1">Contas Ativas</p>
               <p className="text-3xl font-bold text-gray-900">{totalActive}</p>
             </div>
-            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <TrendingUp className="w-6 h-6 text-[#1C6DD0]" />
+            <div className="w-12 h-12 bg-[#DBEAFE] rounded-lg flex items-center justify-center">
+              <TrendingUp className="w-6 h-6 text-[#1F4FD8]" />
             </div>
           </div>
         </div>
 
         {/* Total Mensal */}
-        <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-[#22C39A]">
+        <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-[#2ECC9A]">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600 mb-1">Total Mensal</p>
               <p className="text-3xl font-bold text-gray-900">{formatCurrency(totalMonthly)}</p>
             </div>
             <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <DollarSign className="w-6 h-6 text-[#22C39A]" />
+              <DollarSign className="w-6 h-6 text-[#2ECC9A]" />
             </div>
           </div>
         </div>

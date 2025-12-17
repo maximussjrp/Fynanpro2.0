@@ -406,7 +406,7 @@ export default function ReportsPage() {
     const levelBgColors = [
       '', // nível 0 não usado
       catIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50', // L1
-      'bg-blue-50/50', // L2
+      'bg-[#EFF6FF]/50', // L2
       'bg-purple-50/30', // L3
     ];
     const bgColor = levelBgColors[level] || levelBgColors[1];
@@ -606,7 +606,7 @@ export default function ReportsPage() {
             type="date"
             value={tempStartDate}
             onChange={(e) => setTempStartDate(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
             aria-label="Data inicial"
             title="Data inicial do período"
           />
@@ -615,13 +615,13 @@ export default function ReportsPage() {
             type="date"
             value={tempEndDate}
             onChange={(e) => setTempEndDate(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
             aria-label="Data final"
             title="Data final do período"
           />
           <button
             onClick={handleApplyDateFilter}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+            className="px-4 py-2 bg-[#1F4FD8] text-white rounded-lg hover:bg-[#1A44BF] text-sm font-medium"
             title="Aplicar filtro de data"
           >
             Filtrar
@@ -679,7 +679,7 @@ export default function ReportsPage() {
                 setStartDate(newStart);
                 setEndDate(newEnd);
               }}
-              className="px-3 py-1.5 text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg transition font-medium"
+              className="px-3 py-1.5 text-xs bg-[#DBEAFE] hover:bg-blue-200 text-[#1A44BF] rounded-lg transition font-medium"
             >
               6 meses
             </button>
@@ -758,7 +758,7 @@ export default function ReportsPage() {
             onClick={() => setActiveTab('cashflow')}
             className={`flex-1 px-6 py-4 font-medium transition ${
               activeTab === 'cashflow'
-                ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
+                ? 'text-[#1F4FD8] border-b-2 border-[#1F4FD8] bg-[#EFF6FF]'
                 : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
             }`}
           >
@@ -768,7 +768,7 @@ export default function ReportsPage() {
             onClick={() => setActiveTab('categories')}
             className={`flex-1 px-6 py-4 font-medium transition ${
               activeTab === 'categories'
-                ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
+                ? 'text-[#1F4FD8] border-b-2 border-[#1F4FD8] bg-[#EFF6FF]'
                 : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
             }`}
           >
@@ -778,7 +778,7 @@ export default function ReportsPage() {
             onClick={() => setActiveTab('comparison')}
             className={`flex-1 px-6 py-4 font-medium transition ${
               activeTab === 'comparison'
-                ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
+                ? 'text-[#1F4FD8] border-b-2 border-[#1F4FD8] bg-[#EFF6FF]'
                 : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
             }`}
           >
@@ -791,7 +791,7 @@ export default function ReportsPage() {
             }}
             className={`flex-1 px-6 py-4 font-medium transition ${
               activeTab === 'cashflow-categories'
-                ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
+                ? 'text-[#1F4FD8] border-b-2 border-[#1F4FD8] bg-[#EFF6FF]'
                 : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
             }`}
           >
@@ -801,7 +801,7 @@ export default function ReportsPage() {
             onClick={() => setActiveTab('budgets')}
             className={`flex-1 px-6 py-4 font-medium transition ${
               activeTab === 'budgets'
-                ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
+                ? 'text-[#1F4FD8] border-b-2 border-[#1F4FD8] bg-[#EFF6FF]'
                 : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
             }`}
           >
@@ -951,8 +951,8 @@ export default function ReportsPage() {
               </ResponsiveContainer>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
-                <div className="bg-blue-50 p-4 rounded-lg">
-                  <div className="text-sm text-blue-600 font-medium">Total de Receitas</div>
+                <div className="bg-[#EFF6FF] p-4 rounded-lg">
+                  <div className="text-sm text-[#1F4FD8] font-medium">Total de Receitas</div>
                   <div className="text-2xl font-bold text-blue-900">
                     {formatCurrency(incomeVsExpenseData.summary.totalIncome)}
                   </div>
@@ -981,14 +981,14 @@ export default function ReportsPage() {
                 <div className="flex items-center gap-2">
                   <button 
                     onClick={expandAllCategories}
-                    className="text-sm text-blue-600 hover:underline"
+                    className="text-sm text-[#1F4FD8] hover:underline"
                   >
                     Expandir Tudo
                   </button>
                   <span className="text-gray-400">|</span>
                   <button 
                     onClick={() => setExpandedCategories(new Set())}
-                    className="text-sm text-blue-600 hover:underline"
+                    className="text-sm text-[#1F4FD8] hover:underline"
                   >
                     Recolher Tudo
                   </button>
@@ -1070,7 +1070,7 @@ export default function ReportsPage() {
                             onClick={() => !isCalculated && toggleCategory(group.id)}
                           >
                             <td className={`sticky left-0 z-10 px-4 py-3 font-bold border-r border-gray-200 ${
-                              isCalculated ? 'bg-blue-100' : group.id === 'entradas' ? 'bg-green-100' : 'bg-red-100'
+                              isCalculated ? 'bg-[#DBEAFE]' : group.id === 'entradas' ? 'bg-green-100' : 'bg-red-100'
                             }`}>
                               <div className="flex items-center gap-2">
                                 {!isCalculated && (
@@ -1135,12 +1135,12 @@ export default function ReportsPage() {
                                   <td className={`px-2 py-3 text-right border-l border-gray-200 font-bold ${
                                     group.id === 'entradas' ? 'text-green-700' : 
                                     group.id === 'saidas' ? 'text-red-700' : 
-                                    monthRealizado >= 0 ? 'text-blue-700' : 'text-red-700'
+                                    monthRealizado >= 0 ? 'text-[#1A44BF]' : 'text-red-700'
                                   }`}>
                                     {formatCurrency(Math.abs(monthRealizado))}
                                   </td>
                                   <td className={`px-1 py-3 text-center text-xs font-semibold ${
-                                    isCalculated ? 'bg-blue-50' : group.id === 'entradas' ? 'bg-green-50' : 'bg-red-50'
+                                    isCalculated ? 'bg-[#EFF6FF]' : group.id === 'entradas' ? 'bg-green-50' : 'bg-red-50'
                                   }`}>
                                     100%
                                   </td>
@@ -1163,21 +1163,21 @@ export default function ReportsPage() {
                             })}
                             {/* Totais */}
                             <td className={`px-2 py-3 text-right border-l-2 border-gray-300 font-bold ${
-                              isCalculated ? 'bg-blue-50' : 'bg-gray-50'
+                              isCalculated ? 'bg-[#EFF6FF]' : 'bg-gray-50'
                             } ${
                               group.id === 'entradas' ? 'text-green-700' : 
                               group.id === 'saidas' ? 'text-red-700' : 
-                              groupTotalRealizado >= 0 ? 'text-blue-700' : 'text-red-700'
+                              groupTotalRealizado >= 0 ? 'text-[#1A44BF]' : 'text-red-700'
                             }`}>
                               {formatCurrency(Math.abs(groupTotalRealizado))}
                             </td>
                             <td className={`px-1 py-3 text-center text-xs font-bold ${
-                              isCalculated ? 'bg-blue-100' : group.id === 'entradas' ? 'bg-green-100' : 'bg-red-100'
+                              isCalculated ? 'bg-[#DBEAFE]' : group.id === 'entradas' ? 'bg-green-100' : 'bg-red-100'
                             }`}>
                               100%
                             </td>
                             <td className={`px-2 py-3 text-right ${
-                              isCalculated ? 'bg-blue-50' : 'bg-gray-50'
+                              isCalculated ? 'bg-[#EFF6FF]' : 'bg-gray-50'
                             } text-gray-500`}>
                               {formatCurrency(groupTotalEsperado)}
                             </td>
@@ -1206,7 +1206,7 @@ export default function ReportsPage() {
                     <span>Saídas (Despesas)</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 bg-blue-500 rounded"></div>
+                    <div className="w-3 h-3 bg-[#1F4FD8] rounded"></div>
                     <span>Saldo do Período</span>
                   </div>
                 </div>

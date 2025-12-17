@@ -7,7 +7,6 @@ import api, { logout } from '@/lib/api';
 import { useAuth, useUser, useTenant } from '@/stores/auth';
 import TransactionModal from '@/components/NewTransactionModal';
 import UnifiedTransactionModal from '@/components/UnifiedTransactionModal';
-import DashboardLayoutWrapper from '@/components/DashboardLayoutWrapper';
 import QuickActions from '@/components/QuickActions';
 import OnboardingRecurringBills from '@/components/OnboardingRecurringBills';
 import { 
@@ -345,15 +344,13 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <DashboardLayoutWrapper showAddButton={false}>
-        <div className="p-6">
-          <DashboardMetricsSkeleton />
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-            <ChartSkeleton height={350} />
-            <ChartSkeleton height={350} />
-          </div>
+      <div className="p-6">
+        <DashboardMetricsSkeleton />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+          <ChartSkeleton height={350} />
+          <ChartSkeleton height={350} />
         </div>
-      </DashboardLayoutWrapper>
+      </div>
     );
   }
 
@@ -363,7 +360,7 @@ export default function Dashboard() {
   const chartData = dashboardData.incomeVsExpenses?.chartData || [];
 
   return (
-    <DashboardLayoutWrapper>
+    <>
       {/* Content */}
       <div className="p-6">
         {/* Quick Actions */}
@@ -404,7 +401,7 @@ export default function Dashboard() {
         {/* 1. Saldo Final Detalhado */}
         <div className={`rounded-xl p-6 mb-8 text-white shadow-lg ${
           balance?.isPositive 
-            ? 'bg-gradient-to-r from-[#1C6DD0] to-[#1557A8]' 
+            ? 'bg-gradient-to-r from-[#1F4FD8] to-[#1A44BF]' 
             : 'bg-gradient-to-r from-[#DC2626] to-[#B91C1C]'
         }`}>
           <h2 className="text-lg font-semibold mb-6 font-poppins">Saldo Final do Período</h2>
@@ -457,7 +454,7 @@ export default function Dashboard() {
           <div className="border-t border-white/20 pt-4">
             <div className={`rounded-lg p-4 text-center ${balance?.isPositive ? 'bg-white/20' : 'bg-white/10'}`}>
               <p className="text-sm text-white mb-2 font-medium">Saldo Final (Receitas - Despesas)</p>
-              <p className={`text-4xl font-bold ${balance?.isPositive ? 'text-[#22C39A]' : 'text-[#FFEB3B]'}`}>
+              <p className={`text-4xl font-bold ${balance?.isPositive ? 'text-[#2ECC9A]' : 'text-[#FFEB3B]'}`}>
                 {formatCurrency(balance?.finalBalance || 0)}
               </p>
             </div>
@@ -475,7 +472,7 @@ export default function Dashboard() {
               <div className="space-y-3">
                 {expenseData.pareto80.map((item: any) => (
                   <div key={item.rank} className="flex items-center gap-3">
-                    <div className="flex-shrink-0 w-8 h-8 bg-[#FEF2F2] rounded-full flex items-center justify-center text-[#E74C3C] font-semibold text-sm">
+                    <div className="flex-shrink-0 w-8 h-8 bg-[#FEF2F2] rounded-full flex items-center justify-center text-[#EF4444] font-semibold text-sm">
                       {item.rank}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -485,7 +482,7 @@ export default function Dashboard() {
                       </div>
                       <div className="w-full bg-[#D9D9D9] rounded-full h-2">
                         <div
-                          className="bg-[#E74C3C] h-2 rounded-full transition-all"
+                          className="bg-[#EF4444] h-2 rounded-full transition-all"
                           style={{ width: `${item.percentage}%` }}
                         ></div>
                       </div>
@@ -511,7 +508,7 @@ export default function Dashboard() {
               <div className="space-y-3">
                 {incomeData.ranking.slice(0, 8).map((item: any) => (
                   <div key={item.rank} className="flex items-center gap-3">
-                    <div className="flex-shrink-0 w-8 h-8 bg-[#E8F9F4] rounded-full flex items-center justify-center text-[#22C39A] font-semibold text-sm">
+                    <div className="flex-shrink-0 w-8 h-8 bg-[#DCFCE7] rounded-full flex items-center justify-center text-[#2ECC9A] font-semibold text-sm">
                       {item.rank}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -521,7 +518,7 @@ export default function Dashboard() {
                       </div>
                       <div className="w-full bg-[#D9D9D9] rounded-full h-2">
                         <div
-                          className="bg-[#22C39A] h-2 rounded-full transition-all"
+                          className="bg-[#2ECC9A] h-2 rounded-full transition-all"
                           style={{ width: `${item.percentage}%` }}
                         ></div>
                       </div>
@@ -547,7 +544,7 @@ export default function Dashboard() {
                 <div key={month.month} className="space-y-2">
                   <div className="flex items-center justify-between text-sm">
                     <span className="font-medium text-[#1A1A1A] font-inter">{formatMonth(month.month)}</span>
-                    <span className={`font-semibold font-inter ${month.balance >= 0 ? 'text-[#22C39A]' : 'text-[#E74C3C]'}`}>
+                    <span className={`font-semibold font-inter ${month.balance >= 0 ? 'text-[#2ECC9A]' : 'text-[#EF4444]'}`}>
                       {formatCurrency(month.balance)}
                     </span>
                   </div>
@@ -558,10 +555,10 @@ export default function Dashboard() {
                         <span>Receitas (realizado + provisionado)</span>
                         <span className="font-medium">{formatCurrency(month.totalIncome || month.realizedIncome)}</span>
                       </div>
-                      <div className="h-8 bg-[#E8F9F4] rounded overflow-hidden">
+                      <div className="h-8 bg-[#DCFCE7] rounded overflow-hidden">
                         <div className="h-full flex">
                           <div
-                            className="bg-[#22C39A]"
+                            className="bg-[#2ECC9A]"
                             style={{
                               width: month.totalIncome ? `${(month.realizedIncome / month.totalIncome) * 100}%` : '100%',
                             }}
@@ -580,7 +577,7 @@ export default function Dashboard() {
                       </div>
                       <div className="flex items-center gap-3 mt-1 text-xs text-[#4F4F4F] font-inter">
                         <span className="flex items-center gap-1">
-                          <div className="w-3 h-3 bg-[#22C39A] rounded"></div>
+                          <div className="w-3 h-3 bg-[#2ECC9A] rounded"></div>
                           Realizado: {formatCurrency(month.realizedIncome)}
                         </span>
                         {month.projectedIncome > 0 && (
@@ -601,7 +598,7 @@ export default function Dashboard() {
                       <div className="h-8 bg-[#FEF2F2] rounded overflow-hidden">
                         <div className="h-full flex">
                           <div
-                            className="bg-[#E74C3C]"
+                            className="bg-[#EF4444]"
                             style={{
                               width: `${(month.realizedExpense / month.totalExpense) * 100}%`,
                             }}
@@ -618,7 +615,7 @@ export default function Dashboard() {
                       </div>
                       <div className="flex items-center gap-3 mt-1 text-xs text-[#4F4F4F] font-inter">
                         <span className="flex items-center gap-1">
-                          <div className="w-3 h-3 bg-[#E74C3C] rounded"></div>
+                          <div className="w-3 h-3 bg-[#EF4444] rounded"></div>
                           Realizado: {formatCurrency(month.realizedExpense)}
                         </span>
                         <span className="flex items-center gap-1">
@@ -642,12 +639,12 @@ export default function Dashboard() {
           <div className="bg-white rounded-xl shadow-sm border p-6">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
-                <Wallet className="text-blue-600" size={20} />
+                <Wallet className="text-[#1F4FD8]" size={20} />
                 <h3 className="text-lg font-semibold text-[#1A1A1A] font-poppins">Contas Bancárias</h3>
               </div>
               <button
                 onClick={() => setShowBankAccountModal(true)}
-                className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium flex items-center gap-1"
+                className="px-3 py-1.5 bg-[#1F4FD8] text-white rounded-lg hover:bg-[#1A44BF] text-sm font-medium flex items-center gap-1"
               >
                 <span>+</span> Nova Conta
               </button>
@@ -660,7 +657,7 @@ export default function Dashboard() {
                       <p className="font-medium text-[#1A1A1A]">{account.name}</p>
                       <p className="text-xs text-gray-500">{account.institution || account.type}</p>
                     </div>
-                    <p className={`font-semibold ${account.currentBalance >= 0 ? 'text-[#22C39A]' : 'text-[#E74C3C]'}`}>
+                    <p className={`font-semibold ${account.currentBalance >= 0 ? 'text-[#2ECC9A]' : 'text-[#EF4444]'}`}>
                       {formatCurrency(account.currentBalance)}
                     </p>
                   </div>
@@ -672,7 +669,7 @@ export default function Dashboard() {
                 <p className="text-gray-500 text-sm">Nenhuma conta cadastrada</p>
                 <button
                   onClick={() => setShowBankAccountModal(true)}
-                  className="mt-3 text-blue-600 text-sm hover:underline"
+                  className="mt-3 text-[#1F4FD8] text-sm hover:underline"
                 >
                   Adicionar primeira conta
                 </button>
@@ -743,7 +740,7 @@ export default function Dashboard() {
                   type="date"
                   value={tempStartDate}
                   onChange={(e) => setTempStartDate(e.target.value)}
-                  className="w-full px-4 py-2 border border-[#D9D9D9] rounded-lg focus:ring-2 focus:ring-[#1C6DD0] focus:border-[#1C6DD0] font-inter"
+                  className="w-full px-4 py-2 border border-[#D9D9D9] rounded-lg focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] font-inter"
                   title="Data inicial do período"
                 />
               </div>
@@ -753,7 +750,7 @@ export default function Dashboard() {
                   type="date"
                   value={tempEndDate}
                   onChange={(e) => setTempEndDate(e.target.value)}
-                  className="w-full px-4 py-2 border border-[#D9D9D9] rounded-lg focus:ring-2 focus:ring-[#1C6DD0] focus:border-[#1C6DD0] font-inter"
+                  className="w-full px-4 py-2 border border-[#D9D9D9] rounded-lg focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] font-inter"
                   title="Data final do período"
                 />
               </div>
@@ -786,7 +783,7 @@ export default function Dashboard() {
               </button>
               <button
                 onClick={handleApplyPeriod}
-                className="flex-1 px-4 py-2 bg-[#1C6DD0] text-white rounded-lg hover:bg-[#1557A8] shadow-md font-inter"
+                className="flex-1 px-4 py-2 bg-[#1F4FD8] text-white rounded-lg hover:bg-[#1A44BF] shadow-md font-inter"
               >
                 Aplicar
               </button>
@@ -802,7 +799,7 @@ export default function Dashboard() {
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-2">
-                <Wallet className="text-blue-600" size={24} />
+                <Wallet className="text-[#1F4FD8]" size={24} />
                 <h2 className="text-xl font-bold text-gray-900">Nova Conta Bancária</h2>
               </div>
               <button
@@ -827,7 +824,7 @@ export default function Dashboard() {
                   required
                   value={bankAccountForm.name}
                   onChange={(e) => setBankAccountForm({ ...bankAccountForm, name: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
                   placeholder="Ex: Conta Corrente Itaú"
                 />
               </div>
@@ -841,7 +838,7 @@ export default function Dashboard() {
                   required
                   value={bankAccountForm.type}
                   onChange={(e) => setBankAccountForm({ ...bankAccountForm, type: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
                   title="Tipo de conta"
                 >
                   <option value="bank">Conta Bancária</option>
@@ -861,7 +858,7 @@ export default function Dashboard() {
                   required
                   value={bankAccountForm.institution}
                   onChange={(e) => setBankAccountForm({ ...bankAccountForm, institution: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
                   placeholder="Ex: Banco Itaú, Nubank, PicPay..."
                 />
               </div>
@@ -880,7 +877,7 @@ export default function Dashboard() {
                     min="0"
                     value={bankAccountForm.initialBalance}
                     onChange={(e) => setBankAccountForm({ ...bankAccountForm, initialBalance: e.target.value })}
-                    className="w-full pl-12 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    className="w-full pl-12 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
                     placeholder="0.00"
                   />
                 </div>
@@ -898,7 +895,7 @@ export default function Dashboard() {
                 </button>
                 <button
                   type="submit"
-                  className={`flex-1 px-4 py-2 rounded-lg text-white font-medium bg-blue-600 hover:bg-blue-700 ${
+                  className={`flex-1 px-4 py-2 rounded-lg text-white font-medium bg-[#1F4FD8] hover:bg-[#1A44BF] ${
                     submitting ? 'opacity-50 cursor-not-allowed' : ''
                   }`}
                   disabled={submitting}
@@ -917,7 +914,7 @@ export default function Dashboard() {
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-2">
-                <CreditCard className="text-blue-600" size={24} />
+                <CreditCard className="text-[#1F4FD8]" size={24} />
                 <h2 className="text-xl font-bold text-gray-900">Novo Meio de Pagamento</h2>
               </div>
               <button
@@ -942,7 +939,7 @@ export default function Dashboard() {
                   required
                   value={paymentMethodForm.name}
                   onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, name: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
                   placeholder="Ex: PIX Nubank, Cartão Itaú, Dinheiro..."
                 />
               </div>
@@ -956,7 +953,7 @@ export default function Dashboard() {
                   required
                   value={paymentMethodForm.type}
                   onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, type: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
                   title="Tipo de meio de pagamento"
                 >
                   <option value="pix">PIX</option>
@@ -982,7 +979,7 @@ export default function Dashboard() {
                     required={paymentMethodForm.type === 'credit_card' || paymentMethodForm.type === 'debit_card'}
                     value={paymentMethodForm.bankAccountId}
                     onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, bankAccountId: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
                     title="Conta bancária vinculada"
                   >
                     <option value="">Selecione uma conta</option>
@@ -1014,7 +1011,7 @@ export default function Dashboard() {
                         maxLength={4}
                         value={paymentMethodForm.lastFourDigits}
                         onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, lastFourDigits: e.target.value.replace(/\D/g, '') })}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
                         placeholder="2277"
                       />
                     </div>
@@ -1027,7 +1024,7 @@ export default function Dashboard() {
                       <select
                         value={paymentMethodForm.cardNetwork}
                         onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, cardNetwork: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
                         title="Bandeira do cartão"
                       >
                         <option value="">Selecione</option>
@@ -1057,7 +1054,7 @@ export default function Dashboard() {
                         }
                         setPaymentMethodForm({ ...paymentMethodForm, expirationDate: value });
                       }}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
                       title="Data de vencimento do cartão"
                       placeholder="MM/AA"
                       maxLength={5}
@@ -1078,7 +1075,7 @@ export default function Dashboard() {
                 </button>
                 <button
                   type="submit"
-                  className={`flex-1 px-4 py-2 rounded-lg text-white font-medium bg-blue-600 hover:bg-blue-700 ${
+                  className={`flex-1 px-4 py-2 rounded-lg text-white font-medium bg-[#1F4FD8] hover:bg-[#1A44BF] ${
                     submitting ? 'opacity-50 cursor-not-allowed' : ''
                   }`}
                   disabled={submitting}
@@ -1128,6 +1125,6 @@ export default function Dashboard() {
         }}
       />
       </div>
-    </DashboardLayoutWrapper>
+    </>
   );
 }

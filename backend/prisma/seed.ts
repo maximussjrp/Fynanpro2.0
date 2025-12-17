@@ -36,7 +36,7 @@ async function main() {
     },
     create: {
       ownerId: masterUser.id,
-      name: 'FYNANPRO Master',
+      name: 'UTOP Master',
       slug: 'maxguarinieri',
       subscriptionPlan: 'enterprise',
       subscriptionStatus: 'active',
@@ -73,13 +73,13 @@ async function main() {
   if (existingCategories === 0) {
     const categories = [
       // RECEITAS
-      { name: '💼 Salário', type: 'income', icon: '💼', color: '#22C39A' },
-      { name: '💰 Investimentos', type: 'income', icon: '💰', color: '#4CAF50' },
-      { name: '🎁 Extras', type: 'income', icon: '🎁', color: '#8BC34A' },
+      { name: '💼 Salário', type: 'income', icon: '💼', color: '#2ECC9A' },
+      { name: '💰 Investimentos', type: 'income', icon: '💰', color: '#22C55E' },
+      { name: '🎁 Extras', type: 'income', icon: '🎁', color: '#9AF0C6' },
       { name: '💵 Freelance', type: 'income', icon: '💵', color: '#66BB6A' },
       
       // DESPESAS
-      { name: '🏠 Moradia', type: 'expense', icon: '🏠', color: '#E74C3C' },
+      { name: '🏠 Moradia', type: 'expense', icon: '🏠', color: '#EF4444' },
       { name: '🍔 Alimentação', type: 'expense', icon: '🍔', color: '#FF6B6B' },
       { name: '🚗 Transporte', type: 'expense', icon: '🚗', color: '#FF9800' },
       { name: '🏥 Saúde', type: 'expense', icon: '🏥', color: '#E91E63' },
@@ -110,7 +110,7 @@ async function main() {
   console.log('\n📧 Credenciais de acesso:');
   console.log('   Email: max.guarinieri@gmail.com');
   console.log('   Senha: MxG#2025$FynanPro!Dev');
-  console.log('   Tenant: FYNANPRO Master');
+  console.log('   Tenant: UTOP Master');
   console.log('   Plano: Enterprise (1 ano)\n');
 }
 

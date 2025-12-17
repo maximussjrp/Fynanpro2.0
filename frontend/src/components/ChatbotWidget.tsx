@@ -78,7 +78,7 @@ export default function ChatbotWidget() {
         isLoading: false,
         messages: [{
           role: 'assistant',
-          content: 'Olá! 👋 Sou a Isis, sua assistente financeira. Como posso ajudar?',
+          content: 'Olá! 👋 Sou o Utop Assistant, seu guia financeiro. Posso te ajudar a organizar suas finanças. Vamos começar?',
           timestamp: new Date(),
           quickReplies: ['Novo gasto', 'Meu saldo', 'Ajuda'],
         }],
@@ -188,13 +188,13 @@ export default function ChatbotWidget() {
     return (
       <button
         onClick={toggleChat}
-        className="fixed bottom-6 right-6 w-14 h-14 bg-gradient-to-br from-[#1C6DD0] to-[#1557A8] rounded-full shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center group z-50"
-        title="Falar com Isis"
+        className="fixed bottom-6 right-6 w-14 h-14 bg-gradient-to-br from-[#1F4FD8] to-[#2ECC9A] rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center group z-50"
+        title="Falar com Utop Assistant"
       >
         <MessageCircle className="w-6 h-6 text-white group-hover:scale-110 transition-transform" />
         
         {/* Indicador de notificação */}
-        <span className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white animate-pulse" />
+        <span className="absolute -top-1 -right-1 w-4 h-4 bg-[#2ECC9A] rounded-full border-2 border-white animate-pulse" />
       </button>
     );
   }
@@ -203,16 +203,16 @@ export default function ChatbotWidget() {
     <div className={`fixed bottom-6 right-6 w-96 bg-white rounded-2xl shadow-2xl z-50 flex flex-col overflow-hidden transition-all duration-300 ${isMinimized ? 'h-16' : 'h-[600px] max-h-[80vh]'}`}>
       {/* Header */}
       <div 
-        className="bg-gradient-to-r from-[#1C6DD0] to-[#1557A8] text-white p-4 flex items-center justify-between cursor-pointer"
+        className="bg-gradient-to-r from-[#1F4FD8] to-[#2ECC9A] text-white p-4 flex items-center justify-between cursor-pointer"
         onClick={() => setIsMinimized(!isMinimized)}
       >
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+          <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
             <Sparkles className="w-5 h-5" />
           </div>
           <div>
-            <h3 className="font-semibold">Isis</h3>
-            <p className="text-xs text-white/80">Sua assistente financeira</p>
+            <h3 className="font-semibold">Utop Assistant</h3>
+            <p className="text-xs text-white/80">Seu guia financeiro</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -241,7 +241,7 @@ export default function ChatbotWidget() {
                 className={`flex gap-2 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 {message.role === 'assistant' && (
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#1C6DD0] to-[#1557A8] flex items-center justify-center flex-shrink-0">
+                  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#1F4FD8] to-[#2ECC9A] flex items-center justify-center flex-shrink-0">
                     <Bot className="w-4 h-4 text-white" />
                   </div>
                 )}
@@ -250,8 +250,8 @@ export default function ChatbotWidget() {
                   <div
                     className={`px-4 py-3 rounded-2xl ${
                       message.role === 'user'
-                        ? 'bg-[#1C6DD0] text-white rounded-br-md'
-                        : 'bg-white text-gray-800 rounded-bl-md shadow-sm'
+                        ? 'bg-[#1F4FD8] text-white rounded-br-md'
+                        : 'bg-white text-[#0F172A] rounded-bl-md shadow-sm'
                     }`}
                     dangerouslySetInnerHTML={{ __html: formatMessage(message.content) }}
                   />
@@ -283,7 +283,7 @@ export default function ChatbotWidget() {
             {/* Loading */}
             {state.isLoading && (
               <div className="flex gap-2">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#1C6DD0] to-[#1557A8] flex items-center justify-center">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#1F4FD8] to-[#1A44BF] flex items-center justify-center">
                   <Bot className="w-4 h-4 text-white" />
                 </div>
                 <div className="bg-white px-4 py-3 rounded-2xl rounded-bl-md shadow-sm">
@@ -323,13 +323,13 @@ export default function ChatbotWidget() {
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 placeholder="Digite sua mensagem..."
-                className="flex-1 px-4 py-2.5 bg-gray-100 rounded-full focus:outline-none focus:ring-2 focus:ring-[#1C6DD0]/50 text-sm"
+                className="flex-1 px-4 py-2.5 bg-gray-100 rounded-full focus:outline-none focus:ring-2 focus:ring-[#1F4FD8]/50 text-sm"
                 disabled={state.isLoading}
               />
               <button
                 type="submit"
                 disabled={!inputValue.trim() || state.isLoading}
-                className="w-10 h-10 bg-[#1C6DD0] hover:bg-[#1557A8] disabled:bg-gray-300 text-white rounded-full flex items-center justify-center transition-colors"
+                className="w-10 h-10 bg-[#1F4FD8] hover:bg-[#1A44BF] disabled:bg-gray-300 text-white rounded-full flex items-center justify-center transition-colors"
               >
                 {state.isLoading ? (
                   <Loader2 className="w-5 h-5 animate-spin" />

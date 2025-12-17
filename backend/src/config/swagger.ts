@@ -9,12 +9,12 @@ const options: swaggerJsdoc.Options = {
   definition: {
     openapi: '3.0.0',
     info: {
-      title: 'FYNANPRO 2.0 API',
+      title: 'UTOP API',
       version: '2.0.0',
       description: 'API completa para gestão financeira pessoal e empresarial com suporte multi-tenant',
       contact: {
-        name: 'FYNANPRO Support',
-        email: 'support@fynanpro.com',
+        name: 'UTOP Support',
+        email: 'support@utop.app',
       },
       license: {
         name: 'MIT',
@@ -27,7 +27,7 @@ const options: swaggerJsdoc.Options = {
         description: 'Servidor de Desenvolvimento',
       },
       {
-        url: 'https://api.fynanpro.com/api/v1',
+        url: 'https://api.utop.app/api/v1',
         description: 'Servidor de Produção',
       },
     ],

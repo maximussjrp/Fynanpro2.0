@@ -59,14 +59,14 @@ export default function InstallmentsHeader({
         </div>
 
         {/* Total a Pagar */}
-        <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-[#E74C3C]">
+        <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-[#EF4444]">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600 mb-1">Total a Pagar</p>
               <p className="text-3xl font-bold text-gray-900">{formatCurrency(totalOwed)}</p>
             </div>
             <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
-              <TrendingDown className="w-6 h-6 text-[#E74C3C]" />
+              <TrendingDown className="w-6 h-6 text-[#EF4444]" />
             </div>
           </div>
         </div>

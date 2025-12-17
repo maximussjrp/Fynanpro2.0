@@ -63,7 +63,7 @@ export class CacheService {
    * Gera chave única para cache
    */
   private generateKey(namespace: string, key: string): string {
-    return `fynanpro:${namespace}:${key}`;
+    return `utop:${namespace}:${key}`;
   }
 
   /**
@@ -137,7 +137,7 @@ export class CacheService {
     }
 
     try {
-      const pattern = `fynanpro:${namespace}:*`;
+      const pattern = `utop:${namespace}:*`;
       const keys = await this.redis.keys(pattern);
       
       if (keys.length > 0) {

@@ -141,8 +141,8 @@ export default function TransactionsPage() {
       return <ChevronsUpDown className="w-4 h-4 text-gray-400" />;
     }
     return sortDirection === 'asc' 
-      ? <ChevronUp className="w-4 h-4 text-blue-600" />
-      : <ChevronDown className="w-4 h-4 text-blue-600" />;
+      ? <ChevronUp className="w-4 h-4 text-[#1F4FD8]" />
+      : <ChevronDown className="w-4 h-4 text-[#1F4FD8]" />;
   };
 
   // Ordenar e filtrar transações
@@ -433,7 +433,7 @@ export default function TransactionsPage() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#1F4FD8] mx-auto mb-4"></div>
           <p className="text-gray-600">Carregando transações...</p>
         </div>
       </div>
@@ -477,7 +477,7 @@ export default function TransactionsPage() {
             </button>
             <button
               onClick={() => setShowUnifiedModal(true)}
-              className="px-4 py-2 bg-gradient-to-r from-[#1C6DD0] to-[#1557A8] text-white rounded-lg hover:from-[#1557A8] hover:to-[#0E4A8A] transition-all flex items-center gap-2 shadow-md"
+              className="px-4 py-2 bg-gradient-to-r from-[#1F4FD8] to-[#1A44BF] text-white rounded-lg hover:from-[#1A44BF] hover:to-[#1539A6] transition-all flex items-center gap-2 shadow-md"
               title="Nova transação com opções avançadas"
             >
               <Plus className="w-5 h-5" />
@@ -526,8 +526,8 @@ export default function TransactionsPage() {
 
           <div className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow">
             <div className="flex items-center gap-3 mb-2">
-              <div className="p-3 bg-blue-100 rounded-lg">
-                <Receipt className="w-6 h-6 text-blue-600" />
+              <div className="p-3 bg-[#DBEAFE] rounded-lg">
+                <Receipt className="w-6 h-6 text-[#1F4FD8]" />
               </div>
               <div className="flex-1">
                 <p className="text-sm text-gray-500 font-medium">Saldo</p>
@@ -554,7 +554,7 @@ export default function TransactionsPage() {
               type="date"
               value={tempStartDate}
               onChange={(e) => setTempStartDate(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8] focus:border-transparent text-sm"
               title="Data inicial"
             />
             <span className="text-gray-400">até</span>
@@ -562,12 +562,12 @@ export default function TransactionsPage() {
               type="date"
               value={tempEndDate}
               onChange={(e) => setTempEndDate(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8] focus:border-transparent text-sm"
               title="Data final"
             />
             <button
               onClick={handleApplyDateFilter}
-              className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+              className="px-3 py-2 bg-[#1F4FD8] text-white rounded-lg hover:bg-[#1A44BF] text-sm font-medium"
               title="Aplicar filtro de data"
             >
               Filtrar
@@ -578,7 +578,7 @@ export default function TransactionsPage() {
             <select
               value={filters.type}
               onChange={(e) => setFilters({ ...filters, type: e.target.value as any })}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8] focus:border-transparent text-sm"
               title="Tipo"
             >
               <option value="all">Todos os tipos</option>
@@ -590,12 +590,12 @@ export default function TransactionsPage() {
           {/* Indicador de filtros ativos */}
           {activeFiltersCount > 0 && (
             <div className="flex items-center gap-2 ml-auto">
-              <span className="text-sm text-blue-600 font-medium">
+              <span className="text-sm text-[#1F4FD8] font-medium">
                 {activeFiltersCount} filtro{activeFiltersCount > 1 ? 's' : ''} ativo{activeFiltersCount > 1 ? 's' : ''}
               </span>
               <button
                 onClick={clearAllColumnFilters}
-                className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors flex items-center gap-1"
+                className="px-3 py-1 text-sm bg-[#DBEAFE] text-[#1A44BF] rounded-lg hover:bg-blue-200 transition-colors flex items-center gap-1"
               >
                 <X className="w-4 h-4" />
                 Limpar
@@ -647,13 +647,13 @@ export default function TransactionsPage() {
                             setPopoverSearch('');
                           }}
                           className={`p-1 rounded hover:bg-gray-200 transition-colors ${
-                            columnFilters.categories.length > 0 ? 'text-blue-600 bg-blue-100' : 'text-gray-400'
+                            columnFilters.categories.length > 0 ? 'text-[#1F4FD8] bg-[#DBEAFE]' : 'text-gray-400'
                           }`}
                           title="Filtrar categorias"
                         >
                           <Filter className="w-4 h-4" />
                           {columnFilters.categories.length > 0 && (
-                            <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-600 text-white text-[10px] rounded-full flex items-center justify-center">
+                            <span className="absolute -top-1 -right-1 w-4 h-4 bg-[#1F4FD8] text-white text-[10px] rounded-full flex items-center justify-center">
                               {columnFilters.categories.length}
                             </span>
                           )}
@@ -675,7 +675,7 @@ export default function TransactionsPage() {
                                 placeholder="Buscar categoria..."
                                 value={popoverSearch}
                                 onChange={(e) => setPopoverSearch(e.target.value)}
-                                className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#1F4FD8] focus:border-transparent"
                                 autoFocus
                               />
                             </div>
@@ -711,7 +711,7 @@ export default function TransactionsPage() {
                                           }));
                                         }
                                       }}
-                                      className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                                      className="w-4 h-4 text-[#1F4FD8] rounded border-gray-300 focus:ring-[#1F4FD8]"
                                     />
                                     <span className="text-sm">{cat.icon}</span>
                                     <span className="text-sm text-gray-700">
@@ -751,7 +751,7 @@ export default function TransactionsPage() {
                                             }));
                                           }
                                         }}
-                                        className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                                        className="w-4 h-4 text-[#1F4FD8] rounded border-gray-300 focus:ring-[#1F4FD8]"
                                       />
                                       <span className="text-sm">{l1.icon}</span>
                                       <span className="text-sm text-gray-700">{l1.name}</span>
@@ -783,7 +783,7 @@ export default function TransactionsPage() {
                                                   }));
                                                 }
                                               }}
-                                              className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                                              className="w-4 h-4 text-[#1F4FD8] rounded border-gray-300 focus:ring-[#1F4FD8]"
                                             />
                                             <span className="text-sm">{l2.icon}</span>
                                             <span className="text-sm">{l2.name}</span>
@@ -811,7 +811,7 @@ export default function TransactionsPage() {
                                                     }));
                                                   }
                                                 }}
-                                                className="w-3 h-3 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                                                className="w-3 h-3 text-[#1F4FD8] rounded border-gray-300 focus:ring-[#1F4FD8]"
                                               />
                                               <span className="text-xs">{l3.icon}</span>
                                               <span className="text-xs">{l3.name}</span>
@@ -832,7 +832,7 @@ export default function TransactionsPage() {
                             <div className="p-2 border-t border-gray-100">
                               <button
                                 onClick={() => setColumnFilters(prev => ({ ...prev, categories: [] }))}
-                                className="w-full px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                className="w-full px-3 py-2 text-sm text-[#1F4FD8] hover:bg-[#EFF6FF] rounded-lg transition-colors"
                               >
                                 Limpar seleção
                               </button>
@@ -859,13 +859,13 @@ export default function TransactionsPage() {
                             setPopoverSearch('');
                           }}
                           className={`p-1 rounded hover:bg-gray-200 transition-colors ${
-                            columnFilters.accounts.length > 0 ? 'text-blue-600 bg-blue-100' : 'text-gray-400'
+                            columnFilters.accounts.length > 0 ? 'text-[#1F4FD8] bg-[#DBEAFE]' : 'text-gray-400'
                           }`}
                           title="Filtrar contas"
                         >
                           <Filter className="w-4 h-4" />
                           {columnFilters.accounts.length > 0 && (
-                            <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-600 text-white text-[10px] rounded-full flex items-center justify-center">
+                            <span className="absolute -top-1 -right-1 w-4 h-4 bg-[#1F4FD8] text-white text-[10px] rounded-full flex items-center justify-center">
                               {columnFilters.accounts.length}
                             </span>
                           )}
@@ -887,7 +887,7 @@ export default function TransactionsPage() {
                                 placeholder="Buscar conta..."
                                 value={popoverSearch}
                                 onChange={(e) => setPopoverSearch(e.target.value)}
-                                className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#1F4FD8] focus:border-transparent"
                                 autoFocus
                               />
                             </div>
@@ -917,7 +917,7 @@ export default function TransactionsPage() {
                                         }));
                                       }
                                     }}
-                                    className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                                    className="w-4 h-4 text-[#1F4FD8] rounded border-gray-300 focus:ring-[#1F4FD8]"
                                   />
                                   <span className="text-sm text-gray-700">{acc.name}</span>
                                 </label>
@@ -930,7 +930,7 @@ export default function TransactionsPage() {
                             <div className="p-2 border-t border-gray-100">
                               <button
                                 onClick={() => setColumnFilters(prev => ({ ...prev, accounts: [] }))}
-                                className="w-full px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                className="w-full px-3 py-2 text-sm text-[#1F4FD8] hover:bg-[#EFF6FF] rounded-lg transition-colors"
                               >
                                 Limpar seleção
                               </button>
@@ -966,13 +966,13 @@ export default function TransactionsPage() {
                             setActivePopover(activePopover === 'status' ? null : 'status');
                           }}
                           className={`p-1 rounded hover:bg-gray-200 transition-colors ${
-                            columnFilters.statuses.length > 0 ? 'text-blue-600 bg-blue-100' : 'text-gray-400'
+                            columnFilters.statuses.length > 0 ? 'text-[#1F4FD8] bg-[#DBEAFE]' : 'text-gray-400'
                           }`}
                           title="Filtrar status"
                         >
                           <Filter className="w-4 h-4" />
                           {columnFilters.statuses.length > 0 && (
-                            <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-600 text-white text-[10px] rounded-full flex items-center justify-center">
+                            <span className="absolute -top-1 -right-1 w-4 h-4 bg-[#1F4FD8] text-white text-[10px] rounded-full flex items-center justify-center">
                               {columnFilters.statuses.length}
                             </span>
                           )}
@@ -1004,7 +1004,7 @@ export default function TransactionsPage() {
                                     }));
                                   }
                                 }}
-                                className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                                className="w-4 h-4 text-[#1F4FD8] rounded border-gray-300 focus:ring-[#1F4FD8]"
                               />
                               <CheckCircle className="w-4 h-4 text-green-600" />
                               <span className="text-sm text-gray-700">Pago</span>
@@ -1026,7 +1026,7 @@ export default function TransactionsPage() {
                                     }));
                                   }
                                 }}
-                                className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                                className="w-4 h-4 text-[#1F4FD8] rounded border-gray-300 focus:ring-[#1F4FD8]"
                               />
                               <Clock className="w-4 h-4 text-yellow-600" />
                               <span className="text-sm text-gray-700">Pendente</span>
@@ -1036,7 +1036,7 @@ export default function TransactionsPage() {
                             <div className="p-2 border-t border-gray-100">
                               <button
                                 onClick={() => setColumnFilters(prev => ({ ...prev, statuses: [] }))}
-                                className="w-full px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                className="w-full px-3 py-2 text-sm text-[#1F4FD8] hover:bg-[#EFF6FF] rounded-lg transition-colors"
                               >
                                 Limpar seleção
                               </button>
@@ -1057,13 +1057,13 @@ export default function TransactionsPage() {
                             setPopoverSearch('');
                           }}
                           className={`p-1 rounded hover:bg-gray-200 transition-colors ${
-                            columnFilters.paymentMethods.length > 0 ? 'text-blue-600 bg-blue-100' : 'text-gray-400'
+                            columnFilters.paymentMethods.length > 0 ? 'text-[#1F4FD8] bg-[#DBEAFE]' : 'text-gray-400'
                           }`}
                           title="Filtrar meio de pagamento"
                         >
                           <Filter className="w-4 h-4" />
                           {columnFilters.paymentMethods.length > 0 && (
-                            <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-600 text-white text-[10px] rounded-full flex items-center justify-center">
+                            <span className="absolute -top-1 -right-1 w-4 h-4 bg-[#1F4FD8] text-white text-[10px] rounded-full flex items-center justify-center">
                               {columnFilters.paymentMethods.length}
                             </span>
                           )}
@@ -1085,7 +1085,7 @@ export default function TransactionsPage() {
                                 placeholder="Buscar..."
                                 value={popoverSearch}
                                 onChange={(e) => setPopoverSearch(e.target.value)}
-                                className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#1F4FD8]"
                                 aria-label="Buscar meio de pagamento"
                               />
                             </div>
@@ -1111,7 +1111,7 @@ export default function TransactionsPage() {
                                         }));
                                       }
                                     }}
-                                    className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                                    className="w-4 h-4 text-[#1F4FD8] rounded border-gray-300 focus:ring-[#1F4FD8]"
                                   />
                                   <CreditCard className="w-4 h-4 text-gray-500" />
                                   <span className="text-sm text-gray-700 truncate">{pm}</span>
@@ -1125,7 +1125,7 @@ export default function TransactionsPage() {
                             <div className="p-2 border-t border-gray-100">
                               <button
                                 onClick={() => setColumnFilters(prev => ({ ...prev, paymentMethods: [] }))}
-                                className="w-full px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                className="w-full px-3 py-2 text-sm text-[#1F4FD8] hover:bg-[#EFF6FF] rounded-lg transition-colors"
                               >
                                 Limpar seleção
                               </button>
@@ -1249,10 +1249,10 @@ export default function TransactionsPage() {
                             <>
                               <button
                                 onClick={() => handleEdit(transaction)}
-                                className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
+                                className="p-2 hover:bg-[#DBEAFE] rounded-lg transition-colors"
                                 title="Editar"
                               >
-                                <Edit2 className="w-4 h-4 text-blue-600" />
+                                <Edit2 className="w-4 h-4 text-[#1F4FD8]" />
                               </button>
                               <button
                                 onClick={() => handleDelete(transaction.id)}
@@ -1285,7 +1285,7 @@ export default function TransactionsPage() {
               <p className="text-gray-400 text-sm mt-2">Ajuste os filtros ou adicione novas transações</p>
               <button
                 onClick={() => setShowUnifiedModal(true)}
-                className="mt-4 px-6 py-3 bg-gradient-to-r from-[#1C6DD0] to-[#1557A8] text-white rounded-lg hover:from-[#1557A8] hover:to-[#0E4A8A] transition-all inline-flex items-center gap-2 shadow-md"
+                className="mt-4 px-6 py-3 bg-gradient-to-r from-[#1F4FD8] to-[#1A44BF] text-white rounded-lg hover:from-[#1A44BF] hover:to-[#1539A6] transition-all inline-flex items-center gap-2 shadow-md"
               >
                 <Plus className="w-5 h-5" />
                 Adicionar Primeira Transação

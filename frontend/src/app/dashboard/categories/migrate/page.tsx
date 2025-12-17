@@ -172,15 +172,15 @@ export default function MigrateCategoriesPage() {
 
         {/* Steps */}
         <div className="flex items-center justify-center gap-4 mb-8">
-          <div className={`flex items-center gap-2 px-4 py-2 rounded-lg ${step === 'analysis' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>
+          <div className={`flex items-center gap-2 px-4 py-2 rounded-lg ${step === 'analysis' ? 'bg-[#DBEAFE] text-[#1A44BF]' : 'bg-gray-100 text-gray-500'}`}>
             <span className="font-bold">1</span> Análise
           </div>
           <ArrowRight className="w-5 h-5 text-gray-400" />
-          <div className={`flex items-center gap-2 px-4 py-2 rounded-lg ${step === 'mapping' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>
+          <div className={`flex items-center gap-2 px-4 py-2 rounded-lg ${step === 'mapping' ? 'bg-[#DBEAFE] text-[#1A44BF]' : 'bg-gray-100 text-gray-500'}`}>
             <span className="font-bold">2</span> Mapeamento
           </div>
           <ArrowRight className="w-5 h-5 text-gray-400" />
-          <div className={`flex items-center gap-2 px-4 py-2 rounded-lg ${step === 'confirmation' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>
+          <div className={`flex items-center gap-2 px-4 py-2 rounded-lg ${step === 'confirmation' ? 'bg-[#DBEAFE] text-[#1A44BF]' : 'bg-gray-100 text-gray-500'}`}>
             <span className="font-bold">3</span> Confirmação
           </div>
         </div>
@@ -221,7 +221,7 @@ export default function MigrateCategoriesPage() {
 
             <button
               onClick={() => setStep('mapping')}
-              className="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-semibold"
+              className="w-full py-3 bg-[#1F4FD8] text-white rounded-lg hover:bg-[#1A44BF] font-semibold"
             >
               Iniciar Mapeamento
             </button>
@@ -271,7 +271,7 @@ export default function MigrateCategoriesPage() {
                           const selected = newCategories.find(c => c.id === e.target.value);
                           if (selected) handleSelectNewCategory(mapping.oldCategory.id, selected);
                         }}
-                        className="w-full p-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        className="w-full p-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
                       >
                         <option value="">Selecione uma categoria...</option>
                         {newCategories
@@ -298,7 +298,7 @@ export default function MigrateCategoriesPage() {
               <button
                 onClick={() => setStep('confirmation')}
                 disabled={mappings.some(m => !m.newCategory)}
-                className="flex-1 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 py-3 bg-[#1F4FD8] text-white rounded-lg hover:bg-[#1A44BF] font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Continuar
               </button>
@@ -329,11 +329,11 @@ export default function MigrateCategoriesPage() {
               ))}
             </div>
 
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+            <div className="bg-[#EFF6FF] border border-blue-200 rounded-lg p-4 mb-6">
               <p className="text-blue-900">
                 <strong>Total:</strong> {mappings.reduce((sum, m) => sum + (m.oldCategory._count?.transactions || 0), 0)} transações serão migradas.
               </p>
-              <p className="text-sm text-blue-700 mt-2">
+              <p className="text-sm text-[#1A44BF] mt-2">
                 As categorias antigas serão arquivadas após a migração.
               </p>
             </div>
@@ -366,7 +366,7 @@ export default function MigrateCategoriesPage() {
             </p>
             <button
               onClick={() => router.push('/dashboard/categories')}
-              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-semibold"
+              className="px-6 py-3 bg-[#1F4FD8] text-white rounded-lg hover:bg-[#1A44BF] font-semibold"
             >
               Voltar para Categorias
             </button>

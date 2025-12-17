@@ -525,7 +525,7 @@ export class ChatbotService {
     session.state = ChatState.ONBOARDING_PROFILE;
     
     return {
-      response: `Prazer em te conhecer, **${capitalizedName}**! 😊\n\nVocê vai usar o FynanPro para finanças pessoais ou familiares?`,
+      response: `Prazer em te conhecer, **${capitalizedName}**! 😊\n\nVocê vai usar o UTOP para finanças pessoais ou familiares?`,
       options: ['1️⃣ Pessoal (só eu)', '2️⃣ Familiar (casal/família)'],
       quickReplies: ['Pessoal', 'Familiar'],
     };

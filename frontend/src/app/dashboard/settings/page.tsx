@@ -227,7 +227,7 @@ export default function SettingsPage() {
                     onClick={() => setActiveTab(tab.id as any)}
                     className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
                       activeTab === tab.id
-                        ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-600'
+                        ? 'bg-[#EFF6FF] text-[#1A44BF] border-l-4 border-[#1F4FD8]'
                         : 'text-gray-600 hover:bg-gray-50 border-l-4 border-transparent'
                     }`}
                   >
@@ -249,7 +249,7 @@ export default function SettingsPage() {
                   <h2 className="text-xl font-bold text-gray-800">Informações do Perfil</h2>
                   
                   <div className="flex items-center gap-4 mb-6">
-                    <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#1C6DD0] to-[#1557A8] flex items-center justify-center text-white text-2xl font-bold">
+                    <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#1F4FD8] to-[#1A44BF] flex items-center justify-center text-white text-2xl font-bold">
                       {user?.fullName?.charAt(0).toUpperCase()}
                     </div>
                     <div>
@@ -265,7 +265,7 @@ export default function SettingsPage() {
                         type="text"
                         value={userSettings.fullName}
                         onChange={(e) => setUserSettings(prev => ({ ...prev, fullName: e.target.value }))}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8] focus:border-transparent"
                         aria-label="Nome completo"
                         placeholder="Digite seu nome"
                       />
@@ -287,7 +287,7 @@ export default function SettingsPage() {
                   <button
                     onClick={handleSaveProfile}
                     disabled={loading}
-                    className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                    className="flex items-center gap-2 px-6 py-2 bg-[#1F4FD8] text-white rounded-lg hover:bg-[#1A44BF] transition-colors disabled:opacity-50"
                   >
                     <Save className="w-4 h-4" />
                     {loading ? 'Salvando...' : 'Salvar Alterações'}
@@ -307,7 +307,7 @@ export default function SettingsPage() {
                         type="text"
                         value={tenantSettings.name}
                         onChange={(e) => setTenantSettings(prev => ({ ...prev, name: e.target.value }))}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
                         aria-label="Nome da empresa"
                         placeholder="Nome da sua empresa"
                       />
@@ -317,7 +317,7 @@ export default function SettingsPage() {
                       <select
                         value={tenantSettings.currency}
                         onChange={(e) => setTenantSettings(prev => ({ ...prev, currency: e.target.value }))}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
                         aria-label="Moeda"
                       >
                         <option value="BRL">Real Brasileiro (R$)</option>
@@ -330,7 +330,7 @@ export default function SettingsPage() {
                       <select
                         value={tenantSettings.language}
                         onChange={(e) => setTenantSettings(prev => ({ ...prev, language: e.target.value }))}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
                         aria-label="Idioma"
                       >
                         <option value="pt-BR">Português (Brasil)</option>
@@ -343,7 +343,7 @@ export default function SettingsPage() {
                       <select
                         value={tenantSettings.timezone}
                         onChange={(e) => setTenantSettings(prev => ({ ...prev, timezone: e.target.value }))}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
                         aria-label="Fuso horário"
                       >
                         <option value="America/Sao_Paulo">Brasília (GMT-3)</option>
@@ -356,7 +356,7 @@ export default function SettingsPage() {
                   <button
                     onClick={handleSaveTenant}
                     disabled={loading}
-                    className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                    className="flex items-center gap-2 px-6 py-2 bg-[#1F4FD8] text-white rounded-lg hover:bg-[#1A44BF] transition-colors disabled:opacity-50"
                   >
                     <Save className="w-4 h-4" />
                     {loading ? 'Salvando...' : 'Salvar Alterações'}
@@ -391,7 +391,7 @@ export default function SettingsPage() {
                           aria-label={notificationSettings[item.key as keyof NotificationSettings] ? `Desativar ${item.label}` : `Ativar ${item.label}`}
                           className={`relative w-12 h-6 rounded-full transition-colors ${
                             notificationSettings[item.key as keyof NotificationSettings]
-                              ? 'bg-blue-600'
+                              ? 'bg-[#1F4FD8]'
                               : 'bg-gray-300'
                           }`}
                         >
@@ -410,7 +410,7 @@ export default function SettingsPage() {
                   <button
                     onClick={handleSaveNotifications}
                     disabled={loading}
-                    className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                    className="flex items-center gap-2 px-6 py-2 bg-[#1F4FD8] text-white rounded-lg hover:bg-[#1A44BF] transition-colors disabled:opacity-50"
                   >
                     <Save className="w-4 h-4" />
                     {loading ? 'Salvando...' : 'Salvar Preferências'}
@@ -437,7 +437,7 @@ export default function SettingsPage() {
                           onChange={(e) => setUserSettings(prev => ({ ...prev, currentPassword: e.target.value }))}
                           aria-label="Senha Atual"
                           placeholder="Digite sua senha atual"
-                          className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                          className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
                         />
                         <button
                           type="button"
@@ -459,7 +459,7 @@ export default function SettingsPage() {
                           onChange={(e) => setUserSettings(prev => ({ ...prev, newPassword: e.target.value }))}
                           aria-label="Nova Senha"
                           placeholder="Digite a nova senha"
-                          className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                          className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
                         />
                         <button
                           type="button"
@@ -480,7 +480,7 @@ export default function SettingsPage() {
                         onChange={(e) => setUserSettings(prev => ({ ...prev, confirmPassword: e.target.value }))}
                         aria-label="Confirmar Nova Senha"
                         placeholder="Confirme a nova senha"
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
                       />
                     </div>
                   </div>
@@ -488,7 +488,7 @@ export default function SettingsPage() {
                   <button
                     onClick={handleChangePassword}
                     disabled={loading || !userSettings.currentPassword || !userSettings.newPassword}
-                    className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                    className="flex items-center gap-2 px-6 py-2 bg-[#1F4FD8] text-white rounded-lg hover:bg-[#1A44BF] transition-colors disabled:opacity-50"
                   >
                     <Shield className="w-4 h-4" />
                     {loading ? 'Alterando...' : 'Alterar Senha'}
@@ -515,7 +515,7 @@ export default function SettingsPage() {
                         title={darkMode ? 'Desativar modo escuro' : 'Ativar modo escuro'}
                         aria-label={darkMode ? 'Desativar modo escuro' : 'Ativar modo escuro'}
                         className={`relative w-12 h-6 rounded-full transition-colors ${
-                          darkMode ? 'bg-blue-600' : 'bg-gray-300'
+                          darkMode ? 'bg-[#1F4FD8]' : 'bg-gray-300'
                         }`}
                       >
                         <span 
@@ -530,7 +530,7 @@ export default function SettingsPage() {
                       <p className="font-medium text-gray-800 mb-3">Cor Principal</p>
                       <div className="flex gap-3">
                         {[
-                          { color: '#1C6DD0', className: 'bg-[#1C6DD0]' },
+                          { color: '#1F4FD8', className: 'bg-[#1F4FD8]' },
                           { color: '#10B981', className: 'bg-emerald-500' },
                           { color: '#8B5CF6', className: 'bg-violet-500' },
                           { color: '#F59E0B', className: 'bg-amber-500' },
@@ -562,7 +562,7 @@ export default function SettingsPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="p-4 border border-gray-200 rounded-lg">
                       <div className="flex items-center gap-3 mb-3">
-                        <Download className="w-6 h-6 text-blue-600" />
+                        <Download className="w-6 h-6 text-[#1F4FD8]" />
                         <h3 className="font-semibold text-gray-800">Exportar Dados</h3>
                       </div>
                       <p className="text-sm text-gray-500 mb-4">
@@ -570,7 +570,7 @@ export default function SettingsPage() {
                       </p>
                       <button
                         onClick={handleExportData}
-                        className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                        className="w-full px-4 py-2 bg-[#1F4FD8] text-white rounded-lg hover:bg-[#1A44BF] transition-colors"
                       >
                         Exportar Dados
                       </button>

@@ -5,8 +5,8 @@ import { AuthProvider } from '@/components/AuthProvider'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'FynanPro - Sua vida financeira sob controle',
-  description: 'Sistema completo de gestão financeira pessoal com controle de transações, orçamentos, contas recorrentes e muito mais.',
+  title: 'UTOP - Seu dinheiro em equilíbrio',
+  description: 'Organizar suas finanças pode ser simples, leve e previsível. UTOP é um ambiente de clareza onde o dinheiro deixa de ser caótico.',
   icons: {
     icon: [
       { url: '/images/logo/favicon-16.png', sizes: '16x16', type: 'image/png' },

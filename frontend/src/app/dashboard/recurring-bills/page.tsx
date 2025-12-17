@@ -87,7 +87,7 @@ export default function RecurringBillsPage() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#F4F7FB] to-white flex items-center justify-center">
         <div className="text-center">
-          <div className="w-16 h-16 border-4 border-[#1C6DD0] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <div className="w-16 h-16 border-4 border-[#1F4FD8] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-xl font-semibold text-gray-700">Carregando...</p>
         </div>
       </div>
@@ -104,12 +104,12 @@ export default function RecurringBillsPage() {
               <span className="text-2xl">✨</span>
               <div>
                 <p className="font-semibold text-blue-800">Nova experiência de transações!</p>
-                <p className="text-sm text-blue-600">Agora você pode criar transações recorrentes diretamente na página de transações.</p>
+                <p className="text-sm text-[#1F4FD8]">Agora você pode criar transações recorrentes diretamente na página de transações.</p>
               </div>
             </div>
             <button
               onClick={() => router.push('/dashboard/transactions')}
-              className="px-4 py-2 bg-gradient-to-r from-[#1C6DD0] to-[#1557A8] text-white rounded-lg hover:from-[#1557A8] hover:to-[#0E4A8A] transition-all text-sm font-medium"
+              className="px-4 py-2 bg-gradient-to-r from-[#1F4FD8] to-[#1A44BF] text-white rounded-lg hover:from-[#1A44BF] hover:to-[#1539A6] transition-all text-sm font-medium"
             >
               Ir para Transações
             </button>

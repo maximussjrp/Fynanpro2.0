@@ -39,10 +39,10 @@ export class AuthService {
   /**
    * Gera um par de tokens (access + refresh)
    */
-  private async generateTokenPair(userId: string, email: string, tenantId: string): Promise<TokenPair> {
+  private async generateTokenPair(userId: string, email: string, tenantId: string, role: string = 'owner'): Promise<TokenPair> {
     // Access Token (curta duração)
     const accessToken = jwt.sign(
-      { userId, email, tenantId },
+      { userId, email, tenantId, role },
       env.JWT_SECRET,
       { expiresIn: this.ACCESS_TOKEN_EXPIRATION } as jwt.SignOptions
     );
@@ -140,7 +140,7 @@ export class AuthService {
       await createDefaultCategories(result.tenant.id);
 
       // Gera tokens
-      const tokens = await this.generateTokenPair(result.user.id, result.user.email, result.tenant.id);
+      const tokens = await this.generateTokenPair(result.user.id, result.user.email, result.tenant.id, result.user.role);
 
       // Registra IP e UserAgent no refresh token
       if (ipAddress || userAgent) {
@@ -223,7 +223,7 @@ export class AuthService {
       });
 
       // Gera tokens
-      const tokens = await this.generateTokenPair(user.id, user.email, tenant.id);
+      const tokens = await this.generateTokenPair(user.id, user.email, tenant.id, user.role);
 
       // Registra IP e UserAgent no refresh token
       if (ipAddress || userAgent) {
@@ -323,7 +323,8 @@ export class AuthService {
       const tokens = await this.generateTokenPair(
         refreshToken.user.id,
         refreshToken.user.email,
-        tenant.id
+        tenant.id,
+        refreshToken.user.role
       );
 
       // Registra IP e UserAgent no novo refresh token

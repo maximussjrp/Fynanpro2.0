@@ -1,6 +1,8 @@
-﻿#  FynanPro 2.0
+﻿# 🚀 UTOP - Seu dinheiro em equilíbrio
 
 Sistema completo de gestão financeira pessoal com arquitetura multi-tenant.
+
+> **Missão**: Ajudar pessoas a conquistarem equilíbrio financeiro de forma leve, sem pressão ou complicações.
 
 ##  Tecnologias
 

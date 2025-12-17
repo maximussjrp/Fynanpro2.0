@@ -2,7 +2,7 @@
 
 ## 📋 Visão Geral
 
-Este documento descreve a configuração de testes do frontend FYNANPRO 2.0, utilizando **Jest** e **React Testing Library**.
+Este documento descreve a configuração de testes do frontend UTOP, utilizando **Jest** e **React Testing Library**.
 
 ## 🛠️ Tecnologias de Teste
 

@@ -1,193 +1,286 @@
-# 🎨 Guia de Uso do Branding FynanPro
+# 🌐 BRANDING OFICIAL — UTOP
 
-## 📁 Estrutura de Arquivos
+## 1️⃣ Essência da Marca
 
-```
-frontend/public/images/logo/fynanpro_branding/
-├── logo-horizontal-light.png    → Logo completa para fundos claros
-├── logo-horizontal-dark.png     → Logo completa para fundos escuros
-├── logo-icon-gradient.png       → Ícone com gradiente oficial
-├── logo-icon-dark.png           → Ícone versão dark
-├── icon-small-1.png             → Ícone pequeno (menu lateral)
-├── icon-small-2.png             → Ícone pequeno alternativo
-└── icon-small-3.png             → Ícone pequeno alternativo 2
-```
+### Nome
+**UTOP**
+
+- **Origem:** Utopia
+- **Significado:** "Um lugar ideal onde as finanças fazem sentido, são organizadas e não geram ansiedade."
 
 ---
 
-## 🧩 Componente Logo
+## 2️⃣ Posicionamento da Marca
 
-### Importação
-```tsx
-import Logo from '@/components/Logo';
-```
+> UTOP não é só um sistema financeiro.
+> É um ambiente de clareza, onde o dinheiro deixa de ser caótico.
 
-### Variantes Disponíveis
+### Promessa Central
+**"Organizar suas finanças pode ser simples, leve e previsível."**
 
-#### 1. Logo Horizontal (Padrão)
-```tsx
-<Logo variant="horizontal-light" />
-```
-**Uso:** Headers, página de login, topo do dashboard  
-**Tamanho padrão:** 180x40px
-
-#### 2. Logo Horizontal Dark
-```tsx
-<Logo variant="horizontal-dark" />
-```
-**Uso:** Headers em dark mode  
-**Tamanho padrão:** 180x40px
-
-#### 3. Ícone com Gradiente
-```tsx
-<Logo variant="icon-gradient" />
-```
-**Uso:** Favicon, splash screen, ícone standalone  
-**Tamanho padrão:** 48x48px
-
-#### 4. Ícone Dark
-```tsx
-<Logo variant="icon-dark" />
-```
-**Uso:** Dark mode, ícones em fundos claros  
-**Tamanho padrão:** 48x48px
-
-#### 5. Ícone Pequeno
-```tsx
-<Logo variant="icon-small" />
-```
-**Uso:** Menu lateral, notificações, breadcrumbs  
-**Tamanho padrão:** 32x32px
+### Público-Alvo
+- Pessoas físicas
+- Profissionais liberais
+- Pequenos empreendedores
+- Usuários cansados de planilhas confusas
 
 ---
 
-## 📐 Personalizando Tamanho
+## 3️⃣ Personalidade da Marca
 
-### Com props width/height
-```tsx
-<Logo 
-  variant="horizontal-light" 
-  width={240} 
-  height={60} 
-/>
-```
+### UTOP é:
+- 🧘‍♂️ **Tranquila** (não agressiva, não alarmista)
+- 🧠 **Inteligente** (organiza, não julga)
+- 🧭 **Guiada** (conduz o usuário)
+- 🔒 **Confiável**
+- 🌱 **Progressiva** (crescimento constante)
 
-### Com className (Tailwind)
-```tsx
-<Logo 
-  variant="icon-gradient" 
-  className="w-16 h-16 rounded-full shadow-lg" 
-/>
-```
+### O que UTOP NÃO é:
+- ❌ Não é bancão
+- ❌ Não é robô frio
+- ❌ Não é planilha feia
+- ❌ Não é "fintech gritante"
 
 ---
 
-## 💡 Exemplos de Uso
+## 4️⃣ Conceito Visual
 
-### Header do Dashboard
-```tsx
-<header className="bg-white shadow-sm border-b">
-  <div className="flex items-center justify-between p-4">
-    <Logo variant="horizontal-light" className="h-10 w-auto" />
-    <nav>...</nav>
-  </div>
-</header>
-```
+### Ideia Central
+**Equilíbrio, horizonte, futuro possível**
 
-### Menu Lateral
-```tsx
-<aside className="w-64 bg-gray-900">
-  <div className="p-4 flex items-center gap-3">
-    <Logo variant="icon-small" className="w-8 h-8" />
-    <span className="text-white font-semibold">FynanPro</span>
-  </div>
-</aside>
-```
+### Visual inspirado em:
+- Horizonte
+- Linhas suaves
+- Círculos incompletos
+- Caminhos
+- Simetria leve
 
-### Página de Login
-```tsx
-<div className="text-center mb-8">
-  <Logo 
-    variant="horizontal-light" 
-    className="mx-auto mb-4" 
-  />
-  <h2>Bem-vindo de volta!</h2>
-</div>
-```
-
-### Loading Spinner com Logo
-```tsx
-<div className="flex flex-col items-center justify-center min-h-screen">
-  <Logo 
-    variant="icon-gradient" 
-    className="w-20 h-20 animate-pulse" 
-  />
-  <p className="mt-4 text-gray-600">Carregando...</p>
-</div>
-```
+> **Nada agressivo. Nada pesado.**
 
 ---
 
-## 🎨 Paleta de Cores Oficial
+## 5️⃣ Logotipo — Conceito
 
+### Símbolo
+O símbolo da UTOP deve representar:
+- Um horizonte ou portal
+- Um "U" abstrato
+- Um caminho indo para frente
+- Uma utopia financeira possível
+
+### Formas Recomendadas
+- Geométricas
+- Curvas suaves
+- Círculos abertos
+- Linhas contínuas
+
+### Estilo
+- Minimalista
+- Flat design
+- Futurista leve
+- Atemporal
+
+---
+
+## 6️⃣ Paleta de Cores — UTOP
+
+### 🎨 Paleta Principal (Utopia + Tranquilidade)
+
+| Função | Nome | Hex | CSS Variable |
+|--------|------|-----|--------------|
+| **Primária** | Azul Horizonte | `#1F4FD8` | `--utop-primary` |
+| **Secundária** | Verde Futuro | `#2ECC9A` | `--utop-secondary` |
+| **Destaque** | Verde Aurora | `#9AF0C6` | `--utop-accent` |
+
+### 🌫 Paleta Neutra
+
+| Uso | Hex | CSS Variable |
+|-----|-----|--------------|
+| Preto Suave | `#0F172A` | `--utop-dark` |
+| Cinza Profissional | `#475569` | `--utop-gray` |
+| Cinza Interface | `#CBD5E1` | `--utop-light` |
+| Fundo Principal | `#F8FAFC` | `--utop-background` |
+
+### 🚦 Alertas (financeiro padrão)
+
+| Tipo | Hex | CSS Variable |
+|------|-----|--------------|
+| Sucesso | `#22C55E` | `--utop-success` |
+| Aviso | `#FACC15` | `--utop-warning` |
+| Erro | `#EF4444` | `--utop-error` |
+
+### Sensação Geral
+> **Calmo, tecnológico, confiável, moderno**
+
+---
+
+## 7️⃣ Tipografia
+
+### Principal (UI e títulos)
+**Inter**
+- Extremamente legível
+- Moderna
+- Perfeita para dashboards
+
+### Alternativa Premium
+- **Poppins** (títulos)
+- **Satoshi** (branding)
+- **SF Pro** (Apple-like)
+
+### Classes CSS
 ```css
-/* Gradiente Principal (FP) */
---gradient-primary: linear-gradient(135deg, #3B82F6 0%, #8B5CF6 100%);
-
-/* Cores Secundárias */
---green-success: #10B981;   /* Receitas */
---red-danger: #EF4444;      /* Despesas */
---blue-neutral: #3B82F6;    /* Informação */
---purple-premium: #8B5CF6;  /* Premium */
+.font-inter { font-family: 'Inter', sans-serif; }
+.font-poppins { font-family: 'Poppins', sans-serif; }
+.font-satoshi { font-family: 'Satoshi', sans-serif; }
 ```
 
 ---
 
-## 📱 Responsividade
+## 8️⃣ Voz da Marca (Brand Voice)
 
-### Mobile
+### Como o UTOP fala
+- ✅ Direto
+- ✅ Humano
+- ✅ Sem julgamento
+- ✅ Sem termos financeiros complexos
+
+### Exemplos
+- *"Vamos organizar isso juntos."*
+- *"Seu dinheiro, no seu ritmo."*
+- *"Tudo sob controle. Sem pressão."*
+
+---
+
+## 9️⃣ Aplicações do Branding
+
+### Interface
+- Fundo claro (`#F8FAFC`)
+- Cards brancos
+- Destaques em azul horizonte
+- Crescimento em verde
+
+### Chatbot UTOP
+O chatbot deve parecer um guia, não um robô:
+> *"Posso te ajudar a montar seu mês financeiro agora."*
+
+---
+
+## 🔟 Tailwind CSS Classes
+
+### Cores UTOP no Tailwind
+```javascript
+// tailwind.config.js
+colors: {
+  utop: {
+    primary: '#1F4FD8',    // Azul Horizonte
+    secondary: '#2ECC9A',  // Verde Futuro
+    accent: '#9AF0C6',     // Verde Aurora
+  },
+  neutral: {
+    dark: '#0F172A',
+    gray: '#475569',
+    light: '#CBD5E1',
+    background: '#F8FAFC',
+  },
+  alert: {
+    success: '#22C55E',
+    warning: '#FACC15',
+    error: '#EF4444',
+  },
+}
+```
+
+### Uso no Código
 ```tsx
-<Logo 
-  variant="icon-small" 
-  className="sm:hidden w-8 h-8" 
-/>
-<Logo 
-  variant="horizontal-light" 
-  className="hidden sm:block h-10 w-auto" 
-/>
-```
+// Botão primário
+<button className="bg-[#1F4FD8] hover:bg-[#1A44BF] text-white">
 
-### Tablet/Desktop
-```tsx
-<Logo 
-  variant="horizontal-light" 
-  className="h-8 md:h-10 lg:h-12 w-auto" 
-/>
+// Botão gradiente UTOP
+<button className="bg-gradient-to-r from-[#1F4FD8] to-[#2ECC9A]">
+
+// Card
+<div className="bg-white rounded-2xl shadow-sm border border-[#CBD5E1]/30">
+
+// Texto
+<p className="text-[#0F172A]">  // Escuro
+<p className="text-[#475569]">  // Cinza
 ```
 
 ---
 
-## ✅ Checklist de Implementação
+## 1️⃣1️⃣ Naming Interno
 
-- [x] Logo aplicada no header do dashboard
-- [x] Logo aplicada na página de login
-- [x] Favicon configurado
-- [x] Componente `Logo` criado
-- [ ] Logo no menu lateral (quando criar sidebar)
-- [ ] Logo em dark mode (quando implementar)
-- [ ] Logo em e-mails transacionais
-- [ ] Logo em relatórios PDF
-
----
-
-## 🚀 Próximos Passos
-
-1. **Sidebar com Logo:** Criar menu lateral com `icon-small`
-2. **Dark Mode:** Trocar automaticamente para `horizontal-dark` e `icon-dark`
-3. **PWA:** Usar `logo-icon-gradient.png` como ícone do app
-4. **E-mails:** Incluir logo nos templates de notificação
+| Contexto | Nome |
+|----------|------|
+| Nome público | **UTOP** |
+| Chatbot | **Utop Assistant** |
+| Onboarding | "Bem-vindo ao UTOP" |
+| Slogan | *"Seu dinheiro em equilíbrio."* |
+| localStorage key | `utop-auth` |
 
 ---
 
-**Última atualização:** 05/12/2025  
-**Versão do Branding:** 1.0
+## 1️⃣2️⃣ Prompts para IA
+
+### Prompt para Criar Logo
+```
+Create a modern minimalist logo for a personal finance SaaS called "UTOP".
+The brand concept is based on "utopia", clarity, balance, and financial peace.
+
+Design a clean, geometric symbol inspired by:
+- an abstract "U"
+- a horizon or pathway
+- a sense of future and equilibrium
+
+Use smooth curves, open shapes, and soft geometry.
+Flat design, timeless, elegant, and professional.
+Avoid aggressive fintech aesthetics.
+
+Color palette:
+Primary blue (#1F4FD8)
+Secondary green (#2ECC9A)
+Light backgrounds
+
+The logo must work well as:
+- full logo (icon + UTOP)
+- icon only
+- monochrome
+- app favicon
+
+Style: futuristic but calm, premium, accessible, scalable.
+```
+
+### Prompt para Telas
+```
+Design a clean and calm personal finance dashboard for a SaaS called UTOP.
+Use a light background (#F8FAFC), white cards, soft shadows, and rounded corners.
+Primary actions in blue, positive values in green.
+
+The interface should feel peaceful, intuitive, and organized,
+reducing financial anxiety and promoting clarity.
+```
+
+---
+
+## 📁 Estrutura de Arquivos Atualizados
+
+```
+frontend/
+├── src/
+│   ├── app/
+│   │   ├── globals.css      # CSS com variáveis UTOP
+│   │   ├── page.tsx         # Landing/Login UTOP
+│   │   └── layout.tsx       # Metadata UTOP
+│   ├── components/
+│   │   ├── Logo.tsx         # Logo UTOP
+│   │   ├── Sidebar.tsx      # Sidebar com cores UTOP
+│   │   └── ChatbotWidget.tsx # Utop Assistant
+│   └── stores/
+│       └── auth.ts          # localStorage: utop-auth
+├── tailwind.config.js       # Paleta UTOP
+└── BRANDING.md              # Este arquivo
+```
+
+---
+
+**© 2025 UTOP — Seu dinheiro em equilíbrio**

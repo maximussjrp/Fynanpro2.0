@@ -167,7 +167,7 @@ export const useAuth = create<AuthState>()(
       },
     }),
     {
-      name: 'fynanpro-auth', // Nome da chave no localStorage
+      name: 'utop-auth', // Nome da chave no localStorage
       storage: createJSONStorage(() => localStorage),
       // Não persiste tokens sensíveis no storage do Zustand
       // (eles ficam apenas no localStorage padrão para o interceptor)

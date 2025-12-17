@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useAuth } from '@/stores/auth';
 
@@ -109,7 +109,7 @@ export default function ReportsPage() {
         loadCategoryFlowData()
       ]);
     } catch (error) {
-      console.error('Erro ao carregar relatÃ³rios:', error);
+      console.error('Erro ao carregar relatórios:', error);
     } finally {
       setLoading(false);
     }
@@ -143,7 +143,7 @@ export default function ReportsPage() {
         setCategoryData(data.data);
       }
     } catch (error) {
-      console.error('Erro ao carregar anÃ¡lise por categoria:', error);
+      console.error('Erro ao carregar análise por categoria:', error);
     }
   };
 
@@ -167,7 +167,7 @@ export default function ReportsPage() {
     try {
       const token = accessToken;
       
-      // Buscar transaÃ§Ãµes
+      // Buscar transações
       const transactionsResponse = await fetch(
         `http://localhost:3000/api/v1/transactions?startDate=${startDate}&endDate=${endDate}&limit=10000`,
         { headers: { 'Authorization': `Bearer ${token}` } }
@@ -181,7 +181,7 @@ export default function ReportsPage() {
       );
       const categoriesData = await categoriesResponse.json();
       
-      // Buscar orÃ§amentos para ter o "esperado"
+      // Buscar orçamentos para ter o "esperado"
       const budgetsResponse = await fetch(
         `http://localhost:3000/api/v1/budgets`,
         { headers: { 'Authorization': `Bearer ${token}` } }
@@ -202,7 +202,7 @@ export default function ReportsPage() {
 
   // Fluxo de Caixa por Categoria - Regime de Caixa
   const processFluxoCaixaData = (transactions: any[], categories: any[], budgets: any[]) => {
-    // Gerar lista de meses no perÃ­odo
+    // Gerar lista de meses no período
     const start = new Date(startDate);
     const end = new Date(endDate);
     const allMonths: string[] = [];
@@ -214,18 +214,18 @@ export default function ReportsPage() {
 
     // Estrutura de grupos do Fluxo de Caixa
     const groups = [
-      { id: 'entradas', name: 'ENTRADAS (Receitas)', icon: 'ðŸ’°', type: 'income', categories: [] as any[], isGroup: true },
-      { id: 'saidas', name: 'SAÃDAS (Despesas)', icon: 'ðŸ’¸', type: 'expense', categories: [] as any[], isGroup: true },
-      { id: 'saldo_periodo', name: 'SALDO DO PERÃODO', icon: 'ðŸ“Š', type: 'calculated', isCalculated: true },
+      { id: 'entradas', name: 'ENTRADAS (Receitas)', icon: '💰', type: 'income', categories: [] as any[], isGroup: true },
+      { id: 'saidas', name: 'SAÍDAS (Despesas)', icon: '💸', type: 'expense', categories: [] as any[], isGroup: true },
+      { id: 'saldo_periodo', name: 'SALDO DO PERÍODO', icon: '📊', type: 'calculated', isCalculated: true },
     ];
 
-    // Criar mapa de orÃ§amentos por categoria/mÃªs
+    // Criar mapa de orçamentos por categoria/mês
     const budgetMap = new Map<string, number>();
     budgets.forEach((budget: any) => {
       budgetMap.set(budget.categoryId, budget.amount || 0);
     });
 
-    // Criar mapa de transaÃ§Ãµes por categoria/mÃªs
+    // Criar mapa de transações por categoria/mês
     const transactionMap = new Map<string, Map<string, number>>();
     transactions.forEach((transaction: any) => {
       if (transaction.deletedAt) return;
@@ -255,7 +255,7 @@ export default function ReportsPage() {
       const categoryData: any = {
         id: cat.id,
         name: cat.name || 'Sem Nome',
-        icon: cat.icon || 'ðŸ“‹',
+        icon: cat.icon || '📋',
         type: cat.type,
         months: {} as any,
         totalRealizado: 0,
@@ -285,7 +285,7 @@ export default function ReportsPage() {
       }
     });
 
-    // Calcular totais por mÃªs
+    // Calcular totais por mês
     const monthlyTotals: any = {};
     allMonths.forEach(month => {
       let totalEntradas = 0;
@@ -343,17 +343,17 @@ export default function ReportsPage() {
   };
 
   const exportToPDF = () => {
-    alert('Funcionalidade de exportaÃ§Ã£o PDF serÃ¡ implementada em breve!');
+    alert('Funcionalidade de exportação PDF será implementada em breve!');
   };
 
   const exportToExcel = () => {
-    alert('Funcionalidade de exportaÃ§Ã£o Excel serÃ¡ implementada em breve!');
+    alert('Funcionalidade de exportação Excel será implementada em breve!');
   };
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="text-xl">Carregando relatÃ³rios...</div>
+        <div className="text-xl">Carregando relatórios...</div>
       </div>
     );
   }
@@ -371,8 +371,8 @@ export default function ReportsPage() {
             <ArrowLeft className="w-6 h-6 text-gray-600" />
           </button>
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">ðŸ“Š RelatÃ³rios Financeiros</h1>
-            <p className="text-gray-600 mt-1">AnÃ¡lises e insights dos seus dados</p>
+            <h1 className="text-3xl font-bold text-gray-900">📊 Relatórios Financeiros</h1>
+            <p className="text-gray-600 mt-1">Análises e insights dos seus dados</p>
           </div>
         </div>
         <div className="flex gap-2">
@@ -397,32 +397,32 @@ export default function ReportsPage() {
       <div className="mb-6 bg-white p-4 rounded-lg shadow-sm border border-gray-200">
         <div className="flex items-center gap-4">
           <Filter className="w-5 h-5 text-gray-600" />
-          <label className="text-sm font-medium text-gray-700">PerÃ­odo:</label>
+          <label className="text-sm font-medium text-gray-700">Período:</label>
           <input
             type="date"
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
             aria-label="Data inicial"
-            title="Data inicial do perÃ­odo"
+            title="Data inicial do período"
           />
-          <span className="text-gray-500">atÃ©</span>
+          <span className="text-gray-500">até</span>
           <input
             type="date"
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
             aria-label="Data final"
-            title="Data final do perÃ­odo"
+            title="Data final do período"
           />
           <button
             onClick={() => {
               setStartDate(format(startOfMonth(subMonths(new Date(), 5)), 'yyyy-MM-dd'));
               setEndDate(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
             }}
-            className="px-4 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition"
+            className="px-4 py-2 text-sm text-[#1F4FD8] hover:bg-[#EFF6FF] rounded-lg transition"
           >
-            Ãšltimos 6 meses
+            Últimos 6 meses
           </button>
         </div>
       </div>
@@ -471,31 +471,31 @@ export default function ReportsPage() {
             onClick={() => setActiveTab('cashflow')}
             className={`flex-1 px-6 py-4 font-medium transition ${
               activeTab === 'cashflow'
-                ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
+                ? 'text-[#1F4FD8] border-b-2 border-[#1F4FD8] bg-[#EFF6FF]'
                 : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
             }`}
           >
-            ðŸ“ˆ Fluxo de Caixa
+            📈 Fluxo de Caixa
           </button>
           <button
             onClick={() => setActiveTab('categories')}
             className={`flex-1 px-6 py-4 font-medium transition ${
               activeTab === 'categories'
-                ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
+                ? 'text-[#1F4FD8] border-b-2 border-[#1F4FD8] bg-[#EFF6FF]'
                 : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
             }`}
           >
-            ðŸ• Por Categoria
+            🍕 Por Categoria
           </button>
           <button
             onClick={() => setActiveTab('comparison')}
             className={`flex-1 px-6 py-4 font-medium transition ${
               activeTab === 'comparison'
-                ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
+                ? 'text-[#1F4FD8] border-b-2 border-[#1F4FD8] bg-[#EFF6FF]'
                 : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
             }`}
           >
-            ðŸ“Š Receitas x Despesas
+            📊 Receitas x Despesas
           </button>
           <button
             onClick={() => {
@@ -504,21 +504,21 @@ export default function ReportsPage() {
             }}
             className={`flex-1 px-6 py-4 font-medium transition ${
               activeTab === 'cashflow-categories'
-                ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
+                ? 'text-[#1F4FD8] border-b-2 border-[#1F4FD8] bg-[#EFF6FF]'
                 : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
             }`}
           >
-            ðŸ“ŠðŸ’° Fluxo por Categoria
+            📊💰 Fluxo por Categoria
           </button>
           <button
             onClick={() => setActiveTab('budgets')}
             className={`flex-1 px-6 py-4 font-medium transition ${
               activeTab === 'budgets'
-                ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
+                ? 'text-[#1F4FD8] border-b-2 border-[#1F4FD8] bg-[#EFF6FF]'
                 : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
             }`}
           >
-            ðŸ’° OrÃ§amentos
+            💰 Orçamentos
           </button>
         </div>
 
@@ -526,7 +526,7 @@ export default function ReportsPage() {
           {/* Fluxo de Caixa */}
           {activeTab === 'cashflow' && cashFlowData && (
             <div className="space-y-6">
-              <h3 className="text-xl font-bold text-gray-900">EvoluÃ§Ã£o do Fluxo de Caixa</h3>
+              <h3 className="text-xl font-bold text-gray-900">Evolução do Fluxo de Caixa</h3>
               <ResponsiveContainer width="100%" height={400}>
                 <LineChart data={cashFlowData.timeline}>
                   <CartesianGrid strokeDasharray="3 3" />
@@ -560,7 +560,7 @@ export default function ReportsPage() {
 
               {cashFlowData.projection.length > 0 && (
                 <>
-                  <h3 className="text-xl font-bold text-gray-900 mt-8">ProjeÃ§Ã£o (prÃ³ximos 3 meses)</h3>
+                  <h3 className="text-xl font-bold text-gray-900 mt-8">Projeção (próximos 3 meses)</h3>
                   <ResponsiveContainer width="100%" height={300}>
                     <BarChart data={cashFlowData.projection}>
                       <CartesianGrid strokeDasharray="3 3" />
@@ -577,12 +577,12 @@ export default function ReportsPage() {
             </div>
           )}
 
-          {/* AnÃ¡lise por Categoria */}
+          {/* Análise por Categoria */}
           {activeTab === 'categories' && categoryData && (
             <div className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-4">DistribuiÃ§Ã£o por Categoria</h3>
+                  <h3 className="text-xl font-bold text-gray-900 mb-4">Distribuição por Categoria</h3>
                   <ResponsiveContainer width="100%" height={300}>
                     <RePieChart>
                       <Pie
@@ -635,7 +635,7 @@ export default function ReportsPage() {
                               cat.budgetUsed! > 80 ? 'text-yellow-600' :
                               'text-green-600'
                             }`}>
-                              {cat.budgetUsed!.toFixed(1)}% do orÃ§amento
+                              {cat.budgetUsed!.toFixed(1)}% do orçamento
                             </span>
                           </div>
                         )}
@@ -664,8 +664,8 @@ export default function ReportsPage() {
               </ResponsiveContainer>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
-                <div className="bg-blue-50 p-4 rounded-lg">
-                  <div className="text-sm text-blue-600 font-medium">Total de Receitas</div>
+                <div className="bg-[#EFF6FF] p-4 rounded-lg">
+                  <div className="text-sm text-[#1F4FD8] font-medium">Total de Receitas</div>
                   <div className="text-2xl font-bold text-blue-900">
                     {formatCurrency(incomeVsExpenseData.summary.totalIncome)}
                   </div>
@@ -677,7 +677,7 @@ export default function ReportsPage() {
                   </div>
                 </div>
                 <div className="bg-green-50 p-4 rounded-lg">
-                  <div className="text-sm text-green-600 font-medium">Taxa MÃ©dia de Economia</div>
+                  <div className="text-sm text-green-600 font-medium">Taxa Média de Economia</div>
                   <div className="text-2xl font-bold text-green-900">
                     {incomeVsExpenseData.summary.avgSavingsRate.toFixed(1)}%
                   </div>
@@ -690,18 +690,18 @@ export default function ReportsPage() {
           {activeTab === 'cashflow-categories' && categoryFlowData && categoryFlowData.groups && (
             <div className="space-y-4">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-xl font-bold text-gray-900">ðŸ“Š DRE - DemonstraÃ§Ã£o de Resultado</h3>
+                <h3 className="text-xl font-bold text-gray-900">📊 DRE - Demonstração de Resultado</h3>
                 <div className="flex items-center gap-2">
                   <button 
                     onClick={() => setExpandedCategories(new Set(categoryFlowData.groups.map((g: any) => g.id)))}
-                    className="text-sm text-blue-600 hover:underline"
+                    className="text-sm text-[#1F4FD8] hover:underline"
                   >
                     Expandir Tudo
                   </button>
                   <span className="text-gray-400">|</span>
                   <button 
                     onClick={() => setExpandedCategories(new Set())}
-                    className="text-sm text-blue-600 hover:underline"
+                    className="text-sm text-[#1F4FD8] hover:underline"
                   >
                     Recolher Tudo
                   </button>
@@ -711,11 +711,11 @@ export default function ReportsPage() {
               {/* Tabela Fluxo de Caixa */}
               <div className="bg-white border border-gray-200 rounded-lg overflow-x-auto shadow-lg">
                 <table className="w-full text-sm border-collapse">
-                  {/* CabeÃ§alho */}
+                  {/* Cabeçalho */}
                   <thead>
                     <tr className="bg-gradient-to-r from-teal-700 to-teal-800 text-white">
                       <th className="sticky left-0 z-20 bg-teal-700 px-4 py-3 text-left font-bold min-w-[280px] border-r border-teal-600">
-                        â–¶ CATEGORIA
+                        ▶ CATEGORIA
                       </th>
                       {categoryFlowData.allMonths.map((month: string) => {
                         const [year, monthNum] = month.split('-');
@@ -727,7 +727,7 @@ export default function ReportsPage() {
                         );
                       })}
                       <th colSpan={2} className="px-2 py-3 text-center font-bold border-l-2 border-teal-500 bg-teal-900 min-w-[180px]">
-                        TOTAL PERÃODO
+                        TOTAL PERÍODO
                       </th>
                     </tr>
                     <tr className="bg-teal-600 text-white text-xs">
@@ -778,7 +778,7 @@ export default function ReportsPage() {
                             onClick={() => !isCalculated && toggleCategory(group.id)}
                           >
                             <td className={`sticky left-0 z-10 px-4 py-3 font-bold border-r border-gray-200 ${
-                              isCalculated ? 'bg-blue-100' : group.id === 'entradas' ? 'bg-green-100' : 'bg-red-100'
+                              isCalculated ? 'bg-[#DBEAFE]' : group.id === 'entradas' ? 'bg-green-100' : 'bg-red-100'
                             }`}>
                               <div className="flex items-center gap-2">
                                 {!isCalculated && (
@@ -826,7 +826,7 @@ export default function ReportsPage() {
                                   <td className={`px-2 py-3 text-right font-bold ${
                                     group.id === 'entradas' ? 'text-green-700' : 
                                     group.id === 'saidas' ? 'text-red-700' : 
-                                    monthRealizado >= 0 ? 'text-blue-700' : 'text-red-700'
+                                    monthRealizado >= 0 ? 'text-[#1A44BF]' : 'text-red-700'
                                   }`}>
                                     {formatCurrency(Math.abs(monthRealizado))}
                                   </td>
@@ -840,7 +840,7 @@ export default function ReportsPage() {
                             <td className={`px-2 py-3 text-right font-bold bg-gray-50 ${
                               group.id === 'entradas' ? 'text-green-700' : 
                               group.id === 'saidas' ? 'text-red-700' : 
-                              groupTotalRealizado >= 0 ? 'text-blue-700' : 'text-red-700'
+                              groupTotalRealizado >= 0 ? 'text-[#1A44BF]' : 'text-red-700'
                             }`}>
                               {formatCurrency(Math.abs(groupTotalRealizado))}
                             </td>
@@ -901,11 +901,11 @@ export default function ReportsPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 bg-red-500 rounded"></div>
-                  <span>SaÃ­das (Despesas)</span>
+                  <span>Saídas (Despesas)</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 bg-blue-500 rounded"></div>
-                  <span>Saldo do PerÃ­odo</span>
+                  <div className="w-3 h-3 bg-[#1F4FD8] rounded"></div>
+                  <span>Saldo do Período</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-gray-500">Clique nos grupos para expandir/recolher categorias</span>
@@ -921,12 +921,12 @@ export default function ReportsPage() {
             </div>
           )}
 
-          {/* AnÃ¡lise por Categoria */}
+          {/* Análise por Categoria */}
           {activeTab === 'categories' && categoryData && (
             <div className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-4">DistribuiÃ§Ã£o por Categoria</h3>
+                  <h3 className="text-xl font-bold text-gray-900 mb-4">Distribuição por Categoria</h3>
                   <ResponsiveContainer width="100%" height={300}>
                     <RePieChart>
                       <Pie
@@ -979,7 +979,7 @@ export default function ReportsPage() {
                               cat.budgetUsed! > 80 ? 'text-yellow-600' :
                               'text-green-600'
                             }`}>
-                              {cat.budgetUsed!.toFixed(1)}% do orÃ§amento
+                              {cat.budgetUsed!.toFixed(1)}% do orçamento
                             </span>
                           </div>
                         )}
@@ -1011,7 +1011,7 @@ export default function ReportsPage() {
                               <div className="flex items-center gap-2">
                                 <span className="text-2xl">{category.icon}</span>
                                 <span className="font-semibold text-gray-900">{category.name}</span>
-                                <span className="text-sm text-gray-500">({category.transactionCount} transaÃ§Ãµes)</span>
+                                <span className="text-sm text-gray-500">({category.transactionCount} transações)</span>
                               </div>
                             </div>
                           </div>
@@ -1032,13 +1032,13 @@ export default function ReportsPage() {
                           </div>
                         </button>
 
-                        {/* ConteÃºdo Expandido */}
+                        {/* Conteúdo Expandido */}
                         {isExpanded && (
                           <div className="border-t border-gray-200 p-6 bg-gray-50">
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                              {/* EstatÃ­sticas Detalhadas */}
+                              {/* Estatísticas Detalhadas */}
                               <div className="space-y-4">
-                                <h4 className="font-semibold text-gray-700 mb-3">ðŸ“Š EstatÃ­sticas</h4>
+                                <h4 className="font-semibold text-gray-700 mb-3">📊 Estatísticas</h4>
                                 
                                 <div className="bg-white p-4 rounded-lg border border-gray-200">
                                   <div className="text-sm text-gray-600 mb-1">Valor Total</div>
@@ -1046,12 +1046,12 @@ export default function ReportsPage() {
                                 </div>
 
                                 <div className="bg-white p-4 rounded-lg border border-gray-200">
-                                  <div className="text-sm text-gray-600 mb-1">MÃ©dia por TransaÃ§Ã£o</div>
+                                  <div className="text-sm text-gray-600 mb-1">Média por Transação</div>
                                   <div className="text-lg font-bold text-gray-900">{formatCurrency(category.avgPerTransaction)}</div>
                                 </div>
 
                                 <div className="bg-white p-4 rounded-lg border border-gray-200">
-                                  <div className="text-sm text-gray-600 mb-1">Total de TransaÃ§Ãµes</div>
+                                  <div className="text-sm text-gray-600 mb-1">Total de Transações</div>
                                   <div className="text-lg font-bold text-gray-900">{category.transactionCount}</div>
                                 </div>
 
@@ -1062,7 +1062,7 @@ export default function ReportsPage() {
                                     category.budgetUsed! > 80 ? 'bg-yellow-50 border-yellow-200' :
                                     'bg-green-50 border-green-200'
                                   }`}>
-                                    <div className="text-sm text-gray-600 mb-1">OrÃ§amento Utilizado</div>
+                                    <div className="text-sm text-gray-600 mb-1">Orçamento Utilizado</div>
                                     <div className="text-lg font-bold mb-2">{category.budgetUsed!.toFixed(1)}%</div>
                                     <div className="text-xs text-gray-600">
                                       {formatCurrency(category.total)} de {formatCurrency(category.budget)}
@@ -1082,9 +1082,9 @@ export default function ReportsPage() {
                                 )}
                               </div>
 
-                              {/* GrÃ¡fico de Pizza Individual */}
+                              {/* Gráfico de Pizza Individual */}
                               <div className="md:col-span-2">
-                                <h4 className="font-semibold text-gray-700 mb-3">ðŸ“ˆ DistribuiÃ§Ã£o</h4>
+                                <h4 className="font-semibold text-gray-700 mb-3">📈 Distribuição</h4>
                                 <div className="bg-white p-4 rounded-lg border border-gray-200">
                                   <div className="flex items-center justify-center h-64">
                                     <div className="text-center">
@@ -1109,7 +1109,7 @@ export default function ReportsPage() {
                                       <span className="font-semibold text-gray-900">{formatCurrency(category.total)}</span>
                                     </div>
                                     <div className="flex justify-between items-center mt-2">
-                                      <span className="text-sm text-gray-600">Em {category.transactionCount} transaÃ§Ãµes</span>
+                                      <span className="text-sm text-gray-600">Em {category.transactionCount} transações</span>
                                       <span className="font-semibold text-gray-900">~{formatCurrency(category.avgPerTransaction)} cada</span>
                                     </div>
                                   </div>
@@ -1120,7 +1120,7 @@ export default function ReportsPage() {
                             {/* Barra de Progresso Visual */}
                             <div className="mt-6">
                               <div className="flex items-center justify-between text-sm mb-2">
-                                <span className="text-gray-600">ParticipaÃ§Ã£o no Total</span>
+                                <span className="text-gray-600">Participação no Total</span>
                                 <span className="font-semibold" style={{ color: categoryColor }}>{category.percentage.toFixed(1)}%</span>
                               </div>
                               <div className="bg-gray-200 rounded-full h-3">
@@ -1142,11 +1142,11 @@ export default function ReportsPage() {
             </div>
           )}
 
-          {/* OrÃ§amentos */}
+          {/* Orçamentos */}
           {activeTab === 'budgets' && (
             <div className="text-center py-12 text-gray-500">
               <BarChart3 className="w-16 h-16 mx-auto mb-4 opacity-50" />
-              <p>AnÃ¡lise de orÃ§amentos serÃ¡ carregada aqui</p>
+              <p>Análise de orçamentos será carregada aqui</p>
             </div>
           )}
         </div>
