@@ -93,22 +93,22 @@ export default function InstallmentCard({
       {/* Corpo do Card */}
       <div className="p-6 space-y-4">
         {/* Valores Principais */}
-        <div className="grid grid-cols-3 gap-4">
-          <div>
+        <div className="grid grid-cols-3 gap-2">
+          <div className="min-w-0">
             <p className="text-xs text-gray-500 mb-1">Valor Total</p>
-            <p className="text-xl font-bold text-gray-900">
+            <p className="text-base lg:text-lg font-bold text-gray-900 truncate">
               {formatCurrency(Number(purchase.totalAmount))}
             </p>
           </div>
-          <div>
+          <div className="min-w-0">
             <p className="text-xs text-gray-500 mb-1">Por Parcela</p>
-            <p className="text-xl font-bold text-gray-900">
+            <p className="text-base lg:text-lg font-bold text-gray-900 truncate">
               {formatCurrency(Number(purchase.installmentAmount))}
             </p>
           </div>
-          <div>
+          <div className="min-w-0">
             <p className="text-xs text-gray-500 mb-1">Restante</p>
-            <p className="text-xl font-bold text-[#EF4444]">
+            <p className="text-base lg:text-lg font-bold text-[#EF4444] truncate">
               {formatCurrency(Number(purchase.remainingBalance))}
             </p>
           </div>

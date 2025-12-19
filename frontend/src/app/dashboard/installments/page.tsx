@@ -25,6 +25,13 @@ export default function InstallmentsPage() {
     totalActive,
     totalOwed,
     pendingInstallments,
+    totalPaid,
+    totalOverall,
+    monthlyInstallmentSpend,
+    payoffDate,
+    monthsUntilPayoff,
+    overallProgress,
+    topCategories,
     handleCreatePurchase,
     handlePayInstallment,
     handleDeletePurchase,
@@ -87,6 +94,13 @@ export default function InstallmentsPage() {
           totalActive={totalActive}
           totalOwed={totalOwed}
           pendingInstallments={pendingInstallments}
+          totalPaid={totalPaid}
+          totalOverall={totalOverall}
+          monthlyInstallmentSpend={monthlyInstallmentSpend}
+          payoffDate={payoffDate}
+          monthsUntilPayoff={monthsUntilPayoff}
+          overallProgress={overallProgress}
+          topCategories={topCategories}
           onCreateNew={handleOpenCreate}
         />
 

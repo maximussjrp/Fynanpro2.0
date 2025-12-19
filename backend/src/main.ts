@@ -18,6 +18,7 @@ import notificationRoutes from './routes/notifications';
 import importRoutes from './routes/import';
 import chatbotRoutes from './routes/chatbot';
 import adminRoutes from './routes/admin';
+import planningRoutes from './routes/planning';
 import { createDefaultCategories } from './utils/default-categories';
 import { env } from './config/env';
 import { swaggerSpec } from './config/swagger';
@@ -198,6 +199,9 @@ apiRouter.use('/chatbot', chatbotRoutes);
 
 // Admin routes (super_master only)
 apiRouter.use('/admin', adminRoutes);
+
+// Planning routes (planejamento anual)
+apiRouter.use('/planning', planningRoutes);
 
 // Auth routes com rate limiting
 

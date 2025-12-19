@@ -536,6 +536,229 @@ export class TransactionService {
   }
 
   /**
+   * Atualiza múltiplas parcelas de um parcelamento com base no escopo
+   * @param id - ID da parcela sendo editada
+   * @param data - Dados para atualizar
+   * @param tenantId - ID do tenant
+   * @param scope - 'this' | 'thisAndFuture' | 'all'
+   */
+  async updateBatch(
+    id: string,
+    data: UpdateTransactionDTO,
+    tenantId: string,
+    scope: 'this' | 'thisAndFuture' | 'all'
+  ): Promise<{ updatedCount: number; transactions: any[] }> {
+    try {
+      log.info('TransactionService.updateBatch', { id, data, tenantId, scope });
+
+      // Encontrar a transação atual
+      const currentTransaction = await prisma.transaction.findFirst({
+        where: {
+          id,
+          tenantId,
+          deletedAt: null,
+        },
+      });
+
+      if (!currentTransaction) {
+        throw new Error('Transação não encontrada');
+      }
+
+      // Verificar se é uma parcela ou recorrência
+      const isInstallment = currentTransaction.transactionType === 'installment' && currentTransaction.parentId;
+      const isRecurring = currentTransaction.transactionType === 'recurring' && currentTransaction.parentId;
+      
+      if (!isInstallment && !isRecurring) {
+        // Se não for parcela nem recorrência, atualizar apenas esta
+        const updated = await this.update(id, data, tenantId);
+        return { updatedCount: 1, transactions: [updated] };
+      }
+
+      // Encontrar todas as transações do mesmo grupo (parcelas ou ocorrências)
+      const allGroupTransactions = await prisma.transaction.findMany({
+        where: {
+          parentId: currentTransaction.parentId,
+          tenantId,
+          deletedAt: null,
+          transactionType: currentTransaction.transactionType,
+        },
+        orderBy: isInstallment 
+          ? { installmentNumber: 'asc' }
+          : { transactionDate: 'asc' },
+      });
+
+      let transactionsToUpdate: typeof allGroupTransactions = [];
+
+      switch (scope) {
+        case 'this':
+          // Apenas esta transação
+          transactionsToUpdate = [currentTransaction];
+          break;
+        
+        case 'thisAndFuture':
+          if (isInstallment) {
+            // Para parcelas: baseado no installmentNumber
+            transactionsToUpdate = allGroupTransactions.filter(
+              i => (i.installmentNumber || 0) >= (currentTransaction.installmentNumber || 0)
+            );
+          } else {
+            // Para recorrências: baseado na data
+            transactionsToUpdate = allGroupTransactions.filter(
+              i => new Date(i.transactionDate) >= new Date(currentTransaction.transactionDate)
+            );
+          }
+          break;
+        
+        case 'all':
+          // Todas as transações do grupo
+          transactionsToUpdate = allGroupTransactions;
+          break;
+      }
+
+      // Atualizar cada transação
+      const updatedTransactions: any[] = [];
+      
+      for (const transaction of transactionsToUpdate) {
+        // Para cada transação, ajustar a data mantendo o mesmo DIA do mês
+        let adjustedData = { ...data };
+        
+        // Remover totalInstallments do adjustedData para não atualizar cada parcela individualmente
+        delete adjustedData.totalInstallments;
+        
+        if (data.transactionDate && scope !== 'this') {
+          // Se a data foi alterada e estamos atualizando múltiplas transações
+          // Manter o mesmo DIA do mês para todas
+          // IMPORTANTE: Usar split para evitar problemas de timezone
+          const dateStr = String(data.transactionDate);
+          const [year, month, day] = dateStr.split('-').map(Number);
+          const targetDay = day; // Dia do mês que o usuário quer (ex: 15)
+          
+          if (transaction.id !== currentTransaction.id) {
+            // Para outras transações, manter o mês/ano original mas trocar o dia
+            const transactionDateStr = transaction.transactionDate.toISOString().split('T')[0];
+            const [instYear, instMonth] = transactionDateStr.split('-').map(Number);
+            
+            // Verificar se o dia existe no mês (ex: dia 31 em fevereiro)
+            const lastDayOfMonth = new Date(instYear, instMonth, 0).getDate();
+            const adjustedDay = Math.min(targetDay, lastDayOfMonth);
+            
+            // Formatar a data como string YYYY-MM-DD diretamente
+            const newDateStr = `${instYear}-${String(instMonth).padStart(2, '0')}-${String(adjustedDay).padStart(2, '0')}`;
+            adjustedData.transactionDate = newDateStr;
+          }
+        }
+        
+        const updated = await this.update(transaction.id, adjustedData, tenantId);
+        updatedTransactions.push(updated);
+      }
+
+      // Se aumentou o total de parcelas, criar as novas (só para installments)
+      if (isInstallment && data.totalInstallments && data.totalInstallments > (currentTransaction.totalInstallments || 0)) {
+        const currentTotal = currentTransaction.totalInstallments || allGroupTransactions.length;
+        const newTotal = data.totalInstallments;
+        const parcelasToAdd = newTotal - currentTotal;
+        
+        // Pegar a última parcela existente para usar como base
+        const lastInstallment = allGroupTransactions[allGroupTransactions.length - 1];
+        const lastDate = new Date(lastInstallment.transactionDate);
+        
+        // Buscar o pai para pegar informações
+        const parentTransaction = await prisma.transaction.findFirst({
+          where: { id: currentTransaction.parentId!, tenantId, deletedAt: null },
+        });
+
+        log.info('TransactionService.updateBatch - Adicionando novas parcelas', {
+          currentTotal,
+          newTotal,
+          parcelasToAdd,
+        });
+
+        // Criar novas parcelas
+        for (let i = 1; i <= parcelasToAdd; i++) {
+          const installmentNumber = currentTotal + i;
+          
+          // Calcular a data da nova parcela (mês seguinte à última)
+          const newDate = new Date(lastDate);
+          newDate.setMonth(newDate.getMonth() + i);
+          
+          // Manter o mesmo dia do mês (ajustando se necessário)
+          const targetDay = lastDate.getDate();
+          const lastDayOfMonth = new Date(newDate.getFullYear(), newDate.getMonth() + 1, 0).getDate();
+          newDate.setDate(Math.min(targetDay, lastDayOfMonth));
+
+          // Criar a nova parcela
+          const newInstallment = await prisma.transaction.create({
+            data: {
+              tenantId,
+              userId: lastInstallment.userId,
+              type: lastInstallment.type,
+              categoryId: lastInstallment.categoryId,
+              bankAccountId: lastInstallment.bankAccountId,
+              paymentMethodId: lastInstallment.paymentMethodId,
+              amount: lastInstallment.amount,
+              description: lastInstallment.description?.replace(/\d+\/\d+/, `${installmentNumber}/${newTotal}`) || `Parcela ${installmentNumber}/${newTotal}`,
+              transactionDate: newDate,
+              dueDate: newDate,
+              status: 'pending',
+              transactionType: 'installment',
+              parentId: currentTransaction.parentId,
+              installmentNumber,
+              totalInstallments: newTotal,
+              originalAmount: lastInstallment.originalAmount,
+              notes: lastInstallment.notes,
+            },
+            include: {
+              category: true,
+              bankAccount: true,
+              paymentMethod: true,
+            },
+          });
+
+          updatedTransactions.push(newInstallment);
+        }
+
+        // Atualizar totalInstallments em todas as parcelas existentes
+        await prisma.transaction.updateMany({
+          where: {
+            parentId: currentTransaction.parentId,
+            tenantId,
+            deletedAt: null,
+          },
+          data: {
+            totalInstallments: newTotal,
+          },
+        });
+
+        // Atualizar a transação pai também
+        if (currentTransaction.parentId) {
+          await prisma.transaction.update({
+            where: { id: currentTransaction.parentId },
+            data: {
+              totalInstallments: newTotal,
+              originalAmount: parseFloat(lastInstallment.amount.toString()) * newTotal,
+            },
+          });
+        }
+      }
+
+      log.info('TransactionService.updateBatch success', { 
+        id, 
+        tenantId, 
+        scope, 
+        updatedCount: updatedTransactions.length 
+      });
+
+      return { 
+        updatedCount: updatedTransactions.length, 
+        transactions: updatedTransactions 
+      };
+    } catch (error) {
+      log.error('TransactionService.updateBatch error', { error, id, data, tenantId, scope });
+      throw error;
+    }
+  }
+
+  /**
    * Deleta uma transação (soft delete) com reversão de saldo
    */
   async delete(id: string, tenantId: string): Promise<void> {
@@ -1029,17 +1252,20 @@ export class TransactionService {
       }
 
       const startDate = parseLocalDate(data.transactionDate);
-      const originalAmount = data.amount;
-      const hasDownPayment = data.hasDownPayment || false;
-      const downPaymentAmount = hasDownPayment ? (data.downPaymentAmount || originalAmount / data.totalInstallments) : 0;
       
-      // Calcular valor das parcelas
-      const remainingAmount = originalAmount - downPaymentAmount;
+      // NOVO FLUXO: data.amount É o valor de CADA parcela (não o total)
+      const installmentAmount = data.amount;
+      const hasDownPayment = data.hasDownPayment || false;
+      const downPaymentAmount = hasDownPayment ? (data.downPaymentAmount || installmentAmount) : 0;
+      
+      // Calcular número de parcelas regulares
       const numInstallments = hasDownPayment ? data.totalInstallments - 1 : data.totalInstallments;
-      const installmentAmount = numInstallments > 0 ? remainingAmount / numInstallments : 0;
+      
+      // Calcular valor total (parcela × quantidade + entrada)
+      const totalAmount = (installmentAmount * numInstallments) + downPaymentAmount;
 
       const result = await prisma.$transaction(async (tx) => {
-        // Criar transação pai (template)
+        // Criar transação pai (template) - marcada como deletada para não aparecer
         const parentTransaction = await tx.transaction.create({
           data: {
             tenantId,
@@ -1049,8 +1275,8 @@ export class TransactionService {
             categoryId: data.categoryId || null,
             bankAccountId: data.bankAccountId || null,
             paymentMethodId: data.paymentMethodId || null,
-            amount: originalAmount,
-            originalAmount: originalAmount,
+            amount: totalAmount, // Total = parcela × quantidade
+            originalAmount: totalAmount,
             description: data.description,
             transactionDate: startDate,
             dueDate: startDate,
@@ -1064,6 +1290,7 @@ export class TransactionService {
             isFixed: true,
             notes: data.notes || null,
             tags: data.tags || null,
+            deletedAt: new Date(), // Marcar como deletado para não aparecer na lista
           },
         });
 
@@ -1082,7 +1309,7 @@ export class TransactionService {
               bankAccountId: data.bankAccountId || null,
               paymentMethodId: data.paymentMethodId || null,
               amount: downPaymentAmount,
-              originalAmount: originalAmount,
+              originalAmount: totalAmount,
               description: `${data.description} - Entrada`,
               transactionDate: startDate,
               dueDate: startDate,
@@ -1118,7 +1345,7 @@ export class TransactionService {
               bankAccountId: data.bankAccountId || null,
               paymentMethodId: data.paymentMethodId || null,
               amount: installmentAmount,
-              originalAmount: originalAmount,
+              originalAmount: totalAmount,
               description: `${data.description} - Parcela ${i}/${numInstallments}`,
               transactionDate: dueDate,
               dueDate: dueDate,

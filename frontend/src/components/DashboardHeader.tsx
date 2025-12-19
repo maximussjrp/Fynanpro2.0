@@ -42,6 +42,10 @@ const pageTitles: Record<string, { title: string; subtitle: string }> = {
     title: 'Orçamentos',
     subtitle: 'Planeje e controle seus gastos'
   },
+  '/dashboard/planning': {
+    title: 'Planejamento Anual',
+    subtitle: 'Visualize e planeje suas finanças para o ano todo'
+  },
   '/dashboard/calendar': {
     title: 'Calendário Financeiro',
     subtitle: 'Visualize suas transações no tempo'

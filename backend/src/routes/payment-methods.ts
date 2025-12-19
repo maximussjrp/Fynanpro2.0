@@ -49,7 +49,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     });
 
     return successResponse(res, {
-      paymentMethods,
+      methods: paymentMethods,
       summary: {
         total: paymentMethods.length,
         active: paymentMethods.filter(p => p.isActive).length,
@@ -226,6 +226,91 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
   } catch (error) {
     log.error('Delete payment method error:', { error, tenantId: req.tenantId });
     return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao excluir meio de pagamento', 500);
+  }
+});
+
+// ==================== MIGRATE AND DELETE PAYMENT METHOD ====================
+// POST /api/v1/payment-methods/:id/migrate
+// Migra todas as transações para outro meio de pagamento e exclui o original
+router.post('/:id/migrate', async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { targetPaymentMethodId } = req.body;
+    const tenantId = req.tenantId!;
+
+    if (!targetPaymentMethodId) {
+      return errorResponse(res, 'VALIDATION_ERROR', 'ID do meio de pagamento destino é obrigatório', 400);
+    }
+
+    if (id === targetPaymentMethodId) {
+      return errorResponse(res, 'VALIDATION_ERROR', 'O meio de pagamento destino deve ser diferente do original', 400);
+    }
+
+    // Buscar meio de pagamento original
+    const sourceMethod = await prisma.paymentMethod.findFirst({
+      where: {
+        id,
+        tenantId,
+        deletedAt: null,
+      },
+      include: {
+        _count: {
+          select: {
+            transactions: true,
+          },
+        },
+      },
+    });
+
+    if (!sourceMethod) {
+      return errorResponse(res, 'NOT_FOUND', 'Meio de pagamento de origem não encontrado', 404);
+    }
+
+    // Buscar meio de pagamento destino
+    const targetMethod = await prisma.paymentMethod.findFirst({
+      where: {
+        id: targetPaymentMethodId,
+        tenantId,
+        deletedAt: null,
+      },
+    });
+
+    if (!targetMethod) {
+      return errorResponse(res, 'NOT_FOUND', 'Meio de pagamento destino não encontrado', 404);
+    }
+
+    // Migrar transações
+    const updateResult = await prisma.transaction.updateMany({
+      where: {
+        paymentMethodId: id,
+        tenantId,
+        deletedAt: null,
+      },
+      data: {
+        paymentMethodId: targetPaymentMethodId,
+      },
+    });
+
+    // Soft delete do meio de pagamento original
+    await prisma.paymentMethod.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
+
+    log.info('Payment method migrated and deleted', {
+      sourceId: id,
+      targetId: targetPaymentMethodId,
+      migratedTransactions: updateResult.count,
+      tenantId,
+    });
+
+    return successResponse(res, {
+      message: `${updateResult.count} transações migradas com sucesso. Meio de pagamento excluído.`,
+      migratedCount: updateResult.count,
+    });
+  } catch (error) {
+    log.error('Migrate payment method error:', { error, tenantId: req.tenantId });
+    return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao migrar meio de pagamento', 500);
   }
 });
 

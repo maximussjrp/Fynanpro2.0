@@ -205,7 +205,7 @@ router.post('/confirm', authMiddleware, async (req: AuthRequest, res: Response) 
   try {
     const userId = req.userId!;
     const tenantId = req.tenantId!;
-    const { previewId, bankAccountId, transactions } = req.body;
+    const { previewId, bankAccountId, paymentMethodId, transactions } = req.body;
     
     if (!previewId) {
       return res.status(400).json({ error: 'ID do preview é obrigatório' });
@@ -228,6 +228,20 @@ router.post('/confirm', authMiddleware, async (req: AuthRequest, res: Response) 
     if (!account) {
       return res.status(404).json({ error: 'Conta bancária não encontrada' });
     }
+
+    // Verificar meio de pagamento se fornecido
+    if (paymentMethodId) {
+      const paymentMethod = await prisma.paymentMethod.findFirst({
+        where: {
+          id: paymentMethodId,
+          tenantId,
+          deletedAt: null,
+        },
+      });
+      if (!paymentMethod) {
+        return res.status(404).json({ error: 'Meio de pagamento não encontrado' });
+      }
+    }
     
     // Atualizar transações do preview se enviadas (com edições do usuário)
     if (transactions && Array.isArray(transactions)) {
@@ -239,7 +253,7 @@ router.post('/confirm', authMiddleware, async (req: AuthRequest, res: Response) 
     }
     
     // Confirmar importação
-    const result = await importService.confirmImport(tenantId, userId, previewId, bankAccountId);
+    const result = await importService.confirmImport(tenantId, userId, previewId, bankAccountId, paymentMethodId);
     
     log.info(`[Import] Importação concluída: ${result.imported} importadas, ${result.skipped} ignoradas, ${result.duplicates} duplicadas`);
     

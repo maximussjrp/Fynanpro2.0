@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { log } from '../utils/logger';
+import { transactionService } from './transaction.service';
 
 const prisma = new PrismaClient();
 
@@ -20,10 +21,14 @@ export enum ChatState {
   ONBOARDING_INCOME_AMOUNT = 'onboarding_income_amount',
   ONBOARDING_INCOME_DAY = 'onboarding_income_day',
   ONBOARDING_INCOME_ACCOUNT = 'onboarding_income_account',
+  ONBOARDING_INCOME_OCCURRENCES = 'onboarding_income_occurrences',
   ONBOARDING_INCOME_MORE = 'onboarding_income_more',
   ONBOARDING_EXPENSES = 'onboarding_expenses',
   ONBOARDING_EXPENSE_AMOUNT = 'onboarding_expense_amount',
   ONBOARDING_EXPENSE_DAY = 'onboarding_expense_day',
+  ONBOARDING_EXPENSE_OCCURRENCES = 'onboarding_expense_occurrences',
+  ONBOARDING_EXPENSE_ACCOUNT = 'onboarding_expense_account',
+  ONBOARDING_EXPENSE_PAYMENT = 'onboarding_expense_payment',
   ONBOARDING_EXPENSE_MORE = 'onboarding_expense_more',
   ONBOARDING_COMPLETE = 'onboarding_complete',
 
@@ -416,6 +421,10 @@ export class ChatbotService {
         result = await this.handleOnboardingIncomeDay(session, input);
         break;
         
+      case ChatState.ONBOARDING_INCOME_OCCURRENCES:
+        result = await this.handleOnboardingIncomeOccurrences(session, input);
+        break;
+        
       case ChatState.ONBOARDING_INCOME_ACCOUNT:
         result = await this.handleOnboardingIncomeAccount(session, input);
         break;
@@ -434,6 +443,18 @@ export class ChatbotService {
         
       case ChatState.ONBOARDING_EXPENSE_DAY:
         result = await this.handleOnboardingExpenseDay(session, input);
+        break;
+        
+      case ChatState.ONBOARDING_EXPENSE_OCCURRENCES:
+        result = await this.handleOnboardingExpenseOccurrences(session, input);
+        break;
+        
+      case ChatState.ONBOARDING_EXPENSE_ACCOUNT:
+        result = await this.handleOnboardingExpenseAccount(session, input);
+        break;
+        
+      case ChatState.ONBOARDING_EXPENSE_PAYMENT:
+        result = await this.handleOnboardingExpensePayment(session, input);
         break;
         
       case ChatState.ONBOARDING_EXPENSE_MORE:
@@ -664,6 +685,22 @@ export class ChatbotService {
   }
   
   private async handleOnboardingAccountsMore(session: ChatSession, input: string) {
+    // Se veio do fluxo de despesa, retornar para continuar criando a despesa
+    if ((session.context as any).returningToExpense) {
+      // Usar a última conta criada
+      const lastAccount = session.context.bankAccounts?.[session.context.bankAccounts.length - 1];
+      if (lastAccount) {
+        (session.context.tempExpense as any).accountId = lastAccount.id;
+        (session.context.tempExpense as any).accountName = lastAccount.bankName;
+      }
+      
+      // Limpar flag
+      delete (session.context as any).returningToExpense;
+      
+      // Continuar para perguntar meio de pagamento
+      return this.askPaymentMethod(session);
+    }
+    
     if (isPositive(input)) {
       session.state = ChatState.ONBOARDING_ACCOUNTS;
       session.context.tempAccount = {};
@@ -769,6 +806,39 @@ export class ChatbotService {
     }
     
     session.context.tempIncome!.dueDay = day;
+    
+    // Perguntar número de ocorrências
+    session.state = ChatState.ONBOARDING_INCOME_OCCURRENCES;
+    
+    return {
+      response: `📅 **Quantas vezes essa receita vai se repetir?**\n\n_(ex: 12 para 1 ano, 6 para 6 meses, ou "sempre" se não tem fim)_`,
+      quickReplies: ['12', '6', '24', 'Sempre'],
+    };
+  }
+  
+  private async handleOnboardingIncomeOccurrences(session: ChatSession, input: string) {
+    const normalized = input.toLowerCase().trim();
+    
+    // Se for "sempre", "infinito", "sem fim", não definir limite
+    let totalOccurrences: number | undefined = undefined;
+    
+    if (normalized === 'sempre' || normalized === 'infinito' || normalized.includes('sem fim') || normalized.includes('indefinido')) {
+      totalOccurrences = undefined;
+    } else {
+      const num = parseInt(input);
+      if (!isNaN(num) && num >= 1 && num <= 120) {
+        totalOccurrences = num;
+      } else {
+        return {
+          response: 'Por favor, digite um número entre 1 e 120, ou "sempre" para repetir indefinidamente.',
+          quickReplies: ['12', '6', '24', 'Sempre'],
+        };
+      }
+    }
+    
+    (session.context.tempIncome as any).totalOccurrences = totalOccurrences;
+    
+    // Agora perguntar a conta
     session.state = ChatState.ONBOARDING_INCOME_ACCOUNT;
     
     const accounts = session.context.bankAccounts || [];
@@ -817,39 +887,116 @@ export class ChatbotService {
   private async saveOnboardingIncome(session: ChatSession, accountId: string) {
     const income = session.context.tempIncome!;
     
-    // Buscar categoria de receita
+    // Mapear fonte de renda para categoria
+    const source = (income.source || '').toLowerCase();
+    let categoryName = 'Salário'; // default
+    
+    if (source.includes('salário') || source.includes('salario') || source.includes('clt')) {
+      categoryName = 'Salário';
+    } else if (source.includes('pró-labore') || source.includes('pro-labore') || source.includes('prolabore')) {
+      categoryName = 'Pró-labore';
+    } else if (source.includes('freelance') || source.includes('autônomo') || source.includes('pj')) {
+      categoryName = 'Freelance';
+    } else if (source.includes('aluguel')) {
+      categoryName = 'Aluguel Recebido';
+    } else if (source.includes('aposentadoria') || source.includes('pensão')) {
+      categoryName = 'Aposentadoria';
+    } else if (source.includes('investimento') || source.includes('dividendo') || source.includes('rendimento')) {
+      categoryName = 'Investimentos';
+    }
+    
+    // Buscar categoria de receita pelo nome
     let category = await prisma.category.findFirst({
       where: {
         tenantId: session.tenantId,
         type: 'income',
-        level: 1,
+        name: { contains: categoryName, mode: 'insensitive' },
         isActive: true,
         deletedAt: null,
       },
-      orderBy: { name: 'asc' },
+      orderBy: { level: 'desc' },
     });
     
-    // Criar receita recorrente
-    await prisma.recurringBill.create({
-      data: {
-        tenantId: session.tenantId,
-        name: income.source || 'Receita fixa',
-        amount: income.amount!,
-        type: 'income',
-        status: 'active',
-        isFixed: true,
-        frequency: 'monthly',
-        dueDay: income.dueDay || 5,
-        firstDueDate: new Date(),
-        categoryId: category?.id,
-        bankAccountId: accountId,
-      },
+    // Se não encontrar, buscar qualquer categoria de receita
+    if (!category) {
+      category = await prisma.category.findFirst({
+        where: {
+          tenantId: session.tenantId,
+          type: 'income',
+          level: 1,
+          isActive: true,
+          deletedAt: null,
+        },
+        orderBy: { name: 'asc' },
+      });
+    }
+    
+    // Calcular a data de vencimento
+    const today = new Date();
+    const dueDay = income.dueDay || 5;
+    let dueMonth = today.getMonth();
+    let dueYear = today.getFullYear();
+    
+    // Se o dia já passou neste mês, usar o próximo mês
+    if (today.getDate() >= dueDay) {
+      dueMonth++;
+      if (dueMonth > 11) {
+        dueMonth = 0;
+        dueYear++;
+      }
+    }
+    
+    const lastDayOfMonth = new Date(dueYear, dueMonth + 1, 0).getDate();
+    const adjustedDay = Math.min(dueDay, lastDayOfMonth);
+    const dueDate = new Date(dueYear, dueMonth, adjustedDay);
+    
+    // Buscar userId do tenant
+    const tenantUser = await prisma.tenantUser.findFirst({
+      where: { tenantId: session.tenantId },
     });
+    
+    if (!tenantUser) {
+      throw new Error('Usuário não encontrado para o tenant');
+    }
+    
+    // Usar o transactionService.createRecurring (igual ao formulário de Nova Transação)
+    const totalOccurrences = (income as any).totalOccurrences;
+    
+    const transactionData = {
+      type: 'income' as const,
+      amount: income.amount!,
+      description: income.source || 'Receita fixa',
+      transactionDate: dueDate.toISOString().split('T')[0],
+      categoryId: category?.id,
+      bankAccountId: accountId,
+      status: 'pending' as const,
+      transactionType: 'recurring' as const,
+      frequency: 'monthly' as const,
+      frequencyInterval: 1,
+      totalOccurrences: totalOccurrences || undefined,
+    };
+    
+    log.info('Chatbot criando receita recorrente via transactionService', { transactionData, totalOccurrences });
+    
+    await transactionService.createRecurring(transactionData, tenantUser.userId, session.tenantId);
+    
+    const occurrencesText = totalOccurrences ? `${totalOccurrences}x` : 'sempre';
     
     session.state = ChatState.ONBOARDING_INCOME_MORE;
     
+    let response = `✅ **Receita recorrente cadastrada!**\n\n`;
+    response += `💵 **${income.source}**\n`;
+    response += `💰 R$ ${formatMoney(income.amount!)} / mês\n`;
+    response += `📅 Todo dia ${income.dueDay}\n`;
+    response += `🔄 Repetição: ${occurrencesText}\n`;
+    if (category) {
+      response += `🏷️ Categoria: ${category.name}\n`;
+    }
+    response += `\n✨ Todas as ${totalOccurrences || 'futuras'} transações foram criadas!\n`;
+    response += `\nTem mais alguma receita fixa?`;
+    
     return {
-      response: `✅ Receita cadastrada!\n\n💵 **${income.source}**\n💰 R$ ${formatMoney(income.amount!)} / mês\n📅 Todo dia ${income.dueDay}\n\nTem mais alguma receita fixa?`,
+      response,
       quickReplies: ['Sim', 'Não'],
     };
   }
@@ -945,44 +1092,322 @@ export class ChatbotService {
     
     session.context.tempExpense!.dueDay = day;
     
-    // Buscar categoria de despesa mais adequada ou usar genérica
-    let category = await prisma.category.findFirst({
+    // Perguntar número de ocorrências
+    session.state = ChatState.ONBOARDING_EXPENSE_OCCURRENCES;
+    
+    return {
+      response: `📅 **Quantas vezes essa despesa vai se repetir?**\n\n_(ex: 12 para 1 ano, 6 para 6 meses, ou "sempre" se não tem fim)_`,
+      quickReplies: ['12', '6', '24', 'Sempre'],
+    };
+  }
+  
+  private async handleOnboardingExpenseOccurrences(session: ChatSession, input: string) {
+    const normalized = input.toLowerCase().trim();
+    
+    // Se for "sempre", "infinito", "sem fim", não definir limite
+    let totalOccurrences: number | undefined = undefined;
+    
+    if (normalized === 'sempre' || normalized === 'infinito' || normalized.includes('sem fim') || normalized.includes('indefinido')) {
+      totalOccurrences = undefined; // Sem limite
+    } else {
+      const num = parseInt(input);
+      if (!isNaN(num) && num >= 1 && num <= 120) {
+        totalOccurrences = num;
+      } else {
+        return {
+          response: 'Por favor, digite um número entre 1 e 120, ou "sempre" para repetir indefinidamente.',
+          quickReplies: ['12', '6', '24', 'Sempre'],
+        };
+      }
+    }
+    
+    (session.context.tempExpense as any).totalOccurrences = totalOccurrences;
+    
+    // Buscar contas bancárias do usuário
+    const accounts = await prisma.bankAccount.findMany({
       where: {
         tenantId: session.tenantId,
-        type: 'expense',
-        level: 1,
         isActive: true,
         deletedAt: null,
       },
       orderBy: { name: 'asc' },
     });
     
-    const accounts = session.context.bankAccounts || [];
-    const accountId = accounts.length > 0 ? accounts[0].id : null;
+    // Guardar no contexto para uso posterior
+    session.context.bankAccounts = accounts;
     
-    // Criar despesa recorrente
-    await prisma.recurringBill.create({
-      data: {
+    if (accounts.length === 0) {
+      // Sem contas, perguntar qual banco para criar
+      session.state = ChatState.ONBOARDING_ACCOUNTS;
+      (session.context as any).returningToExpense = true;
+      return {
+        response: `🏦 Você ainda não tem uma conta bancária cadastrada.\n\nQual é seu banco principal?\n\n_(ex: Nubank, Inter, Bradesco, Itaú...)_`,
+      };
+    }
+    
+    if (accounts.length === 1) {
+      // Só uma conta, usar ela automaticamente
+      (session.context.tempExpense as any).accountId = accounts[0].id;
+      (session.context.tempExpense as any).accountName = accounts[0].name;
+      return this.askPaymentMethod(session);
+    }
+    
+    // Múltiplas contas, perguntar qual
+    session.state = ChatState.ONBOARDING_EXPENSE_ACCOUNT;
+    
+    const options = accounts.map((a, i) => `${i + 1}️⃣ ${a.name}`);
+    const quickReplies = accounts.slice(0, 4).map(a => a.name.split(' ')[0]);
+    
+    return {
+      response: `🏦 **Qual conta será usada para pagar essa despesa?**`,
+      options,
+      quickReplies,
+    };
+  }
+  
+  private async handleOnboardingExpenseAccount(session: ChatSession, input: string) {
+    const accounts = session.context.bankAccounts || [];
+    const normalized = input.toLowerCase().trim();
+    
+    // Tentar encontrar por número
+    const num = parseInt(normalized);
+    if (!isNaN(num) && num >= 1 && num <= accounts.length) {
+      (session.context.tempExpense as any).accountId = accounts[num - 1].id;
+      (session.context.tempExpense as any).accountName = accounts[num - 1].name;
+      return this.askPaymentMethod(session);
+    }
+    
+    // Tentar encontrar por nome
+    const found = accounts.find((a: any) => 
+      a.name.toLowerCase().includes(normalized) ||
+      a.institution?.toLowerCase().includes(normalized)
+    );
+    
+    if (found) {
+      (session.context.tempExpense as any).accountId = found.id;
+      (session.context.tempExpense as any).accountName = found.name;
+      return this.askPaymentMethod(session);
+    }
+    
+    return {
+      response: 'Não encontrei essa conta. Por favor, escolha uma da lista:',
+      options: accounts.map((a: any, i: number) => `${i + 1}️⃣ ${a.name}`),
+    };
+  }
+  
+  private async askPaymentMethod(session: ChatSession) {
+    // Sempre perguntar o meio de pagamento (vamos criar se não existir)
+    const options = [
+      '1️⃣ Boleto',
+      '2️⃣ Débito Automático',
+      '3️⃣ PIX',
+      '4️⃣ Cartão de Crédito',
+      '5️⃣ Dinheiro',
+    ];
+    
+    session.state = ChatState.ONBOARDING_EXPENSE_PAYMENT;
+    
+    return {
+      response: `💳 **Como você paga essa conta?**`,
+      options,
+      quickReplies: ['Boleto', 'Débito', 'PIX', 'Cartão'],
+    };
+  }
+  
+  private async handleOnboardingExpensePayment(session: ChatSession, input: string) {
+    const normalized = input.toLowerCase().trim();
+    
+    // Mapear resposta para tipo de pagamento
+    let paymentType = 'boleto';
+    let paymentName = 'Boleto';
+    
+    if (normalized.includes('1') || normalized.includes('boleto')) {
+      paymentType = 'boleto';
+      paymentName = 'Boleto';
+    } else if (normalized.includes('2') || normalized.includes('débito') || normalized.includes('debito') || normalized.includes('automático') || normalized.includes('automatico')) {
+      paymentType = 'automatic_debit';
+      paymentName = 'Débito Automático';
+    } else if (normalized.includes('3') || normalized.includes('pix')) {
+      paymentType = 'pix';
+      paymentName = 'PIX';
+    } else if (normalized.includes('4') || normalized.includes('cartão') || normalized.includes('cartao') || normalized.includes('crédito') || normalized.includes('credito')) {
+      paymentType = 'credit_card';
+      paymentName = 'Cartão de Crédito';
+    } else if (normalized.includes('5') || normalized.includes('dinheiro') || normalized.includes('cash')) {
+      paymentType = 'cash';
+      paymentName = 'Dinheiro';
+    }
+    
+    // Buscar meio de pagamento existente
+    let paymentMethod = await prisma.paymentMethod.findFirst({
+      where: {
         tenantId: session.tenantId,
-        name: session.context.tempExpense!.description || 'Despesa fixa',
-        amount: session.context.tempExpense!.amount!,
-        type: 'expense',
-        status: 'active',
-        isFixed: true,
-        frequency: 'monthly',
-        dueDay: day,
-        firstDueDate: new Date(),
-        categoryId: category?.id,
-        bankAccountId: accountId,
+        type: paymentType,
+        isActive: true,
+        deletedAt: null,
       },
     });
     
+    // Se não existir, criar automaticamente
+    if (!paymentMethod) {
+      paymentMethod = await prisma.paymentMethod.create({
+        data: {
+          tenantId: session.tenantId,
+          name: paymentName,
+          type: paymentType,
+          isActive: true,
+        },
+      });
+      log.info(`Meio de pagamento "${paymentName}" criado automaticamente pelo chatbot`);
+    }
+    
+    (session.context.tempExpense as any).paymentMethodId = paymentMethod.id;
+    (session.context.tempExpense as any).paymentMethodName = paymentName;
+    
+    return this.saveExpenseAndAskMore(session);
+  }
+  
+  private async saveExpenseAndAskMore(session: ChatSession) {
     const expense = session.context.tempExpense!;
+    
+    // Mapear descrição para categoria correta
+    const description = (expense.description || '').toLowerCase();
+    let categoryName = 'Moradia'; // default
+    
+    // Mapeamento de palavras-chave para categorias
+    if (description.includes('internet') || description.includes('wifi') || description.includes('fibra')) {
+      categoryName = 'Internet';
+    } else if (description.includes('luz') || description.includes('energia') || description.includes('enel') || description.includes('light')) {
+      categoryName = 'Luz';
+    } else if (description.includes('água') || description.includes('sanepar') || description.includes('sabesp') || description.includes('cedae')) {
+      categoryName = 'Água';
+    } else if (description.includes('aluguel') || description.includes('renda') || description.includes('moradia')) {
+      categoryName = 'Aluguel';
+    } else if (description.includes('netflix') || description.includes('spotify') || description.includes('prime') || description.includes('streaming') || description.includes('disney') || description.includes('hbo') || description.includes('youtube')) {
+      categoryName = 'Streaming';
+    } else if (description.includes('telefone') || description.includes('celular') || description.includes('vivo') || description.includes('claro') || description.includes('tim') || description.includes('oi')) {
+      categoryName = 'Telefone';
+    } else if (description.includes('seguro')) {
+      categoryName = 'Seguros';
+    } else if (description.includes('condomínio') || description.includes('condominio')) {
+      categoryName = 'Condomínio';
+    } else if (description.includes('gás') || description.includes('gas')) {
+      categoryName = 'Gás';
+    } else if (description.includes('iptu') || description.includes('ipva')) {
+      categoryName = 'Impostos';
+    } else if (description.includes('escola') || description.includes('faculdade') || description.includes('curso') || description.includes('educação')) {
+      categoryName = 'Educação';
+    } else if (description.includes('plano') && (description.includes('saúde') || description.includes('saude'))) {
+      categoryName = 'Saúde';
+    } else if (description.includes('academia') || description.includes('gym') || description.includes('fitness')) {
+      categoryName = 'Academia';
+    }
+    
+    // Buscar categoria pelo nome (level 2 primeiro, depois level 1)
+    let category = await prisma.category.findFirst({
+      where: {
+        tenantId: session.tenantId,
+        type: 'expense',
+        name: { contains: categoryName, mode: 'insensitive' },
+        isActive: true,
+        deletedAt: null,
+      },
+      orderBy: { level: 'desc' }, // Prioriza level 2
+    });
+    
+    // Se não encontrar, buscar qualquer categoria de despesa
+    if (!category) {
+      category = await prisma.category.findFirst({
+        where: {
+          tenantId: session.tenantId,
+          type: 'expense',
+          level: 1,
+          isActive: true,
+          deletedAt: null,
+        },
+        orderBy: { name: 'asc' },
+      });
+    }
+    
+    // Calcular a data de vencimento (próximo mês com o dia informado)
+    const today = new Date();
+    const dueDay = expense.dueDay || 1;
+    let dueMonth = today.getMonth();
+    let dueYear = today.getFullYear();
+    
+    // Se o dia já passou neste mês, usar o próximo mês
+    if (today.getDate() >= dueDay) {
+      dueMonth++;
+      if (dueMonth > 11) {
+        dueMonth = 0;
+        dueYear++;
+      }
+    }
+    
+    // Ajustar para meses com menos dias
+    const lastDayOfMonth = new Date(dueYear, dueMonth + 1, 0).getDate();
+    const adjustedDay = Math.min(dueDay, lastDayOfMonth);
+    const dueDate = new Date(dueYear, dueMonth, adjustedDay);
+    
+    // Buscar userId do tenant (via TenantUser)
+    const tenantUser = await prisma.tenantUser.findFirst({
+      where: { tenantId: session.tenantId },
+      include: { user: true },
+    });
+    
+    if (!tenantUser) {
+      throw new Error('Usuário não encontrado para o tenant');
+    }
+    
+    // Usar o transactionService.createRecurring (igual ao formulário de Nova Transação)
+    const totalOccurrences = (expense as any).totalOccurrences;
+    
+    const transactionData = {
+      type: 'expense' as const,
+      amount: expense.amount!,
+      description: expense.description || 'Despesa fixa',
+      transactionDate: dueDate.toISOString().split('T')[0], // formato YYYY-MM-DD
+      categoryId: category?.id,
+      bankAccountId: (expense as any).accountId || undefined,
+      paymentMethodId: (expense as any).paymentMethodId || undefined,
+      status: 'pending' as const,
+      transactionType: 'recurring' as const,
+      frequency: 'monthly' as const,
+      frequencyInterval: 1,
+      totalOccurrences: totalOccurrences || undefined, // undefined = infinito
+    };
+    
+    log.info('Chatbot criando despesa recorrente via transactionService', { transactionData, totalOccurrences });
+    
+    await transactionService.createRecurring(transactionData, tenantUser.userId, session.tenantId);
+    
+    // Buscar nomes para exibição
+    const accountName = (expense as any).accountName || null;
+    const paymentMethodName = (expense as any).paymentMethodName || null;
+    const occurrencesText = totalOccurrences ? `${totalOccurrences}x` : 'sempre';
+    
     session.context.tempExpense = {};
     session.state = ChatState.ONBOARDING_EXPENSE_MORE;
     
+    let response = `✅ **Despesa recorrente cadastrada!**\n\n`;
+    response += `📋 **${expense.description}**\n`;
+    response += `💰 R$ ${formatMoney(expense.amount!)} / mês\n`;
+    response += `📅 Vencimento: dia ${expense.dueDay}\n`;
+    response += `🔄 Repetição: ${occurrencesText}\n`;
+    if (category) {
+      response += `🏷️ Categoria: ${category.name}\n`;
+    }
+    if (accountName) {
+      response += `🏦 Conta: ${accountName}\n`;
+    }
+    if (paymentMethodName) {
+      response += `💳 Pagamento: ${paymentMethodName}\n`;
+    }
+    response += `\n✨ Todas as ${totalOccurrences || 'futuras'} transações foram criadas!\n`;
+    response += `\nTem mais alguma despesa fixa?`;
+    
     return {
-      response: `✅ Despesa cadastrada!\n\n📋 **${expense.description}**\n💰 R$ ${formatMoney(expense.amount!)} / mês\n📅 Vencimento: dia ${day}\n\nTem mais alguma despesa fixa?`,
+      response,
       quickReplies: ['Sim', 'Não'],
     };
   }
@@ -1104,7 +1529,16 @@ export class ChatbotService {
     
     // Planejamento do mês
     if (normalized.includes('planejamento') || normalized.includes('planejar') || normalized.includes('resumo do mês') || normalized.includes('visão geral')) {
+      // Se pedir planejamento anual, redirecionar para página
+      if (normalized.includes('anual') || normalized.includes('ano') || normalized.includes('12 meses')) {
+        return this.showAnnualPlanning(session);
+      }
       return this.queryPlanning(session);
+    }
+    
+    // Comando específico: planejamento anual
+    if (normalized.includes('planejar ano') || normalized.includes('configurar ano') || normalized.includes('onboarding')) {
+      return this.startAnnualPlanningFlow(session);
     }
     
     // Detectar gasto
@@ -1188,6 +1622,23 @@ export class ChatbotService {
       session.context.tempTransaction = { type: 'income' };
       return {
         response: 'Qual o valor da receita?',
+      };
+    }
+    
+    // Comando: adicionar despesa fixa / receita fixa (recorrente)
+    if (normalized.includes('despesa fixa') || normalized.includes('conta fixa') || normalized.includes('gasto fixo')) {
+      session.state = ChatState.ONBOARDING_EXPENSES;
+      return {
+        response: `📋 **Nova Despesa Fixa**\n\nQual o nome dessa despesa?\n\n_(ex: Aluguel, Internet, Luz, Netflix...)_`,
+      };
+    }
+    
+    if (normalized.includes('receita fixa') || normalized.includes('renda fixa') || normalized.includes('salário fixo')) {
+      session.state = ChatState.ONBOARDING_INCOME_TYPE;
+      return {
+        response: `💵 **Nova Receita Fixa**\n\nQual é a fonte de renda?`,
+        options: ['1️⃣ Salário CLT', '2️⃣ Pró-labore', '3️⃣ Freelance', '4️⃣ Aluguel recebido', '5️⃣ Aposentadoria', '6️⃣ Outro'],
+        quickReplies: ['Salário', 'Pró-labore', 'Freelance', 'Outro'],
       };
     }
     
@@ -2003,6 +2454,97 @@ export class ChatbotService {
     return {
       response,
       quickReplies: ['Menu', 'Receitas Fixas', 'Contas a vencer'],
+    };
+  }
+  
+  /**
+   * Mostra resumo do planejamento anual
+   */
+  private async showAnnualPlanning(session: ChatSession) {
+    const currentYear = new Date().getFullYear();
+    
+    // Buscar totais de recorrentes
+    const incomeTotal = await prisma.recurringBill.aggregate({
+      where: {
+        tenantId: session.tenantId,
+        type: 'income',
+        status: 'active',
+        deletedAt: null,
+      },
+      _sum: { amount: true },
+      _count: true,
+    });
+    
+    const expenseTotal = await prisma.recurringBill.aggregate({
+      where: {
+        tenantId: session.tenantId,
+        type: 'expense',
+        status: 'active',
+        deletedAt: null,
+      },
+      _sum: { amount: true },
+      _count: true,
+    });
+    
+    const monthlyIncome = Number(incomeTotal._sum.amount) || 0;
+    const monthlyExpense = Number(expenseTotal._sum.amount) || 0;
+    const monthlyBalance = monthlyIncome - monthlyExpense;
+    
+    // Saldo atual
+    const accounts = await prisma.bankAccount.aggregate({
+      where: {
+        tenantId: session.tenantId,
+        isActive: true,
+        deletedAt: null,
+      },
+      _sum: { currentBalance: true },
+    });
+    const currentBalance = Number(accounts._sum.currentBalance) || 0;
+    
+    // Projeção
+    const currentMonth = new Date().getMonth();
+    const remainingMonths = 12 - currentMonth;
+    const projectedYearEnd = currentBalance + (monthlyBalance * remainingMonths);
+    
+    let response = `📅 **Planejamento Anual ${currentYear}**\n\n`;
+    
+    response += `💰 **Saldo atual:** R$ ${formatMoney(currentBalance)}\n\n`;
+    
+    response += `📊 **Resumo Mensal Planejado:**\n`;
+    response += `• 💵 Receitas: R$ ${formatMoney(monthlyIncome)} (${incomeTotal._count} fonte${incomeTotal._count !== 1 ? 's' : ''})\n`;
+    response += `• 📋 Despesas: R$ ${formatMoney(monthlyExpense)} (${expenseTotal._count} conta${expenseTotal._count !== 1 ? 's' : ''})\n`;
+    response += `• ${monthlyBalance >= 0 ? '✅' : '⚠️'} Sobra: R$ ${formatMoney(monthlyBalance)}\n\n`;
+    
+    response += `📈 **Projeção Anual:**\n`;
+    response += `• Receita total: R$ ${formatMoney(monthlyIncome * 12)}\n`;
+    response += `• Despesa total: R$ ${formatMoney(monthlyExpense * 12)}\n`;
+    response += `• Saldo previsto fim do ano: R$ ${formatMoney(projectedYearEnd)}\n\n`;
+    
+    response += `👉 Para ver detalhes completos, acesse a página **Planejamento Anual** no menu lateral!\n\n`;
+    response += `Quer configurar receitas ou despesas fixas agora?`;
+    
+    return {
+      response,
+      options: ['1️⃣ Adicionar receita fixa', '2️⃣ Adicionar despesa fixa', '3️⃣ Ver minhas contas'],
+      quickReplies: ['Adicionar receita', 'Adicionar despesa', 'Menu'],
+      navigate: '/dashboard/planning',
+    };
+  }
+  
+  /**
+   * Inicia fluxo guiado de planejamento anual
+   */
+  private startAnnualPlanningFlow(session: ChatSession) {
+    // Resetar estado para onboarding de receitas
+    session.state = ChatState.ONBOARDING_INCOME;
+    
+    return {
+      response: `🎯 **Vamos configurar seu planejamento anual!**\n\n` +
+        `Vou te guiar passo a passo para cadastrar:\n\n` +
+        `1️⃣ Suas receitas fixas (salário, etc)\n` +
+        `2️⃣ Suas despesas fixas (aluguel, contas, etc)\n\n` +
+        `Você tem alguma **receita fixa** mensal?\n_(salário, aluguel recebido, pensão...)_`,
+      quickReplies: ['Sim', 'Não'],
     };
   }
 }

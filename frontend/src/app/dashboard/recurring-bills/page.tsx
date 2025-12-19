@@ -35,6 +35,11 @@ export default function RecurringBillsPage() {
     totalActive,
     totalMonthly,
     nextDueCount,
+    totalMonthlyExpenses,
+    totalMonthlyIncome,
+    netFixedMonthly,
+    incomeCommitmentPercent,
+    topCategories,
   } = useRecurringBills();
 
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -121,6 +126,11 @@ export default function RecurringBillsPage() {
           totalActive={totalActive}
           totalMonthly={totalMonthly}
           nextDueCount={nextDueCount}
+          totalMonthlyExpenses={totalMonthlyExpenses}
+          totalMonthlyIncome={totalMonthlyIncome}
+          netFixedMonthly={netFixedMonthly}
+          incomeCommitmentPercent={incomeCommitmentPercent}
+          topCategories={topCategories}
           onCreateNew={() => setShowCreateModal(true)}
         />
 

@@ -137,6 +137,9 @@ export const UpdateTransactionSchema = z.object({
   frequencyInterval: z.number().int().min(1).max(12).optional(),
   alertDaysBefore: z.number().int().min(0).max(30).optional(),
   autoGenerateNext: z.boolean().optional(),
+  
+  // Campos para parceladas
+  totalInstallments: z.number().int().min(1).max(72).optional(),
 });
 
 export type UpdateTransactionDTO = z.infer<typeof UpdateTransactionSchema>;

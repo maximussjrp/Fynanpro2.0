@@ -100,14 +100,108 @@ export function useRecurringBills() {
 
   const loadData = async () => {
     try {
-      const [recurringBillsRes, categoriesRes, accountsRes, methodsRes] = await Promise.all([
+      // Buscar tanto do modelo antigo quanto do novo (transações unificadas)
+      const [recurringBillsRes, transactionsRes, categoriesRes, accountsRes, methodsRes] = await Promise.all([
         api.get('/recurring-bills'),
+        api.get('/transactions?transactionType=recurring&limit=1000'), // Buscar transações recorrentes
         api.get('/categories'),
         api.get('/bank-accounts?isActive=true'),
         api.get('/payment-methods?isActive=true'),
       ]);
 
-      setRecurringBills(recurringBillsRes.data.data.recurringBills || []);
+      const oldRecurringBills = recurringBillsRes.data.data.recurringBills || [];
+      
+      // Converter transações recorrentes para o formato de RecurringBill
+      const transactions = transactionsRes.data.data?.transactions || [];
+      
+      // Agrupar por parentId para encontrar transações "pai" (recorrentes)
+      const parentTransactions = transactions.filter((t: any) => !t.parentId);
+      const childTransactions = transactions.filter((t: any) => t.parentId);
+      
+      // Criar um mapa de parent -> filhos
+      const childrenByParent = childTransactions.reduce((acc: any, t: any) => {
+        if (!acc[t.parentId]) acc[t.parentId] = [];
+        acc[t.parentId].push(t);
+        return acc;
+      }, {});
+      
+      // Converter transações pai para formato de RecurringBill
+      const convertedRecurringBills = parentTransactions.map((t: any) => {
+        const children = childrenByParent[t.id] || [];
+        const nextOccurrence = children.find((c: any) => c.status === 'pending')?.transactionDate;
+        
+        return {
+          id: t.id,
+          name: t.description,
+          description: t.notes || '',
+          type: t.type === 'income' ? 'income' : 'expense',
+          amount: t.amount?.toString() || '0',
+          frequency: t.frequency || 'monthly',
+          firstDueDate: t.transactionDate,
+          dueDay: new Date(t.transactionDate).getDate(),
+          dayOfMonth: new Date(t.transactionDate).getDate(),
+          status: 'active',
+          category: t.category,
+          bankAccount: t.bankAccount,
+          paymentMethod: t.paymentMethod,
+          _count: { occurrences: children.length },
+          nextOccurrence,
+          createdAt: t.createdAt,
+          isFromTransaction: true, // Marcador para saber que veio de Transaction
+        };
+      });
+      
+      // Também incluir transações recorrentes que são filhas (ocorrências) como "bills" se não têm parent
+      const standaloneRecurring = childTransactions
+        .filter((t: any) => {
+          // Verificar se o parent existe na lista
+          const parentExists = parentTransactions.some((p: any) => p.id === t.parentId);
+          return !parentExists;
+        })
+        .reduce((acc: any, t: any) => {
+          if (!acc[t.parentId]) {
+            acc[t.parentId] = {
+              id: t.parentId,
+              name: t.description,
+              description: t.notes || '',
+              type: t.type === 'income' ? 'income' : 'expense',
+              amount: t.amount?.toString() || '0',
+              frequency: t.frequency || 'monthly',
+              firstDueDate: t.transactionDate,
+              dueDay: new Date(t.transactionDate).getDate(),
+              dayOfMonth: new Date(t.transactionDate).getDate(),
+              status: 'active',
+              category: t.category,
+              bankAccount: t.bankAccount,
+              paymentMethod: t.paymentMethod,
+              _count: { occurrences: 0 },
+              createdAt: t.createdAt,
+              isFromTransaction: true,
+              children: [],
+            };
+          }
+          acc[t.parentId].children.push(t);
+          acc[t.parentId]._count.occurrences++;
+          return acc;
+        }, {});
+      
+      const standaloneList = Object.values(standaloneRecurring).map((item: any) => {
+        const nextOcc = item.children.find((c: any) => c.status === 'pending')?.transactionDate;
+        return { ...item, nextOccurrence: nextOcc, children: undefined };
+      });
+
+      // Combinar todos
+      const allRecurringBills = [...oldRecurringBills, ...convertedRecurringBills, ...standaloneList];
+      
+      // Remover duplicatas por ID
+      const uniqueBills = allRecurringBills.reduce((acc: any[], bill: any) => {
+        if (!acc.find(b => b.id === bill.id)) {
+          acc.push(bill);
+        }
+        return acc;
+      }, []);
+
+      setRecurringBills(uniqueBills);
       setCategories((categoriesRes.data.data.categories || []).filter((c: Category) => c.isActive));
       setBankAccounts(accountsRes.data.data.accounts || []);
       setPaymentMethods(methodsRes.data.data.paymentMethods || []);
@@ -304,22 +398,66 @@ export function useRecurringBills() {
   };
 
   // Estatísticas calculadas
-  const totalActive = recurringBills.filter(b => b.status === 'active').length;
+  const activeBills = recurringBills.filter(b => b.status === 'active');
+  const totalActive = activeBills.length;
   
-  const totalMonthly = recurringBills
-    .filter(b => b.status === 'active')
-    .reduce((sum, bill) => {
-      const amount = parseFloat(bill.amount);
-      if (bill.type === 'expense') return sum + amount;
-      return sum;
-    }, 0);
+  // Total mensal de despesas fixas
+  const totalMonthlyExpenses = activeBills
+    .filter(b => b.type === 'expense')
+    .reduce((sum, bill) => sum + parseFloat(bill.amount), 0);
+    
+  // Total mensal de receitas fixas
+  const totalMonthlyIncome = activeBills
+    .filter(b => b.type === 'income')
+    .reduce((sum, bill) => sum + parseFloat(bill.amount), 0);
 
-  const nextDueCount = recurringBills.filter(b => {
-    if (b.status !== 'active') return false;
-    // Lógica simplificada - contas que vencem nos próximos 7 dias
-    // Você pode melhorar isso calculando as datas reais
-    return true;
+  // Saldo fixo mensal (receitas - despesas)
+  const netFixedMonthly = totalMonthlyIncome - totalMonthlyExpenses;
+  
+  // % de comprometimento da renda fixa com despesas fixas
+  const incomeCommitmentPercent = totalMonthlyIncome > 0 
+    ? Math.round((totalMonthlyExpenses / totalMonthlyIncome) * 100)
+    : 0;
+
+  // Contagem de despesas que vencem nos próximos 7 dias
+  const today = new Date();
+  const next7Days = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const nextDueCount = activeBills.filter(b => {
+    const dueDay = b.dayOfMonth || b.dueDay;
+    if (!dueDay) return false;
+    
+    const thisMonthDue = new Date(today.getFullYear(), today.getMonth(), dueDay);
+    const nextMonthDue = new Date(today.getFullYear(), today.getMonth() + 1, dueDay);
+    
+    return (thisMonthDue >= today && thisMonthDue <= next7Days) ||
+           (nextMonthDue >= today && nextMonthDue <= next7Days);
   }).length;
+  
+  // Breakdown por categoria (top 5)
+  const categoryBreakdown = activeBills
+    .filter(b => b.type === 'expense' && b.category)
+    .reduce((acc, bill) => {
+      const catName = bill.category?.name || 'Sem categoria';
+      const catIcon = bill.category?.icon || '📋';
+      if (!acc[catName]) {
+        acc[catName] = { name: catName, icon: catIcon, total: 0, count: 0 };
+      }
+      acc[catName].total += parseFloat(bill.amount);
+      acc[catName].count += 1;
+      return acc;
+    }, {} as Record<string, { name: string; icon: string; total: number; count: number }>);
+    
+  const topCategories = Object.values(categoryBreakdown)
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 5)
+    .map(cat => ({
+      ...cat,
+      percent: totalMonthlyExpenses > 0 ? Math.round((cat.total / totalMonthlyExpenses) * 100) : 0
+    }));
+
+  // Separação por tipo
+  const expenseBills = activeBills.filter(b => b.type === 'expense');
+  const incomeBills = activeBills.filter(b => b.type === 'income');
 
   return {
     loading,
@@ -340,9 +478,17 @@ export function useRecurringBills() {
     openEditModal,
     resetForm,
     setEditingBill,
-    // Estatísticas
+    // Estatísticas básicas
     totalActive,
-    totalMonthly,
+    totalMonthly: totalMonthlyExpenses, // Mantém compatibilidade
     nextDueCount,
+    // Novas estatísticas
+    totalMonthlyExpenses,
+    totalMonthlyIncome,
+    netFixedMonthly,
+    incomeCommitmentPercent,
+    topCategories,
+    expenseBills,
+    incomeBills,
   };
 }

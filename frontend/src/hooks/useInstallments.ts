@@ -74,30 +74,203 @@ export default function useInstallments() {
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState<InstallmentForm>(initialForm);
 
-  // Estatísticas
-  const totalActive = purchases.filter(p => p.status === 'active').length;
-  const totalOwed = purchases
-    .filter(p => p.status === 'active')
+  // Estatísticas básicas
+  const activePurchases = purchases.filter(p => p.status === 'active');
+  const totalActive = activePurchases.length;
+  const totalOwed = activePurchases
     .reduce((sum, p) => sum + Number(p.remainingBalance), 0);
-  const pendingInstallments = purchases
-    .filter(p => p.status === 'active')
+  const pendingInstallments = activePurchases
     .reduce((sum, p) => sum + (p.numberOfInstallments - p.paidInstallments), 0);
+    
+  // Novas estatísticas
+  // Total já pago
+  const totalPaid = activePurchases
+    .reduce((sum, p) => sum + (Number(p.totalAmount) - Number(p.remainingBalance)), 0);
+    
+  // Total geral (pago + restante)
+  const totalOverall = activePurchases
+    .reduce((sum, p) => sum + Number(p.totalAmount), 0);
+    
+  // Gasto mensal com parcelas (soma de todas as parcelas ativas)
+  const monthlyInstallmentSpend = activePurchases
+    .reduce((sum, p) => sum + Number(p.installmentAmount), 0);
+    
+  // Previsão de quitação total (última data de término)
+  const payoffDate = activePurchases.reduce((latest, p) => {
+    if (!p.firstDueDate || !p.numberOfInstallments) return latest;
+    
+    const firstDate = new Date(p.firstDueDate.split('T')[0]);
+    const lastDate = new Date(firstDate);
+    lastDate.setMonth(lastDate.getMonth() + p.numberOfInstallments - 1);
+    
+    return !latest || lastDate > latest ? lastDate : latest;
+  }, null as Date | null);
+  
+  // Meses restantes até quitação total
+  const monthsUntilPayoff = payoffDate 
+    ? Math.max(0, Math.ceil((payoffDate.getTime() - new Date().getTime()) / (30 * 24 * 60 * 60 * 1000)))
+    : 0;
+
+  // Progresso geral (%)
+  const overallProgress = totalOverall > 0 
+    ? Math.round((totalPaid / totalOverall) * 100)
+    : 0;
+
+  // Breakdown por categoria
+  const categoryBreakdown = activePurchases
+    .filter(p => p.category)
+    .reduce((acc, p) => {
+      const catName = p.category?.name || 'Sem categoria';
+      const catIcon = p.category?.icon || '📋';
+      if (!acc[catName]) {
+        acc[catName] = { name: catName, icon: catIcon, total: 0, remaining: 0, count: 0 };
+      }
+      acc[catName].total += Number(p.totalAmount);
+      acc[catName].remaining += Number(p.remainingBalance);
+      acc[catName].count += 1;
+      return acc;
+    }, {} as Record<string, { name: string; icon: string; total: number; remaining: number; count: number }>);
+    
+  const topCategories = Object.values(categoryBreakdown)
+    .sort((a, b) => b.remaining - a.remaining)
+    .slice(0, 5)
+    .map(cat => ({
+      ...cat,
+      percent: totalOwed > 0 ? Math.round((cat.remaining / totalOwed) * 100) : 0
+    }));
 
   // Carregar dados iniciais
   const loadData = async () => {
     try {
       setLoading(true);
-      const [purchasesRes, categoriesRes, accountsRes, methodsRes] = await Promise.all([
+      // Buscar tanto do modelo antigo quanto do novo (transações unificadas)
+      const [purchasesRes, transactionsRes, categoriesRes, accountsRes, methodsRes] = await Promise.all([
         apiClient.get('/installments'),
+        apiClient.get('/transactions?transactionType=installment&limit=1000'), // Buscar parcelamentos
         apiClient.get('/categories'),
         apiClient.get('/bank-accounts'),
         apiClient.get('/payment-methods'),
       ]);
 
-      setPurchases(purchasesRes.data.installments || []);
-      setCategories(categoriesRes.data || []);
-      setBankAccounts(accountsRes.data || []);
-      setPaymentMethods(methodsRes.data || []);
+      const oldPurchases = purchasesRes.data.installments || [];
+      
+      // Converter transações parceladas para o formato de InstallmentPurchase
+      const transactions = transactionsRes.data.data?.transactions || [];
+      
+      // Agrupar por parentId para encontrar grupos de parcelas
+      const parentTransactions = transactions.filter((t: any) => !t.parentId && t.transactionType === 'installment');
+      const childTransactions = transactions.filter((t: any) => t.parentId && t.transactionType === 'installment');
+      
+      // Criar um mapa de parent -> parcelas
+      const installmentsByParent = childTransactions.reduce((acc: any, t: any) => {
+        if (!acc[t.parentId]) acc[t.parentId] = [];
+        acc[t.parentId].push(t);
+        return acc;
+      }, {});
+      
+      // Também agrupar órfãos (parcelas sem parent na lista)
+      const orphanGroups = childTransactions
+        .filter((t: any) => !parentTransactions.some((p: any) => p.id === t.parentId))
+        .reduce((acc: any, t: any) => {
+          if (!acc[t.parentId]) acc[t.parentId] = [];
+          acc[t.parentId].push(t);
+          return acc;
+        }, {});
+      
+      // Converter transações pai para formato de InstallmentPurchase
+      const convertFromParent = (parent: any, installments: any[]) => {
+        const sortedInstallments = installments.sort((a: any, b: any) => 
+          (a.installmentNumber || 0) - (b.installmentNumber || 0)
+        );
+        
+        const paidInstallments = sortedInstallments.filter((i: any) => i.status === 'completed').length;
+        const totalInstallments = parent.totalInstallments || sortedInstallments.length || 1;
+        const installmentAmount = Number(parent.amount) || 0;
+        const totalAmount = installmentAmount * totalInstallments;
+        const remainingBalance = installmentAmount * (totalInstallments - paidInstallments);
+        
+        return {
+          id: parent.id,
+          name: parent.description,
+          description: parent.notes || '',
+          totalAmount: totalAmount.toString(),
+          numberOfInstallments: totalInstallments,
+          installmentAmount: installmentAmount.toString(),
+          remainingBalance: remainingBalance.toString(),
+          paidInstallments,
+          firstDueDate: parent.transactionDate || sortedInstallments[0]?.transactionDate,
+          status: paidInstallments >= totalInstallments ? 'completed' : 'active',
+          category: parent.category || sortedInstallments[0]?.category || { id: '', name: 'Sem categoria', icon: '📋', color: '#gray' },
+          installments: sortedInstallments.map((i: any) => ({
+            id: i.id,
+            installmentNumber: i.installmentNumber || 1,
+            amount: i.amount?.toString() || '0',
+            dueDate: i.transactionDate,
+            status: i.status === 'completed' ? 'paid' : 'pending',
+            bankAccount: i.bankAccount,
+          })),
+          isFromTransaction: true,
+        };
+      };
+      
+      // Converter parentes com filhos
+      const convertedFromParents = parentTransactions.map((parent: any) => {
+        const installments = installmentsByParent[parent.id] || [];
+        return convertFromParent(parent, installments);
+      });
+      
+      // Converter órfãos (parcelas sem parent)
+      const convertedFromOrphans = Object.entries(orphanGroups).map(([parentId, installments]: [string, any]) => {
+        const sortedInstallments = installments.sort((a: any, b: any) => 
+          (a.installmentNumber || 0) - (b.installmentNumber || 0)
+        );
+        const first = sortedInstallments[0];
+        
+        const paidInstallments = sortedInstallments.filter((i: any) => i.status === 'completed').length;
+        const totalInstallments = first.totalInstallments || sortedInstallments.length;
+        const installmentAmount = Number(first.amount) || 0;
+        const totalAmount = installmentAmount * totalInstallments;
+        const remainingBalance = installmentAmount * (totalInstallments - paidInstallments);
+        
+        return {
+          id: parentId,
+          name: first.description,
+          description: first.notes || '',
+          totalAmount: totalAmount.toString(),
+          numberOfInstallments: totalInstallments,
+          installmentAmount: installmentAmount.toString(),
+          remainingBalance: remainingBalance.toString(),
+          paidInstallments,
+          firstDueDate: first.transactionDate,
+          status: paidInstallments >= totalInstallments ? 'completed' : 'active',
+          category: first.category || { id: '', name: 'Sem categoria', icon: '📋', color: '#gray' },
+          installments: sortedInstallments.map((i: any) => ({
+            id: i.id,
+            installmentNumber: i.installmentNumber || 1,
+            amount: i.amount?.toString() || '0',
+            dueDate: i.transactionDate,
+            status: i.status === 'completed' ? 'paid' : 'pending',
+            bankAccount: i.bankAccount,
+          })),
+          isFromTransaction: true,
+        };
+      });
+
+      // Combinar todos
+      const allPurchases = [...oldPurchases, ...convertedFromParents, ...convertedFromOrphans];
+      
+      // Remover duplicatas por ID
+      const uniquePurchases = allPurchases.reduce((acc: any[], purchase: any) => {
+        if (!acc.find(p => p.id === purchase.id)) {
+          acc.push(purchase);
+        }
+        return acc;
+      }, []);
+
+      setPurchases(uniquePurchases);
+      setCategories(categoriesRes.data?.data?.categories || categoriesRes.data || []);
+      setBankAccounts(accountsRes.data?.data?.accounts || accountsRes.data || []);
+      setPaymentMethods(methodsRes.data?.data?.paymentMethods || methodsRes.data || []);
     } catch (error: any) {
       console.error('Erro ao carregar dados:', error);
       toast.error('Erro ao carregar dados. Tente novamente.');
@@ -221,10 +394,19 @@ export default function useInstallments() {
     form,
     setForm,
 
-    // Estatísticas
+    // Estatísticas básicas
     totalActive,
     totalOwed,
     pendingInstallments,
+    
+    // Novas estatísticas
+    totalPaid,
+    totalOverall,
+    monthlyInstallmentSpend,
+    payoffDate,
+    monthsUntilPayoff,
+    overallProgress,
+    topCategories,
 
     // Ações
     loadData,

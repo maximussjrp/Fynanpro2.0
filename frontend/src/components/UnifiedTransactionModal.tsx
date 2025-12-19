@@ -355,18 +355,18 @@ export default function UnifiedTransactionModal({
     setShowCategoryDropdown(false);
   };
 
-  // Calcular valor da parcela para preview
-  const calculateInstallmentAmount = () => {
+  // Calcular valor total das parcelas (parcela × quantidade)
+  const calculateInstallmentTotal = () => {
     if (!formData.amount || !installmentData.totalInstallments) return 0;
-    const total = parseFloat(formData.amount.replace(',', '.'));
+    const installmentValue = parseFloat(formData.amount.replace(',', '.'));
     const downPayment = installmentData.hasDownPayment && installmentData.downPaymentAmount 
       ? parseFloat(installmentData.downPaymentAmount.replace(',', '.'))
       : 0;
-    const remaining = total - downPayment;
+    // Valor informado É o valor da parcela, calcular total
     const numInstallments = installmentData.hasDownPayment 
       ? installmentData.totalInstallments - 1 
       : installmentData.totalInstallments;
-    return numInstallments > 0 ? remaining / numInstallments : 0;
+    return (installmentValue * numInstallments) + downPayment;
   };
 
   if (!isOpen) return null;
@@ -475,7 +475,7 @@ export default function UnifiedTransactionModal({
             {/* Valor */}
             <div>
               <label className="block text-sm font-semibold text-[#1A1A1A] mb-2">
-                {transactionType === 'installment' ? 'Valor Total *' : 'Valor *'}
+                {transactionType === 'installment' ? 'Valor da Parcela *' : 'Valor *'}
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
@@ -487,7 +487,7 @@ export default function UnifiedTransactionModal({
                   value={formData.amount}
                   onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
                   className="w-full pl-14 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] transition-all bg-[#F9FAFB]"
-                  placeholder="0,00"
+                  placeholder={transactionType === 'installment' ? 'Valor de cada parcela' : '0,00'}
                   required
                 />
               </div>
@@ -665,22 +665,27 @@ export default function UnifiedTransactionModal({
                 </div>
               )}
 
-              {/* Preview das parcelas */}
+              {/* Preview do total */}
               {formData.amount && (
                 <div className="bg-white p-3 rounded-lg border border-purple-200">
-                  <div className="text-sm text-gray-600 flex items-center gap-2">
-                    <RefreshCw className="w-4 h-4" />
-                    <span>
-                      {installmentData.hasDownPayment && installmentData.downPaymentAmount && (
-                        <span className="font-semibold">
-                          Entrada: R$ {parseFloat(installmentData.downPaymentAmount).toFixed(2)} + {' '}
+                  <div className="text-sm text-gray-600 space-y-1">
+                    <div className="flex items-center gap-2">
+                      <RefreshCw className="w-4 h-4" />
+                      <span>
+                        {installmentData.hasDownPayment && installmentData.downPaymentAmount && (
+                          <span className="font-semibold">
+                            Entrada: R$ {parseFloat(installmentData.downPaymentAmount).toFixed(2)} + {' '}
+                          </span>
+                        )}
+                        <span className="font-semibold text-purple-700">
+                          {installmentData.hasDownPayment ? installmentData.totalInstallments - 1 : installmentData.totalInstallments}x 
+                          de R$ {parseFloat(formData.amount.replace(',', '.')).toFixed(2)}
                         </span>
-                      )}
-                      <span className="font-semibold text-purple-700">
-                        {installmentData.hasDownPayment ? installmentData.totalInstallments - 1 : installmentData.totalInstallments}x 
-                        de R$ {calculateInstallmentAmount().toFixed(2)}
                       </span>
-                    </span>
+                    </div>
+                    <div className="font-bold text-purple-800 text-base">
+                      💰 Total: R$ {calculateInstallmentTotal().toFixed(2)}
+                    </div>
                   </div>
                 </div>
               )}
@@ -880,7 +885,7 @@ export default function UnifiedTransactionModal({
                   <option value="">Selecione (opcional)</option>
                   {paymentMethods.map((method) => (
                     <option key={method.id} value={method.id}>
-                      {method.name} ({method.type})
+                      {method.name}
                     </option>
                   ))}
                 </select>

@@ -27,6 +27,7 @@ model User {
   transactions      Transaction[]
   auditLogs         AuditLog[]
   refreshTokens     RefreshToken[]
+  consents          Consent[]
 }
 
 model Tenant {
@@ -57,6 +58,8 @@ model Tenant {
   imports             Import[]
   savedFilters        SavedFilter[]
   auditLogs           AuditLog[]
+  categorizationRules CategorizationRule[]
+  importTemplates     ImportTemplate[]
 
   @@index([ownerId])
   @@index([subscriptionPlan])
@@ -106,6 +109,7 @@ model Category {
   installmentPurchases InstallmentPurchase[]
   budgets     Budget[]
   triggerCategories TriggerCategory[]
+  categorizationRules CategorizationRule[]
 
   @@index([tenantId, parentId])
   @@index([type])
@@ -537,4 +541,72 @@ model RefreshToken {
   @@index([token])
   @@index([expiresAt])
   @@index([userId, isRevoked, expiresAt])
+}
+
+// ==================== LGPD - CONSENTIMENTOS ====================
+
+model Consent {
+  id              String    @id @default(uuid())
+  userId          String
+  type            String    // terms_of_use, privacy_policy, marketing, cookies, data_processing
+  version         String    // Versão do documento aceito
+  accepted        Boolean   @default(false)
+  acceptedAt      DateTime?
+  revokedAt       DateTime?
+  ipAddress       String?
+  userAgent       String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, type])
+  @@index([userId])
+  @@index([type])
+}
+
+// ==================== REGRAS DE CATEGORIZAÇÃO ====================
+
+model CategorizationRule {
+  id              String    @id @default(uuid())
+  tenantId        String
+  pattern         String    // Texto ou regex para match
+  matchType       String    @default("contains") // contains, startsWith, endsWith, exact, regex
+  categoryId      String
+  priority        Int       @default(5) // 1-10, maior = mais prioritário
+  isActive        Boolean   @default(true)
+  matchCount      Int       @default(0) // Quantas vezes aplicada
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  category        Category  @relation(fields: [categoryId], references: [id])
+
+  @@index([tenantId, isActive])
+  @@index([tenantId, priority])
+}
+
+// ==================== TEMPLATES DE IMPORTAÇÃO ====================
+
+model ImportTemplate {
+  id              String    @id @default(uuid())
+  tenantId        String
+  name            String    // "Nubank", "Itaú Conta Corrente", etc
+  bankCode        String?   // Código FEBRABAN
+  fileType        String    @default("csv") // csv, ofx
+  delimiter       String    @default(";")
+  encoding        String    @default("utf-8")
+  skipRows        Int       @default(0)
+  columnMapping   String    // JSON com mapeamento de colunas
+  dateFormat      String?   @default("DD/MM/YYYY")
+  isDefault       Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@unique([tenantId, name])
 }

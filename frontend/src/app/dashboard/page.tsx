@@ -23,6 +23,9 @@ import {
   Wallet,
   CreditCard,
   PiggyBank,
+  Edit2,
+  Trash2,
+  AlertTriangle,
 } from 'lucide-react';
 
 interface DashboardData {
@@ -54,6 +57,9 @@ interface PaymentMethod {
   id: string;
   name: string;
   type: string;
+  _count?: {
+    transactions: number;
+  };
 }
 
 interface BankAccountForm {
@@ -88,6 +94,14 @@ export default function Dashboard() {
   const [showOnboardingRecurring, setShowOnboardingRecurring] = useState(false);
   const [transactionType, setTransactionType] = useState<'income' | 'expense'>('expense');
   const [submitting, setSubmitting] = useState(false);
+  
+  // Estados para edição/exclusão de meios de pagamento
+  const [showEditPaymentMethodModal, setShowEditPaymentMethodModal] = useState(false);
+  const [showDeletePaymentMethodModal, setShowDeletePaymentMethodModal] = useState(false);
+  const [editingPaymentMethod, setEditingPaymentMethod] = useState<PaymentMethod | null>(null);
+  const [deletingPaymentMethod, setDeletingPaymentMethod] = useState<PaymentMethod | null>(null);
+  const [targetPaymentMethodId, setTargetPaymentMethodId] = useState<string>('');
+  const [editPaymentMethodName, setEditPaymentMethodName] = useState<string>('');
   
   // Dados para formulário
   const [categories, setCategories] = useState<Category[]>([]);
@@ -139,15 +153,8 @@ export default function Dashboard() {
     loadDashboardData();
     loadFormData();
     
-    // Verificar se é primeiro acesso para mostrar wizard de contas recorrentes
-    const hasSeenWizard = localStorage.getItem('hasSeenRecurringBillsWizard');
-    if (!hasSeenWizard) {
-      // Aguardar 1 segundo para dashboard carregar antes de mostrar wizard
-      const timer = setTimeout(() => {
-        setShowOnboardingRecurring(true);
-      }, 1000);
-      return () => clearTimeout(timer);
-    }
+    // Wizard de contas recorrentes desativado - não usamos mais
+    // O onboarding agora é feito pelo chatbot
   }, [startDate, endDate, isAuthenticated]);
 
   const loadDashboardData = async () => {
@@ -189,18 +196,22 @@ export default function Dashboard() {
       const [categoriesRes, accountsRes, paymentsRes] = await Promise.all([
         api.get('/categories?isActive=true'),
         api.get('/bank-accounts?isActive=true'),
-        api.get('/payment-methods?isActive=true'),
+        api.get('/payment-methods'), // Sem filtro para pegar _count de transações
       ]);
+
+      // Filtrar apenas ativos depois de pegar os dados com _count
+      const allPaymentMethods = paymentsRes.data.data.methods || paymentsRes.data.data.paymentMethods || [];
+      const activePaymentMethods = allPaymentMethods.filter((m: any) => m.isActive !== false);
 
       console.log('Dados carregados:', {
         categorias: categoriesRes.data.data.categories?.length || 0,
         contas: accountsRes.data.data.accounts?.length || 0,
-        meios: paymentsRes.data.data.paymentMethods?.length || 0,
+        meios: activePaymentMethods.length,
       });
 
       setCategories(categoriesRes.data.data.categories || []);
       setBankAccounts(accountsRes.data.data.accounts || []);
-      setPaymentMethods(paymentsRes.data.data.paymentMethods || []);
+      setPaymentMethods(activePaymentMethods);
     } catch (error: any) {
       console.error('Erro ao carregar dados do formulário:', error.response?.data || error.message);
     }
@@ -271,6 +282,66 @@ export default function Dashboard() {
     } catch (error: any) {
       console.error('Erro ao criar meio de pagamento:', error);
       toast.error(error.response?.data?.error?.message || 'Erro ao criar meio de pagamento');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleEditPaymentMethod = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPaymentMethod) return;
+    
+    try {
+      setSubmitting(true);
+      await api.put(`/payment-methods/${editingPaymentMethod.id}`, {
+        name: editPaymentMethodName.trim(),
+      });
+      
+      setShowEditPaymentMethodModal(false);
+      setEditingPaymentMethod(null);
+      setEditPaymentMethodName('');
+      await loadFormData();
+      toast.success('Meio de pagamento atualizado com sucesso!');
+    } catch (error: any) {
+      console.error('Erro ao atualizar meio de pagamento:', error);
+      toast.error(error.response?.data?.error?.message || 'Erro ao atualizar meio de pagamento');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeletePaymentMethod = async () => {
+    if (!deletingPaymentMethod) return;
+    
+    const transactionCount = deletingPaymentMethod._count?.transactions || 0;
+    
+    try {
+      setSubmitting(true);
+      
+      if (transactionCount > 0) {
+        // Se tem transações, precisa migrar primeiro
+        if (!targetPaymentMethodId) {
+          toast.error('Selecione um meio de pagamento para migrar as transações');
+          return;
+        }
+        
+        await api.post(`/payment-methods/${deletingPaymentMethod.id}/migrate`, {
+          targetPaymentMethodId,
+        });
+        toast.success(`${transactionCount} transações migradas e meio de pagamento excluído!`);
+      } else {
+        // Sem transações, pode excluir direto
+        await api.delete(`/payment-methods/${deletingPaymentMethod.id}`);
+        toast.success('Meio de pagamento excluído com sucesso!');
+      }
+      
+      setShowDeletePaymentMethodModal(false);
+      setDeletingPaymentMethod(null);
+      setTargetPaymentMethodId('');
+      await loadFormData();
+    } catch (error: any) {
+      console.error('Erro ao excluir meio de pagamento:', error);
+      toast.error(error.response?.data?.error?.message || 'Erro ao excluir meio de pagamento');
     } finally {
       setSubmitting(false);
     }
@@ -418,11 +489,21 @@ export default function Dashboard() {
               
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between items-center">
-                  <span className={balance?.isPositive ? 'text-blue-200' : 'text-red-200'}>✅ Receitas Recebidas</span>
+                  <a 
+                    href={`/dashboard/transactions?type=income&status=completed&startDate=${startDate}&endDate=${endDate}`}
+                    className={`${balance?.isPositive ? 'text-blue-200 hover:text-white' : 'text-red-200 hover:text-white'} hover:underline cursor-pointer transition-colors`}
+                  >
+                    ✅ Receitas Recebidas
+                  </a>
                   <span className="font-semibold">{formatCurrency(balance?.receivedIncome || 0)}</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className={balance?.isPositive ? 'text-blue-200' : 'text-red-200'}>⏳ Receitas a Receber</span>
+                  <a 
+                    href={`/dashboard/transactions?type=income&status=pending&startDate=${startDate}&endDate=${endDate}`}
+                    className={`${balance?.isPositive ? 'text-blue-200 hover:text-white' : 'text-red-200 hover:text-white'} hover:underline cursor-pointer transition-colors`}
+                  >
+                    ⏳ Receitas a Receber
+                  </a>
                   <span className="font-semibold">{formatCurrency(balance?.pendingIncome || 0)}</span>
                 </div>
               </div>
@@ -439,11 +520,21 @@ export default function Dashboard() {
               
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between items-center">
-                  <span className={balance?.isPositive ? 'text-blue-200' : 'text-red-200'}>✅ Despesas Pagas</span>
+                  <a 
+                    href={`/dashboard/transactions?type=expense&status=completed&startDate=${startDate}&endDate=${endDate}`}
+                    className={`${balance?.isPositive ? 'text-blue-200 hover:text-white' : 'text-red-200 hover:text-white'} hover:underline cursor-pointer transition-colors`}
+                  >
+                    ✅ Despesas Pagas
+                  </a>
                   <span className="font-semibold">{formatCurrency(balance?.paidExpense || 0)}</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className={balance?.isPositive ? 'text-blue-200' : 'text-red-200'}>⏳ Despesas a Pagar</span>
+                  <a 
+                    href={`/dashboard/transactions?type=expense&status=pending&startDate=${startDate}&endDate=${endDate}`}
+                    className={`${balance?.isPositive ? 'text-blue-200 hover:text-white' : 'text-red-200 hover:text-white'} hover:underline cursor-pointer transition-colors`}
+                  >
+                    ⏳ Despesas a Pagar
+                  </a>
                   <span className="font-semibold">{formatCurrency(balance?.pendingExpense || 0)}</span>
                 </div>
               </div>
@@ -703,6 +794,30 @@ export default function Dashboard() {
                         <p className="font-medium text-[#1A1A1A]">{method.name}</p>
                         <p className="text-xs text-gray-500 capitalize">{method.type.replace('_', ' ')}</p>
                       </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          setEditingPaymentMethod(method);
+                          setEditPaymentMethodName(method.name);
+                          setShowEditPaymentMethodModal(true);
+                        }}
+                        className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                        title="Editar"
+                      >
+                        <Edit2 size={14} />
+                      </button>
+                      <button
+                        onClick={() => {
+                          setDeletingPaymentMethod(method);
+                          setTargetPaymentMethodId('');
+                          setShowDeletePaymentMethodModal(true);
+                        }}
+                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Excluir"
+                      >
+                        <Trash2 size={14} />
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -1124,6 +1239,159 @@ export default function Dashboard() {
           loadDashboardData();
         }}
       />
+
+      {/* Modal de Edição de Meio de Pagamento */}
+      {showEditPaymentMethodModal && editingPaymentMethod && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-[#1A1A1A] font-poppins">Editar Meio de Pagamento</h3>
+              <button 
+                onClick={() => {
+                  setShowEditPaymentMethodModal(false);
+                  setEditingPaymentMethod(null);
+                  setEditPaymentMethodName('');
+                }} 
+                className="p-2 hover:bg-gray-100 rounded-lg"
+              >
+                <X className="w-5 h-5 text-[#4F4F4F]" />
+              </button>
+            </div>
+            <form onSubmit={handleEditPaymentMethod} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-[#1A1A1A] mb-2">Nome</label>
+                <input
+                  type="text"
+                  value={editPaymentMethodName}
+                  onChange={(e) => setEditPaymentMethodName(e.target.value)}
+                  className="w-full px-4 py-2 border border-[#D9D9D9] rounded-lg focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8]"
+                  placeholder="Nome do meio de pagamento"
+                  required
+                />
+              </div>
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditPaymentMethodModal(false);
+                    setEditingPaymentMethod(null);
+                    setEditPaymentMethodName('');
+                  }}
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                  disabled={submitting}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className={`flex-1 px-4 py-2 rounded-lg text-white font-medium bg-[#1F4FD8] hover:bg-[#1A44BF] ${
+                    submitting ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
+                  disabled={submitting}
+                >
+                  {submitting ? 'Salvando...' : 'Salvar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Exclusão de Meio de Pagamento */}
+      {showDeletePaymentMethodModal && deletingPaymentMethod && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-[#1A1A1A] font-poppins">Excluir Meio de Pagamento</h3>
+              <button 
+                onClick={() => {
+                  setShowDeletePaymentMethodModal(false);
+                  setDeletingPaymentMethod(null);
+                  setTargetPaymentMethodId('');
+                }} 
+                className="p-2 hover:bg-gray-100 rounded-lg"
+              >
+                <X className="w-5 h-5 text-[#4F4F4F]" />
+              </button>
+            </div>
+            
+            <div className="mb-6">
+              <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg mb-4">
+                <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
+                  <CreditCard className="text-purple-600" size={20} />
+                </div>
+                <div>
+                  <p className="font-semibold text-gray-900">{deletingPaymentMethod.name}</p>
+                  <p className="text-sm text-gray-500 capitalize">{deletingPaymentMethod.type.replace('_', ' ')}</p>
+                </div>
+              </div>
+
+              {(deletingPaymentMethod._count?.transactions || 0) > 0 ? (
+                <div>
+                  <div className="flex items-center gap-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg mb-4">
+                    <AlertTriangle className="w-5 h-5 text-yellow-600 flex-shrink-0" />
+                    <p className="text-sm text-yellow-800">
+                      Este meio de pagamento possui <strong>{deletingPaymentMethod._count?.transactions}</strong> transações vinculadas. 
+                      Selecione outro meio de pagamento para migrar essas transações antes de excluir.
+                    </p>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-[#1A1A1A] mb-2">
+                      Migrar transações para:
+                    </label>
+                    <select
+                      value={targetPaymentMethodId}
+                      onChange={(e) => setTargetPaymentMethodId(e.target.value)}
+                      className="w-full px-4 py-2 border border-[#D9D9D9] rounded-lg focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8]"
+                      required
+                    >
+                      <option value="">Selecione um meio de pagamento</option>
+                      {paymentMethods
+                        .filter(m => m.id !== deletingPaymentMethod.id)
+                        .map(method => (
+                          <option key={method.id} value={method.id}>
+                            {method.name}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-gray-600">
+                  Este meio de pagamento não possui transações vinculadas e pode ser excluído com segurança.
+                </p>
+              )}
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDeletePaymentMethodModal(false);
+                  setDeletingPaymentMethod(null);
+                  setTargetPaymentMethodId('');
+                }}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                disabled={submitting}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleDeletePaymentMethod}
+                className={`flex-1 px-4 py-2 rounded-lg text-white font-medium bg-red-600 hover:bg-red-700 ${
+                  submitting || ((deletingPaymentMethod._count?.transactions || 0) > 0 && !targetPaymentMethodId) 
+                    ? 'opacity-50 cursor-not-allowed' 
+                    : ''
+                }`}
+                disabled={submitting || ((deletingPaymentMethod._count?.transactions || 0) > 0 && !targetPaymentMethodId)}
+              >
+                {submitting ? 'Excluindo...' : (deletingPaymentMethod._count?.transactions || 0) > 0 ? 'Migrar e Excluir' : 'Excluir'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       </div>
     </>
   );

@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { log } from '../utils/logger';
 import { extractKeywords, calculateSimilarity } from './chatbot.service';
 import { cacheService, CacheNamespace } from './cache.service';
+import { bankProfileService } from './bank-profiles.service';
 
 const prisma = new PrismaClient();
 
@@ -410,23 +411,25 @@ export class ImportService {
   
   /**
    * Sugerir categoria para uma descrição
+   * Usa padrões do histórico do usuário + padrões globais do banco
    */
   async suggestCategory(
     tenantId: string,
     description: string,
     type: 'income' | 'expense',
-    patterns: any[]
+    patterns: any[],
+    bankCode?: string
   ): Promise<{ categoryId: string; categoryName: string } | null> {
     const normalized = description.toLowerCase().trim();
     const keywords = extractKeywords(description);
     
-    // Match exato
+    // Match exato no histórico do usuário
     const exact = patterns.find(p => p.description === normalized);
     if (exact) {
       return { categoryId: exact.categoryId, categoryName: exact.categoryName };
     }
     
-    // Match por similaridade
+    // Match por similaridade no histórico
     let bestMatch: any = null;
     let bestScore = 0;
     
@@ -442,7 +445,29 @@ export class ImportService {
       return { categoryId: bestMatch.categoryId, categoryName: bestMatch.categoryName };
     }
     
-    // Fallback: buscar categoria padrão por palavras-chave comuns
+    // NOVO: Usar padrões globais do bank-profiles.service
+    // Buscar o perfil do banco se tiver o código
+    const bankProfile = bankCode ? bankProfileService.getProfileByCode(bankCode) : null;
+    const suggestedCategory = bankProfileService.suggestCategoryFromPatterns(description, type, bankProfile);
+    if (suggestedCategory) {
+      // Buscar categoria correspondente no tenant
+      const categoryName = suggestedCategory.categoryName.split(' > ')[0];
+      const category = await prisma.category.findFirst({
+        where: {
+          tenantId,
+          type,
+          name: { contains: categoryName, mode: 'insensitive' },
+          isActive: true,
+          deletedAt: null,
+        },
+      });
+      
+      if (category) {
+        return { categoryId: category.id, categoryName: category.name };
+      }
+    }
+    
+    // Fallback: buscar por palavras-chave locais
     const keywordCategories: Record<string, string[]> = {
       'Alimentação': ['mercado', 'supermercado', 'restaurante', 'ifood', 'padaria', 'lanchonete', 'pizzaria', 'hamburgueria'],
       'Transporte': ['uber', '99', 'combustível', 'gasolina', 'estacionamento', 'pedágio', 'ipva'],
@@ -722,7 +747,8 @@ export class ImportService {
     tenantId: string,
     userId: string,
     previewId: string,
-    bankAccountId: string
+    bankAccountId: string,
+    paymentMethodId?: string
   ): Promise<ImportResult> {
     const preview = previewCache.get(previewId);
     
@@ -756,6 +782,7 @@ export class ImportService {
             type: tx.type,
             categoryId: tx.categoryId || null,
             bankAccountId,
+            paymentMethodId: paymentMethodId || null,
             amount: tx.amount,
             description: tx.description,
             transactionDate: tx.date,

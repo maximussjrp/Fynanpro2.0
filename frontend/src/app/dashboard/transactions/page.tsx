@@ -2,7 +2,7 @@
 
 import { useAuth } from '@/stores/auth';
 import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import api from '@/lib/api';
 import { toast } from 'sonner';
 import TransactionModal from '@/components/NewTransactionModal';
@@ -27,6 +27,15 @@ interface Transaction {
   paymentMethodId?: string;
   isRecurringOccurrence?: boolean; // Flag para identificar ocorrências
   recurringBillId?: string;
+  // Campos para parcelas e recorrências
+  transactionType?: string; // 'single' | 'recurring' | 'installment'
+  parentId?: string | null;
+  installmentNumber?: number;
+  totalInstallments?: number;
+  // Campos para recorrências
+  occurrenceNumber?: number;
+  totalOccurrences?: number;
+  frequency?: string;
   category: {
     id: string;
     name: string;
@@ -67,6 +76,7 @@ interface BankAccount {
 
 export default function TransactionsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { accessToken, isAuthenticated } = useAuth();
   const [loading, setLoading] = useState(true);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -75,6 +85,12 @@ export default function TransactionsPage() {
   const [showModal, setShowModal] = useState(false);
   const [showUnifiedModal, setShowUnifiedModal] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  
+  // Ler parâmetros da URL para filtros iniciais
+  const urlType = searchParams.get('type') as 'income' | 'expense' | null;
+  const urlStatus = searchParams.get('status');
+  const urlStartDate = searchParams.get('startDate');
+  const urlEndDate = searchParams.get('endDate');
   
   // Filtros de coluna (inline)
   const [columnFilters, setColumnFilters] = useState<{
@@ -85,7 +101,7 @@ export default function TransactionsPage() {
   }>({
     categories: [],
     accounts: [],
-    statuses: [],
+    statuses: urlStatus ? [urlStatus] : [],
     paymentMethods: [],
   });
   
@@ -108,14 +124,14 @@ export default function TransactionsPage() {
   
   // Filtros principais (apenas datas e tipo)
   const [filters, setFilters] = useState({
-    startDate: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
-    endDate: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().split('T')[0],
-    type: 'all' as 'all' | 'income' | 'expense',
+    startDate: urlStartDate || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
+    endDate: urlEndDate || new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().split('T')[0],
+    type: (urlType || 'all') as 'all' | 'income' | 'expense',
   });
   
   // Estados temporários para os inputs de data (só aplica ao clicar no botão)
-  const [tempStartDate, setTempStartDate] = useState(filters.startDate);
-  const [tempEndDate, setTempEndDate] = useState(filters.endDate);
+  const [tempStartDate, setTempStartDate] = useState(urlStartDate || filters.startDate);
+  const [tempEndDate, setTempEndDate] = useState(urlEndDate || filters.endDate);
   
   const handleApplyDateFilter = () => {
     setFilters({ ...filters, startDate: tempStartDate, endDate: tempEndDate });

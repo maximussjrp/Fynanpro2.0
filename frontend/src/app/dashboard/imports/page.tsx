@@ -50,6 +50,13 @@ interface BankAccount {
   currentBalance: number;
 }
 
+interface PaymentMethod {
+  id: string;
+  name: string;
+  type: string;
+  lastFourDigits?: string;
+}
+
 interface Category {
   id: string;
   name: string;
@@ -95,7 +102,9 @@ export default function ImportsPage() {
   
   // Configurações
   const [selectedAccountId, setSelectedAccountId] = useState('');
+  const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState('');
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   
   // Histórico
@@ -119,6 +128,7 @@ export default function ImportsPage() {
   useEffect(() => {
     if (accessToken) {
       loadBankAccounts();
+      loadPaymentMethods();
       loadCategories();
     }
   }, [accessToken]);
@@ -135,6 +145,18 @@ export default function ImportsPage() {
       // NÃO auto-selecionar - usuário deve escolher manualmente
     } catch (err) {
       console.error('Erro ao carregar contas:', err);
+    }
+  };
+
+  const loadPaymentMethods = async () => {
+    try {
+      const response = await fetch('http://localhost:3000/api/v1/payment-methods', {
+        headers: { 'Authorization': `Bearer ${accessToken}` }
+      });
+      const data = await response.json();
+      setPaymentMethods(data.data?.methods || []);
+    } catch (err) {
+      console.error('Erro ao carregar meios de pagamento:', err);
     }
   };
 
@@ -320,6 +342,7 @@ export default function ImportsPage() {
         body: JSON.stringify({
           previewId: preview.id,
           bankAccountId: selectedAccountId,
+          paymentMethodId: selectedPaymentMethodId || undefined,
           transactions: transactions,
         }),
       });
@@ -606,6 +629,28 @@ export default function ImportsPage() {
               {!selectedAccountId && fileName && (
                 <p className="text-red-400 text-sm mt-1">⚠️ Selecione uma conta bancária para continuar</p>
               )}
+            </div>
+
+            {/* Seleção de Meio de Pagamento - OPCIONAL */}
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Meio de Pagamento <span className="text-gray-400 text-xs">(opcional)</span>
+              </label>
+              <select
+                value={selectedPaymentMethodId}
+                onChange={(e) => setSelectedPaymentMethodId(e.target.value)}
+                className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg focus:ring-1 focus:border-emerald-500 focus:ring-emerald-500"
+              >
+                <option value="">Selecione (opcional)</option>
+                {paymentMethods.map(method => (
+                  <option key={method.id} value={method.id}>
+                    {method.name} {method.lastFourDigits ? `(****${method.lastFourDigits})` : ''}
+                  </option>
+                ))}
+              </select>
+              <p className="text-gray-400 text-xs mt-1">
+                Todas as transações importadas usarão este meio de pagamento
+              </p>
             </div>
 
             {/* Dicas */}

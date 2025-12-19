@@ -423,6 +423,58 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// ==================== UPDATE BATCH (PARCELAS) ====================
+// PUT /api/v1/transactions/:id/batch
+// Atualiza múltiplas parcelas de um parcelamento com base no escopo
+router.put('/:id/batch', async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const tenantId = req.tenantId!;
+    const { scope, ...updateData } = req.body;
+
+    // Validar scope
+    if (!scope || !['this', 'thisAndFuture', 'all'].includes(scope)) {
+      return errorResponse(res, 'VALIDATION_ERROR', 'Escopo inválido. Use: this, thisAndFuture ou all', 400);
+    }
+
+    // Validação dos dados com Zod
+    const validatedData = UpdateTransactionSchema.parse(updateData);
+
+    // Chama service
+    const result = await transactionService.updateBatch(id, validatedData, tenantId, scope);
+
+    return successResponse(res, {
+      message: `${result.updatedCount} parcela(s) atualizada(s) com sucesso`,
+      updatedCount: result.updatedCount,
+      transactions: result.transactions,
+    });
+  } catch (error: any) {
+    log.error('Update batch transaction error', { error, id: req.params.id, body: req.body, tenantId: req.tenantId });
+
+    // Zod validation error
+    if (error.name === 'ZodError') {
+      return errorResponse(res, 'VALIDATION_ERROR', 'Dados inválidos', 400, error.errors);
+    }
+
+    // Business logic errors
+    if (error.message === 'Transação não encontrada') {
+      return errorResponse(res, 'NOT_FOUND', error.message, 404);
+    }
+
+    if (
+      error.message === 'Categoria não encontrada' ||
+      error.message === 'Categoria não é de receita' ||
+      error.message === 'Categoria não é de despesa' ||
+      error.message === 'Conta bancária não encontrada' ||
+      error.message === 'Meio de pagamento não encontrado'
+    ) {
+      return errorResponse(res, 'VALIDATION_ERROR', error.message, 400);
+    }
+
+    return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao atualizar parcelas', 500);
+  }
+});
+
 /**
  * @swagger
  * /transactions/{id}:

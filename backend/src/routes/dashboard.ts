@@ -449,7 +449,7 @@ router.get('/income-vs-expenses', async (req: AuthRequest, res) => {
       currentDate.setMonth(currentDate.getMonth() + 1);
     }
     
-    // Adicionar transações realizadas
+    // Adicionar transações - separar realizadas (completed) de pendentes
     transactions.forEach(t => {
       const month = t.transactionDate.toISOString().substring(0, 7);
       if (!monthlyData[month]) {
@@ -462,10 +462,20 @@ router.get('/income-vs-expenses', async (req: AuthRequest, res) => {
         };
       }
       const amount = Number(t.amount);
+      const isCompleted = t.status === 'completed' || t.status === 'paid';
+      
       if (t.type === 'income') {
-        monthlyData[month].realizedIncome += amount;
+        if (isCompleted) {
+          monthlyData[month].realizedIncome += amount;
+        } else {
+          monthlyData[month].projectedIncome += amount;
+        }
       } else if (t.type === 'expense') {
-        monthlyData[month].realizedExpense += amount;
+        if (isCompleted) {
+          monthlyData[month].realizedExpense += amount;
+        } else {
+          monthlyData[month].projectedExpense += amount;
+        }
       }
     });
 

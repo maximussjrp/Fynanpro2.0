@@ -17,6 +17,8 @@ import reportRoutes from './routes/reports';
 import notificationRoutes from './routes/notifications';
 import importRoutes from './routes/import';
 import adminRoutes from './routes/admin';
+import lgpdRoutes from './routes/lgpd.routes';
+import planningRoutes from './routes/planning';
 
 dotenv.config();
 
@@ -84,6 +86,8 @@ apiRouter.use('/reports', reportRoutes);
 apiRouter.use('/notifications', notificationRoutes);
 apiRouter.use('/import', importRoutes);
 apiRouter.use('/admin', adminRoutes);
+apiRouter.use('/lgpd', lgpdRoutes);
+apiRouter.use('/planning', planningRoutes);
 
 app.use('/api/v1', apiRouter);
 

@@ -17,7 +17,8 @@ import {
   Settings,
   LogOut,
   Bell,
-  Upload
+  Upload,
+  Target
 } from 'lucide-react';
 import Logo from './Logo';
 import { logout } from '@/lib/api';
@@ -58,6 +59,7 @@ interface MenuItem {
 
 const menuItems: MenuItem[] = [
   { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard' },
+  { icon: Target, label: 'Planejamento Anual', href: '/dashboard/planning' },
   { icon: Receipt, label: 'Transações', href: '/dashboard/transactions' },
   { icon: Wallet, label: 'Contas Bancárias', href: '/dashboard/bank-accounts' },
   { icon: Tag, label: 'Categorias', href: '/dashboard/categories' },
