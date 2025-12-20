@@ -2,6 +2,8 @@
 
 import { useAuth } from '@/stores/auth';
 import { toast } from 'sonner';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
@@ -94,7 +96,7 @@ export default function PlanningPage() {
   const loadPlanning = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`http://localhost:3000/api/v1/planning/annual?year=${selectedYear}`, {
+      const response = await fetch(`${API_URL}/planning/annual?year=${selectedYear}`, {
         headers: { 'Authorization': `Bearer ${accessToken}` }
       });
       const result = await response.json();
@@ -120,7 +122,7 @@ export default function PlanningPage() {
     }
 
     try {
-      const response = await fetch('http://localhost:3000/api/v1/planning/recurring', {
+      const response = await fetch(`${API_URL}/planning/recurring`, {
         method: 'POST',
         headers: { 
           'Authorization': `Bearer ${accessToken}`,

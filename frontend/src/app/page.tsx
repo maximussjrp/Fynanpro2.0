@@ -7,7 +7,7 @@ import { Wallet, TrendingUp, PiggyBank, CreditCard, LogIn, UserPlus } from 'luci
 import { useAuth } from '@/stores/auth';
 import Logo from '@/components/Logo';
 
-const API_URL = 'http://localhost:3000/api/v1';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
 export default function Home() {
   const router = useRouter();

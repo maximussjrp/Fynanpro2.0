@@ -52,17 +52,21 @@ describe('ErrorBoundary', () => {
     expect(screen.getByText('Voltar ao Início')).toBeInTheDocument()
   })
 
-  it('should render error UI when error occurs', () => {
-    // Since Stack Trace is only shown in development mode and Jest runs in test mode,
-    // we just verify the error boundary catches the error and shows the error UI
+  it('should show stack trace in development mode', () => {
+    const originalEnv = process.env.NODE_ENV
+    process.env.NODE_ENV = 'development'
+    
     render(
       <ErrorBoundary>
         <ThrowError shouldThrow={true} />
       </ErrorBoundary>
     )
     
-    // Check that the error message is displayed
-    expect(screen.getByText(/Algo deu errado/i)).toBeInTheDocument()
+    // Check if details element exists (stack trace is in a details/summary)
+    const detailsElement = screen.getByText(/Stack Trace/i)
+    expect(detailsElement).toBeInTheDocument()
+    
+    process.env.NODE_ENV = originalEnv
   })
 
   it('should log error to console', () => {

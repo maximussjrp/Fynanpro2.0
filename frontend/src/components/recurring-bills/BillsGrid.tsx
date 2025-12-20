@@ -16,21 +16,21 @@ interface RecurringBill {
   dayOfMonth?: number;
   dayOfWeek?: number;
   status: string;
-  category?: {
+  category: {
     id: string;
     name: string;
     type: string;
     icon: string;
     color: string;
-  } | null;
-  bankAccount?: {
+  };
+  bankAccount: {
     id: string;
     name: string;
-  } | null;
+  };
   paymentMethod?: {
     id: string;
     name: string;
-  } | null;
+  };
   _count?: {
     occurrences: number;
   };
@@ -41,10 +41,10 @@ interface RecurringBill {
 interface BillsGridProps {
   bills: RecurringBill[];
   loading: boolean;
-  onEdit: (bill: RecurringBill) => void | Promise<void>;
-  onDelete: (id: string) => void | Promise<void>;
-  onToggleStatus: (bill: RecurringBill) => void | Promise<void>;
-  onGenerateOccurrences: (id: string) => void | Promise<void>;
+  onEdit: (bill: RecurringBill) => void;
+  onDelete: (id: string) => void;
+  onToggleStatus: (bill: RecurringBill) => void;
+  onGenerateOccurrences: (id: string) => void;
   onCreateNew: () => void;
 }
 

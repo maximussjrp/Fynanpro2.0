@@ -4,8 +4,7 @@ import { useAuth } from '@/stores/auth';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/api';
-import { toast } from 'sonner';
-import { Tag, Plus, Edit2, Trash2, Eye, EyeOff, ChevronRight, ChevronDown, ArrowLeft } from 'lucide-react';
+import { Tag, Plus, Edit2, Trash2, Eye, EyeOff, ChevronRight, ChevronDown } from 'lucide-react';
 
 
 
@@ -43,22 +42,6 @@ export default function CategoriesPage() {
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [filterType, setFilterType] = useState<'all' | 'income' | 'expense'>('all');
-  const [showIconPicker, setShowIconPicker] = useState(false);
-
-  // Lista de ícones disponíveis organizados por categoria
-  const availableIcons = {
-    'Finanças': ['💰', '💳', '💵', '💸', '🏦', '💴', '💶', '💷', '💲', '📱'],
-    'Casa': ['🏠', '🏡', '🛋️', '🛏️', '🚰', '🚽', '🚪', '🛠️', '🧹', '🧻'],
-    'Transporte': ['🚗', '🚕', '🚌', '🚇', '✈️', '⛽', '🚲', '🚶', '🚖', '🚨'],
-    'Alimentação': ['🍔', '🍕', '🍝', '🍛', '☕', '🍽️', '🥗', '🎂', '🍺', '🥤'],
-    'Saúde': ['🏥', '💊', '🩺', '🧬', '🦠', '🦨', '🏋️', '🏃', '🧘', '❤️'],
-    'Educação': ['📚', '🎓', '✍️', '📝', '📖', '💻', '🎯', '🧠', '🔬', '🎨'],
-    'Lazer': ['🎬', '🎮', '🎵', '🏖️', '⚽', '🎾', '🏕️', '🎤', '📷', '🎉'],
-    'Trabalho': ['💼', '🖥️', '📈', '📅', '✉️', '📂', '🔧', '⚙️', '📊', '📄'],
-    'Serviços': ['📡', '📶', '💡', '🛡️', '🔒', '🌐', '📦', '📩', '☎️', '📺'],
-    'Compras': ['🛒', '🛍️', '🎁', '👜', '👗', '👟', '💍', '😍', '🌟', '✨'],
-    'Outros': ['📝', '❓', '🌱', '🌎', '🤝', '💡', '🔔', '🏆', '👍', '❤️']
-  };
 
   const [categoryForm, setCategoryForm] = useState<CategoryForm>({
     name: '',
@@ -99,14 +82,12 @@ export default function CategoriesPage() {
     try {
       await api.post('/categories', categoryForm);
       
-      toast.success('Categoria criada com sucesso!');
       setShowCreateModal(false);
-      setShowIconPicker(false);
       setCategoryForm({ name: '', type: 'expense', icon: '📝', color: '#3B82F6', parentId: null });
       loadCategories();
     } catch (error: any) {
       console.error('Erro ao criar categoria:', error.response?.data || error.message);
-      toast.error(error.response?.data?.message || 'Erro ao criar categoria');
+      alert(error.response?.data?.message || 'Erro ao criar categoria');
     } finally {
       setSubmitting(false);
     }
@@ -120,15 +101,13 @@ export default function CategoriesPage() {
     try {
       await api.put(`/categories/${editingCategory.id}`, categoryForm);
       
-      toast.success('Categoria atualizada com sucesso!');
       setShowEditModal(false);
-      setShowIconPicker(false);
       setEditingCategory(null);
       setCategoryForm({ name: '', type: 'expense', icon: '📝', color: '#3B82F6', parentId: null });
       loadCategories();
     } catch (error: any) {
       console.error('Erro ao editar categoria:', error.response?.data || error.message);
-      toast.error(error.response?.data?.message || 'Erro ao editar categoria');
+      alert(error.response?.data?.message || 'Erro ao editar categoria');
     } finally {
       setSubmitting(false);
     }
@@ -137,11 +116,10 @@ export default function CategoriesPage() {
   const toggleCategoryStatus = async (id: string, currentStatus: boolean) => {
     try {
       await api.put(`/categories/${id}`, { isActive: !currentStatus });
-      toast.success(currentStatus ? 'Categoria desativada' : 'Categoria ativada');
       loadCategories();
     } catch (error: any) {
       console.error('Erro ao alterar status:', error.response?.data || error.message);
-      toast.error(error.response?.data?.message || 'Erro ao alterar status da categoria');
+      alert(error.response?.data?.message || 'Erro ao alterar status da categoria');
     }
   };
 
@@ -150,11 +128,10 @@ export default function CategoriesPage() {
 
     try {
       await api.delete(`/categories/${id}`);
-      toast.success('Categoria excluída com sucesso!');
       loadCategories();
     } catch (error: any) {
       console.error('Erro ao excluir categoria:', error.response?.data || error.message);
-      toast.error(error.response?.data?.message || 'Erro ao excluir categoria');
+      alert(error.response?.data?.message || 'Erro ao excluir categoria');
     }
   };
 
@@ -225,15 +202,13 @@ export default function CategoriesPage() {
             </button>
             <button
               onClick={() => openEditModal(category)}
-              className="p-2 hover:bg-[#DBEAFE] rounded-lg transition-colors"
-              title="Editar categoria"
+              className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
             >
-              <Edit2 className="w-4 h-4 text-[#1F4FD8]" />
+              <Edit2 className="w-4 h-4 text-blue-600" />
             </button>
             <button
               onClick={() => handleDeleteCategory(category.id)}
               className="p-2 hover:bg-red-100 rounded-lg transition-colors"
-              title="Excluir categoria"
             >
               <Trash2 className="w-4 h-4 text-red-600" />
             </button>
@@ -293,7 +268,7 @@ export default function CategoriesPage() {
           </div>
           <button
             onClick={() => setShowCreateModal(true)}
-            className="px-4 py-2 bg-[#1F4FD8] text-white rounded-lg hover:bg-[#1A44BF] transition-colors flex items-center gap-2"
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
           >
             <Plus className="w-5 h-5" />
             Nova Categoria
@@ -305,7 +280,7 @@ export default function CategoriesPage() {
           <div className="flex gap-2">
             <button
               onClick={() => setFilterType('all')}
-              className={`px-4 py-2 rounded-lg transition-colors ${filterType === 'all' ? 'bg-[#1F4FD8] text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+              className={`px-4 py-2 rounded-lg transition-colors ${filterType === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
             >
               Todas
             </button>
@@ -356,7 +331,7 @@ export default function CategoriesPage() {
                   required
                   value={categoryForm.name}
                   onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   placeholder="Ex: Transporte, Alimentação..."
                 />
               </div>
@@ -367,8 +342,7 @@ export default function CategoriesPage() {
                   required
                   value={categoryForm.type}
                   onChange={(e) => setCategoryForm({ ...categoryForm, type: e.target.value, parentId: null })}
-                  aria-label="Tipo de categoria"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="expense">Despesa</option>
                   <option value="income">Receita</option>
@@ -380,8 +354,7 @@ export default function CategoriesPage() {
                 <select
                   value={categoryForm.parentId || ''}
                   onChange={(e) => setCategoryForm({ ...categoryForm, parentId: e.target.value || null })}
-                  aria-label="Categoria pai"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">Nenhuma (categoria raiz)</option>
                   {getRootCategories().map((cat) => (
@@ -394,46 +367,15 @@ export default function CategoriesPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Ícone *</label>
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setShowIconPicker(!showIconPicker)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8] flex items-center justify-between hover:bg-gray-50 transition-colors"
-                  >
-                    <span className="flex items-center gap-3">
-                      <span className="text-3xl">{categoryForm.icon || '📝'}</span>
-                      <span className="text-gray-600">Clique para escolher</span>
-                    </span>
-                    <span className="text-gray-400">▼</span>
-                  </button>
-                  
-                  {showIconPicker && (
-                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-xl z-50 max-h-64 overflow-y-auto">
-                      {Object.entries(availableIcons).map(([category, icons]) => (
-                        <div key={category} className="p-2 border-b border-gray-100 last:border-b-0">
-                          <p className="text-xs font-semibold text-gray-500 mb-1 px-1">{category}</p>
-                          <div className="flex flex-wrap gap-1">
-                            {icons.map((icon, idx) => (
-                              <button
-                                key={idx}
-                                type="button"
-                                onClick={() => {
-                                  setCategoryForm({ ...categoryForm, icon });
-                                  setShowIconPicker(false);
-                                }}
-                                className={`w-10 h-10 text-xl rounded-lg hover:bg-[#DBEAFE] transition-colors flex items-center justify-center ${
-                                  categoryForm.icon === icon ? 'bg-blue-200 ring-2 ring-blue-500' : 'bg-gray-50'
-                                }`}
-                              >
-                                {icon}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                <input
+                  type="text"
+                  required
+                  value={categoryForm.icon}
+                  onChange={(e) => setCategoryForm({ ...categoryForm, icon: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="📝"
+                  maxLength={2}
+                />
               </div>
 
               <div>
@@ -443,7 +385,6 @@ export default function CategoriesPage() {
                   required
                   value={categoryForm.color}
                   onChange={(e) => setCategoryForm({ ...categoryForm, color: e.target.value })}
-                  aria-label="Cor da categoria"
                   className="w-full h-10 px-2 border border-gray-300 rounded-lg"
                 />
               </div>
@@ -459,7 +400,7 @@ export default function CategoriesPage() {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="flex-1 px-4 py-2 bg-[#1F4FD8] text-white rounded-lg hover:bg-[#1A44BF] transition-colors disabled:opacity-50"
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
                 >
                   {submitting ? 'Criando...' : 'Criar'}
                 </button>
@@ -488,54 +429,20 @@ export default function CategoriesPage() {
                   required
                   value={categoryForm.name}
                   onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })}
-                  aria-label="Nome da categoria"
-                  placeholder="Nome da categoria"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Ícone *</label>
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setShowIconPicker(!showIconPicker)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8] flex items-center justify-between hover:bg-gray-50 transition-colors"
-                  >
-                    <span className="flex items-center gap-3">
-                      <span className="text-3xl">{categoryForm.icon || '📝'}</span>
-                      <span className="text-gray-600">Clique para escolher</span>
-                    </span>
-                    <span className="text-gray-400">▼</span>
-                  </button>
-                  
-                  {showIconPicker && (
-                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-xl z-50 max-h-64 overflow-y-auto">
-                      {Object.entries(availableIcons).map(([category, icons]) => (
-                        <div key={category} className="p-2 border-b border-gray-100 last:border-b-0">
-                          <p className="text-xs font-semibold text-gray-500 mb-1 px-1">{category}</p>
-                          <div className="flex flex-wrap gap-1">
-                            {icons.map((icon, idx) => (
-                              <button
-                                key={idx}
-                                type="button"
-                                onClick={() => {
-                                  setCategoryForm({ ...categoryForm, icon });
-                                  setShowIconPicker(false);
-                                }}
-                                className={`w-10 h-10 text-xl rounded-lg hover:bg-[#DBEAFE] transition-colors flex items-center justify-center ${
-                                  categoryForm.icon === icon ? 'bg-blue-200 ring-2 ring-blue-500' : 'bg-gray-50'
-                                }`}
-                              >
-                                {icon}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                <input
+                  type="text"
+                  required
+                  value={categoryForm.icon}
+                  onChange={(e) => setCategoryForm({ ...categoryForm, icon: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  maxLength={2}
+                />
               </div>
 
               <div>
@@ -545,7 +452,6 @@ export default function CategoriesPage() {
                   required
                   value={categoryForm.color}
                   onChange={(e) => setCategoryForm({ ...categoryForm, color: e.target.value })}
-                  aria-label="Cor da categoria"
                   className="w-full h-10 px-2 border border-gray-300 rounded-lg"
                 />
               </div>
@@ -561,7 +467,7 @@ export default function CategoriesPage() {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="flex-1 px-4 py-2 bg-[#1F4FD8] text-white rounded-lg hover:bg-[#1A44BF] transition-colors disabled:opacity-50"
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
                 >
                   {submitting ? 'Salvando...' : 'Salvar'}
                 </button>

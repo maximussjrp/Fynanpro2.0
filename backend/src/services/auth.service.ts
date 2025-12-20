@@ -16,7 +16,7 @@ interface TokenPair {
   refreshToken: string;
 }
 
-export interface AuthResponse {
+interface AuthResponse {
   user: {
     id: string;
     email: string;
@@ -39,10 +39,10 @@ export class AuthService {
   /**
    * Gera um par de tokens (access + refresh)
    */
-  private async generateTokenPair(userId: string, email: string, tenantId: string, role: string = 'owner'): Promise<TokenPair> {
+  private async generateTokenPair(userId: string, email: string, tenantId: string): Promise<TokenPair> {
     // Access Token (curta duração)
     const accessToken = jwt.sign(
-      { userId, email, tenantId, role },
+      { userId, email, tenantId },
       env.JWT_SECRET,
       { expiresIn: this.ACCESS_TOKEN_EXPIRATION } as jwt.SignOptions
     );
@@ -132,15 +132,24 @@ export class AuthService {
           },
         });
 
+        // Importa categorias padrão
+        const { defaultCategories } = await import('../utils/default-categories');
+        await tx.category.createMany({
+          data: defaultCategories.map((cat: any) => ({
+            tenantId: tenant.id,
+            name: cat.name,
+            type: cat.type,
+            icon: cat.icon,
+            color: cat.color,
+            parentId: null,
+          })),
+        });
+
         return { user, tenant };
       });
 
-      // Cria categorias padrão FORA da transação (usa prisma principal)
-      const { createDefaultCategories } = await import('../utils/default-categories');
-      await createDefaultCategories(result.tenant.id);
-
       // Gera tokens
-      const tokens = await this.generateTokenPair(result.user.id, result.user.email, result.tenant.id, result.user.role);
+      const tokens = await this.generateTokenPair(result.user.id, result.user.email, result.tenant.id);
 
       // Registra IP e UserAgent no refresh token
       if (ipAddress || userAgent) {
@@ -223,7 +232,7 @@ export class AuthService {
       });
 
       // Gera tokens
-      const tokens = await this.generateTokenPair(user.id, user.email, tenant.id, user.role);
+      const tokens = await this.generateTokenPair(user.id, user.email, tenant.id);
 
       // Registra IP e UserAgent no refresh token
       if (ipAddress || userAgent) {
@@ -323,8 +332,7 @@ export class AuthService {
       const tokens = await this.generateTokenPair(
         refreshToken.user.id,
         refreshToken.user.email,
-        tenant.id,
-        refreshToken.user.role
+        tenant.id
       );
 
       // Registra IP e UserAgent no novo refresh token

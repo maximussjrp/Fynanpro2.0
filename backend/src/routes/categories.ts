@@ -113,91 +113,6 @@ router.get('/', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// ==================== CREATE CATEGORY ====================
-// POST /api/v1/categories
-router.post('/', async (req: AuthRequest, res: Response) => {
-  try {
-    const tenantId = req.tenantId!;
-    const { name, type, icon, color, parentId } = req.body;
-
-    // Validar campos obrigatórios
-    if (!name || !type) {
-      return errorResponse(res, 'VALIDATION_ERROR', 'Nome e tipo são obrigatórios', 400);
-    }
-
-    if (!['income', 'expense'].includes(type)) {
-      return errorResponse(res, 'VALIDATION_ERROR', 'Tipo deve ser "income" ou "expense"', 400);
-    }
-
-    // Determinar nível
-    let level = 1;
-    if (parentId) {
-      const parent = await prisma.category.findFirst({
-        where: { id: parentId, tenantId, deletedAt: null }
-      });
-
-      if (!parent) {
-        return errorResponse(res, 'VALIDATION_ERROR', 'Categoria pai não encontrada', 400);
-      }
-
-      // Verificar se tipos são compatíveis
-      if (parent.type !== type) {
-        return errorResponse(res, 'VALIDATION_ERROR', 'Categoria filha deve ter o mesmo tipo da categoria pai', 400);
-      }
-
-      level = parent.level + 1;
-
-      if (level > 3) {
-        return errorResponse(res, 'VALIDATION_ERROR', 'Máximo de 3 níveis de categorias', 400);
-      }
-    }
-
-    // Verificar se já existe categoria com mesmo nome e tipo
-    const existing = await prisma.category.findFirst({
-      where: {
-        tenantId,
-        name: { equals: name, mode: 'insensitive' },
-        type,
-        deletedAt: null
-      }
-    });
-
-    if (existing) {
-      return errorResponse(res, 'VALIDATION_ERROR', `Já existe uma categoria "${name}" do tipo ${type === 'income' ? 'receita' : 'despesa'}`, 400);
-    }
-
-    // Criar categoria
-    const category = await prisma.category.create({
-      data: {
-        tenantId,
-        name,
-        type,
-        icon: icon || '📝',
-        color: color || '#3B82F6',
-        parentId: parentId || null,
-        level,
-        isActive: true,
-      },
-      include: {
-        parent: true,
-        _count: {
-          select: { transactions: true }
-        }
-      }
-    });
-
-    log.info('Category created:', { categoryId: category.id, name, type, tenantId });
-
-    // Invalidar cache
-    await cacheService.invalidateNamespace(CacheNamespace.CATEGORIES);
-
-    return successResponse(res, category, 201);
-  } catch (error) {
-    log.error('Create category error:', { error, tenantId: req.tenantId });
-    return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao criar categoria', 500);
-  }
-});
-
 // ==================== MIGRATE CATEGORY ====================
 // POST /api/v1/categories/migrate
 router.post('/migrate', async (req: AuthRequest, res: Response) => {
@@ -246,7 +161,7 @@ router.post('/migrate', async (req: AuthRequest, res: Response) => {
       });
 
       // Limpar cache
-      await cacheService.invalidateNamespace(CacheNamespace.CATEGORIES);
+      await cacheService.deletePattern(CacheNamespace.CATEGORIES, `${tenantId}:*`);
 
       return successResponse(res, { 
         message: 'Categoria arquivada (sem transações)',
@@ -354,7 +269,7 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
     log.info('Category updated:', { categoryId: id, tenantId });
 
     // Limpar cache
-    await cacheService.invalidateNamespace(CacheNamespace.CATEGORIES);
+    // await cacheService.deletePattern(CacheNamespace.CATEGORIES, `${tenantId}:*`);
 
     return successResponse(res, updated);
   } catch (error) {
@@ -419,7 +334,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
     log.info('Category deleted:', { categoryId: id, categoryName: category.name, tenantId });
 
     // Limpar cache
-    await cacheService.invalidateNamespace(CacheNamespace.CATEGORIES);
+    // await cacheService.deletePattern(CacheNamespace.CATEGORIES, `${tenantId}:*`);
 
     return successResponse(res, { 
       message: 'Categoria excluída com sucesso',

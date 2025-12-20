@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import api, { logout } from '@/lib/api';
 import { useAuth, useUser, useTenant } from '@/stores/auth';
 import TransactionModal from '@/components/NewTransactionModal';
-import UnifiedTransactionModal from '@/components/UnifiedTransactionModal';
+import DashboardLayoutWrapper from '@/components/DashboardLayoutWrapper';
 import QuickActions from '@/components/QuickActions';
 import OnboardingRecurringBills from '@/components/OnboardingRecurringBills';
 import { 
@@ -23,9 +23,6 @@ import {
   Wallet,
   CreditCard,
   PiggyBank,
-  Edit2,
-  Trash2,
-  AlertTriangle,
 } from 'lucide-react';
 
 interface DashboardData {
@@ -57,9 +54,6 @@ interface PaymentMethod {
   id: string;
   name: string;
   type: string;
-  _count?: {
-    transactions: number;
-  };
 }
 
 interface BankAccountForm {
@@ -87,21 +81,11 @@ export default function Dashboard() {
   const [dashboardData, setDashboardData] = useState<DashboardData>({});
   const [showPeriodModal, setShowPeriodModal] = useState(false);
   const [showTransactionModal, setShowTransactionModal] = useState(false);
-  const [showUnifiedModal, setShowUnifiedModal] = useState(false);
-  const [unifiedModalTab, setUnifiedModalTab] = useState<'recurring' | 'installment' | 'single'>('single');
   const [showBankAccountModal, setShowBankAccountModal] = useState(false);
   const [showPaymentMethodModal, setShowPaymentMethodModal] = useState(false);
   const [showOnboardingRecurring, setShowOnboardingRecurring] = useState(false);
   const [transactionType, setTransactionType] = useState<'income' | 'expense'>('expense');
   const [submitting, setSubmitting] = useState(false);
-  
-  // Estados para edição/exclusão de meios de pagamento
-  const [showEditPaymentMethodModal, setShowEditPaymentMethodModal] = useState(false);
-  const [showDeletePaymentMethodModal, setShowDeletePaymentMethodModal] = useState(false);
-  const [editingPaymentMethod, setEditingPaymentMethod] = useState<PaymentMethod | null>(null);
-  const [deletingPaymentMethod, setDeletingPaymentMethod] = useState<PaymentMethod | null>(null);
-  const [targetPaymentMethodId, setTargetPaymentMethodId] = useState<string>('');
-  const [editPaymentMethodName, setEditPaymentMethodName] = useState<string>('');
   
   // Dados para formulário
   const [categories, setCategories] = useState<Category[]>([]);
@@ -129,21 +113,15 @@ export default function Dashboard() {
   // Filtros de período
   const [startDate, setStartDate] = useState(() => {
     const date = new Date();
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    return `${year}-${month}-01`; // Primeiro dia do mês
+    date.setDate(1); // Primeiro dia do mês
+    return date.toISOString().split('T')[0];
   });
   const [endDate, setEndDate] = useState(() => {
     const date = new Date();
-    const year = date.getFullYear();
-    const month = date.getMonth() + 1;
-    const lastDay = new Date(year, month, 0).getDate(); // Último dia do mês
-    return `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    date.setMonth(date.getMonth() + 1);
+    date.setDate(0); // Último dia do mês
+    return date.toISOString().split('T')[0];
   });
-  
-  // Estados temporários para o modal (só aplica quando clicar em Aplicar)
-  const [tempStartDate, setTempStartDate] = useState(startDate);
-  const [tempEndDate, setTempEndDate] = useState(endDate);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -153,8 +131,15 @@ export default function Dashboard() {
     loadDashboardData();
     loadFormData();
     
-    // Wizard de contas recorrentes desativado - não usamos mais
-    // O onboarding agora é feito pelo chatbot
+    // Verificar se é primeiro acesso para mostrar wizard de contas recorrentes
+    const hasSeenWizard = localStorage.getItem('hasSeenRecurringBillsWizard');
+    if (!hasSeenWizard) {
+      // Aguardar 1 segundo para dashboard carregar antes de mostrar wizard
+      const timer = setTimeout(() => {
+        setShowOnboardingRecurring(true);
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
   }, [startDate, endDate, isAuthenticated]);
 
   const loadDashboardData = async () => {
@@ -196,22 +181,18 @@ export default function Dashboard() {
       const [categoriesRes, accountsRes, paymentsRes] = await Promise.all([
         api.get('/categories?isActive=true'),
         api.get('/bank-accounts?isActive=true'),
-        api.get('/payment-methods'), // Sem filtro para pegar _count de transações
+        api.get('/payment-methods?isActive=true'),
       ]);
-
-      // Filtrar apenas ativos depois de pegar os dados com _count
-      const allPaymentMethods = paymentsRes.data.data.methods || paymentsRes.data.data.paymentMethods || [];
-      const activePaymentMethods = allPaymentMethods.filter((m: any) => m.isActive !== false);
 
       console.log('Dados carregados:', {
         categorias: categoriesRes.data.data.categories?.length || 0,
         contas: accountsRes.data.data.accounts?.length || 0,
-        meios: activePaymentMethods.length,
+        meios: paymentsRes.data.data.paymentMethods?.length || 0,
       });
 
       setCategories(categoriesRes.data.data.categories || []);
       setBankAccounts(accountsRes.data.data.accounts || []);
-      setPaymentMethods(activePaymentMethods);
+      setPaymentMethods(paymentsRes.data.data.paymentMethods || []);
     } catch (error: any) {
       console.error('Erro ao carregar dados do formulário:', error.response?.data || error.message);
     }
@@ -287,66 +268,6 @@ export default function Dashboard() {
     }
   };
 
-  const handleEditPaymentMethod = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingPaymentMethod) return;
-    
-    try {
-      setSubmitting(true);
-      await api.put(`/payment-methods/${editingPaymentMethod.id}`, {
-        name: editPaymentMethodName.trim(),
-      });
-      
-      setShowEditPaymentMethodModal(false);
-      setEditingPaymentMethod(null);
-      setEditPaymentMethodName('');
-      await loadFormData();
-      toast.success('Meio de pagamento atualizado com sucesso!');
-    } catch (error: any) {
-      console.error('Erro ao atualizar meio de pagamento:', error);
-      toast.error(error.response?.data?.error?.message || 'Erro ao atualizar meio de pagamento');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleDeletePaymentMethod = async () => {
-    if (!deletingPaymentMethod) return;
-    
-    const transactionCount = deletingPaymentMethod._count?.transactions || 0;
-    
-    try {
-      setSubmitting(true);
-      
-      if (transactionCount > 0) {
-        // Se tem transações, precisa migrar primeiro
-        if (!targetPaymentMethodId) {
-          toast.error('Selecione um meio de pagamento para migrar as transações');
-          return;
-        }
-        
-        await api.post(`/payment-methods/${deletingPaymentMethod.id}/migrate`, {
-          targetPaymentMethodId,
-        });
-        toast.success(`${transactionCount} transações migradas e meio de pagamento excluído!`);
-      } else {
-        // Sem transações, pode excluir direto
-        await api.delete(`/payment-methods/${deletingPaymentMethod.id}`);
-        toast.success('Meio de pagamento excluído com sucesso!');
-      }
-      
-      setShowDeletePaymentMethodModal(false);
-      setDeletingPaymentMethod(null);
-      setTargetPaymentMethodId('');
-      await loadFormData();
-    } catch (error: any) {
-      console.error('Erro ao excluir meio de pagamento:', error);
-      toast.error(error.response?.data?.error?.message || 'Erro ao excluir meio de pagamento');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   const handleLogout = () => {
     logout(); // Usa função do lib/api.ts que limpa tudo e redireciona
   };
@@ -392,36 +313,22 @@ export default function Dashboard() {
         break;
     }
 
-    const newStart = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')}`;
-    const newEnd = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`;
-    setTempStartDate(newStart);
-    setTempEndDate(newEnd);
-    setStartDate(newStart);
-    setEndDate(newEnd);
-    setShowPeriodModal(false);
-  };
-
-  const handleOpenPeriodModal = () => {
-    setTempStartDate(startDate);
-    setTempEndDate(endDate);
-    setShowPeriodModal(true);
-  };
-
-  const handleApplyPeriod = () => {
-    setStartDate(tempStartDate);
-    setEndDate(tempEndDate);
+    setStartDate(start.toISOString().split('T')[0]);
+    setEndDate(end.toISOString().split('T')[0]);
     setShowPeriodModal(false);
   };
 
   if (loading) {
     return (
-      <div className="p-6">
-        <DashboardMetricsSkeleton />
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-          <ChartSkeleton height={350} />
-          <ChartSkeleton height={350} />
+      <DashboardLayoutWrapper showAddButton={false}>
+        <div className="p-6">
+          <DashboardMetricsSkeleton />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+            <ChartSkeleton height={350} />
+            <ChartSkeleton height={350} />
+          </div>
         </div>
-      </div>
+      </DashboardLayoutWrapper>
     );
   }
 
@@ -431,38 +338,27 @@ export default function Dashboard() {
   const chartData = dashboardData.incomeVsExpenses?.chartData || [];
 
   return (
-    <>
+    <DashboardLayoutWrapper>
       {/* Content */}
       <div className="p-6">
         {/* Quick Actions */}
         <QuickActions
-          onAddTransaction={() => setShowUnifiedModal(true)}
-          onAddRecurring={() => {
-            setUnifiedModalTab('recurring');
-            setShowUnifiedModal(true);
-          }}
-          onAddInstallment={() => {
-            setUnifiedModalTab('installment');
-            setShowUnifiedModal(true);
-          }}
+          onAddTransaction={() => setShowTransactionModal(true)}
           onOpenCalendar={() => router.push('/dashboard/calendar')}
         />
 
         {/* Period Filter */}
         <div className="mb-6 flex items-center justify-between">
-          <div className="flex items-center gap-3 text-sm text-gray-600 font-inter">
+          <div className="flex items-center gap-3 text-sm text-gray-600" style={{fontFamily: 'Inter, sans-serif'}}>
             <Calendar className="w-4 h-4" />
             <span>
-              {(() => {
-                const [sy, sm, sd] = startDate.split('-').map(Number);
-                const [ey, em, ed] = endDate.split('-').map(Number);
-                return `${new Date(sy, sm - 1, sd).toLocaleDateString('pt-BR')} - ${new Date(ey, em - 1, ed).toLocaleDateString('pt-BR')}`;
-              })()}
+              {new Date(startDate).toLocaleDateString('pt-BR')} - {new Date(endDate).toLocaleDateString('pt-BR')}
             </span>
           </div>
           <button
-            onClick={handleOpenPeriodModal}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium font-inter"
+            onClick={() => setShowPeriodModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
+            style={{fontFamily: 'Inter, sans-serif'}}
           >
             <Filter className="w-4 h-4" />
             <span>Alterar Período</span>
@@ -472,10 +368,10 @@ export default function Dashboard() {
         {/* 1. Saldo Final Detalhado */}
         <div className={`rounded-xl p-6 mb-8 text-white shadow-lg ${
           balance?.isPositive 
-            ? 'bg-gradient-to-r from-[#1F4FD8] to-[#1A44BF]' 
+            ? 'bg-gradient-to-r from-[#1C6DD0] to-[#1557A8]' 
             : 'bg-gradient-to-r from-[#DC2626] to-[#B91C1C]'
         }`}>
-          <h2 className="text-lg font-semibold mb-6 font-poppins">Saldo Final do Período</h2>
+          <h2 className="text-lg font-semibold mb-6" style={{fontFamily: 'Poppins, sans-serif'}}>Saldo Final do Período</h2>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             {/* COLUNA RECEITAS */}
@@ -489,21 +385,11 @@ export default function Dashboard() {
               
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between items-center">
-                  <a 
-                    href={`/dashboard/transactions?type=income&status=completed&startDate=${startDate}&endDate=${endDate}`}
-                    className={`${balance?.isPositive ? 'text-blue-200 hover:text-white' : 'text-red-200 hover:text-white'} hover:underline cursor-pointer transition-colors`}
-                  >
-                    ✅ Receitas Recebidas
-                  </a>
+                  <span className={balance?.isPositive ? 'text-blue-200' : 'text-red-200'}>✅ Receitas Recebidas</span>
                   <span className="font-semibold">{formatCurrency(balance?.receivedIncome || 0)}</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <a 
-                    href={`/dashboard/transactions?type=income&status=pending&startDate=${startDate}&endDate=${endDate}`}
-                    className={`${balance?.isPositive ? 'text-blue-200 hover:text-white' : 'text-red-200 hover:text-white'} hover:underline cursor-pointer transition-colors`}
-                  >
-                    ⏳ Receitas a Receber
-                  </a>
+                  <span className={balance?.isPositive ? 'text-blue-200' : 'text-red-200'}>⏳ Receitas a Receber</span>
                   <span className="font-semibold">{formatCurrency(balance?.pendingIncome || 0)}</span>
                 </div>
               </div>
@@ -520,21 +406,11 @@ export default function Dashboard() {
               
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between items-center">
-                  <a 
-                    href={`/dashboard/transactions?type=expense&status=completed&startDate=${startDate}&endDate=${endDate}`}
-                    className={`${balance?.isPositive ? 'text-blue-200 hover:text-white' : 'text-red-200 hover:text-white'} hover:underline cursor-pointer transition-colors`}
-                  >
-                    ✅ Despesas Pagas
-                  </a>
+                  <span className={balance?.isPositive ? 'text-blue-200' : 'text-red-200'}>✅ Despesas Pagas</span>
                   <span className="font-semibold">{formatCurrency(balance?.paidExpense || 0)}</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <a 
-                    href={`/dashboard/transactions?type=expense&status=pending&startDate=${startDate}&endDate=${endDate}`}
-                    className={`${balance?.isPositive ? 'text-blue-200 hover:text-white' : 'text-red-200 hover:text-white'} hover:underline cursor-pointer transition-colors`}
-                  >
-                    ⏳ Despesas a Pagar
-                  </a>
+                  <span className={balance?.isPositive ? 'text-blue-200' : 'text-red-200'}>⏳ Despesas a Pagar</span>
                   <span className="font-semibold">{formatCurrency(balance?.pendingExpense || 0)}</span>
                 </div>
               </div>
@@ -545,7 +421,7 @@ export default function Dashboard() {
           <div className="border-t border-white/20 pt-4">
             <div className={`rounded-lg p-4 text-center ${balance?.isPositive ? 'bg-white/20' : 'bg-white/10'}`}>
               <p className="text-sm text-white mb-2 font-medium">Saldo Final (Receitas - Despesas)</p>
-              <p className={`text-4xl font-bold ${balance?.isPositive ? 'text-[#2ECC9A]' : 'text-[#FFEB3B]'}`}>
+              <p className={`text-4xl font-bold ${balance?.isPositive ? 'text-[#22C39A]' : 'text-[#FFEB3B]'}`}>
                 {formatCurrency(balance?.finalBalance || 0)}
               </p>
             </div>
@@ -556,28 +432,28 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           {/* 2. Ranking de Gastos (Pareto 80%) */}
           <div className="bg-white rounded-xl shadow-sm border p-6">
-            <h3 className="text-lg font-semibold text-[#1A1A1A] mb-4 font-poppins">
+            <h3 className="text-lg font-semibold text-[#1A1A1A] mb-4" style={{fontFamily: 'Poppins, sans-serif'}}>
               Principais Gastos (80% da despesa)
             </h3>
             {expenseData?.pareto80?.length > 0 ? (
               <div className="space-y-3">
                 {expenseData.pareto80.map((item: any) => (
                   <div key={item.rank} className="flex items-center gap-3">
-                    <div className="flex-shrink-0 w-8 h-8 bg-[#FEF2F2] rounded-full flex items-center justify-center text-[#EF4444] font-semibold text-sm">
+                    <div className="flex-shrink-0 w-8 h-8 bg-[#FEF2F2] rounded-full flex items-center justify-center text-[#E74C3C] font-semibold text-sm">
                       {item.rank}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-1">
-                        <p className="text-sm font-medium text-[#1A1A1A] truncate font-inter">{item.name}</p>
-                        <p className="text-sm font-semibold text-[#1A1A1A] font-inter">{formatCurrency(item.total)}</p>
+                        <p className="text-sm font-medium text-[#1A1A1A] truncate" style={{fontFamily: 'Inter, sans-serif'}}>{item.name}</p>
+                        <p className="text-sm font-semibold text-[#1A1A1A]" style={{fontFamily: 'Inter, sans-serif'}}>{formatCurrency(item.total)}</p>
                       </div>
                       <div className="w-full bg-[#D9D9D9] rounded-full h-2">
                         <div
-                          className="bg-[#EF4444] h-2 rounded-full transition-all"
+                          className="bg-[#E74C3C] h-2 rounded-full transition-all"
                           style={{ width: `${item.percentage}%` }}
                         ></div>
                       </div>
-                      <div className="flex justify-between text-xs text-[#4F4F4F] mt-1 font-inter">
+                      <div className="flex justify-between text-xs text-[#4F4F4F] mt-1" style={{fontFamily: 'Inter, sans-serif'}}>
                         <span>{item.percentage.toFixed(1)}%</span>
                         <span>Acumulado: {item.accumulatedPercentage.toFixed(1)}%</span>
                       </div>
@@ -586,47 +462,47 @@ export default function Dashboard() {
                 ))}
               </div>
             ) : (
-              <p className="text-[#4F4F4F] text-center py-8 font-inter">Nenhum gasto registrado no período</p>
+              <p className="text-[#4F4F4F] text-center py-8" style={{fontFamily: 'Inter, sans-serif'}}>Nenhum gasto registrado no período</p>
             )}
           </div>
 
           {/* 3. Ranking de Receitas */}
           <div className="bg-white rounded-xl shadow-sm border p-6">
-            <h3 className="text-lg font-semibold text-[#1A1A1A] mb-4 font-poppins">
+            <h3 className="text-lg font-semibold text-[#1A1A1A] mb-4" style={{fontFamily: 'Poppins, sans-serif'}}>
               Principais Receitas
             </h3>
             {incomeData?.ranking?.length > 0 ? (
               <div className="space-y-3">
                 {incomeData.ranking.slice(0, 8).map((item: any) => (
                   <div key={item.rank} className="flex items-center gap-3">
-                    <div className="flex-shrink-0 w-8 h-8 bg-[#DCFCE7] rounded-full flex items-center justify-center text-[#2ECC9A] font-semibold text-sm">
+                    <div className="flex-shrink-0 w-8 h-8 bg-[#E8F9F4] rounded-full flex items-center justify-center text-[#22C39A] font-semibold text-sm">
                       {item.rank}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-1">
-                        <p className="text-sm font-medium text-[#1A1A1A] truncate font-inter">{item.name}</p>
-                        <p className="text-sm font-semibold text-[#1A1A1A] font-inter">{formatCurrency(item.total)}</p>
+                        <p className="text-sm font-medium text-[#1A1A1A] truncate" style={{fontFamily: 'Inter, sans-serif'}}>{item.name}</p>
+                        <p className="text-sm font-semibold text-[#1A1A1A]" style={{fontFamily: 'Inter, sans-serif'}}>{formatCurrency(item.total)}</p>
                       </div>
                       <div className="w-full bg-[#D9D9D9] rounded-full h-2">
                         <div
-                          className="bg-[#2ECC9A] h-2 rounded-full transition-all"
+                          className="bg-[#22C39A] h-2 rounded-full transition-all"
                           style={{ width: `${item.percentage}%` }}
                         ></div>
                       </div>
-                      <p className="text-xs text-[#4F4F4F] mt-1 font-inter">{item.percentage.toFixed(1)}%</p>
+                      <p className="text-xs text-[#4F4F4F] mt-1" style={{fontFamily: 'Inter, sans-serif'}}>{item.percentage.toFixed(1)}%</p>
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="text-[#4F4F4F] text-center py-8 font-inter">Nenhuma receita registrada no período</p>
+              <p className="text-[#4F4F4F] text-center py-8" style={{fontFamily: 'Inter, sans-serif'}}>Nenhuma receita registrada no período</p>
             )}
           </div>
         </div>
 
         {/* 4. Gráfico Receitas x Despesas */}
         <div className="bg-white rounded-xl shadow-sm border p-6">
-          <h3 className="text-lg font-semibold text-[#1A1A1A] mb-6 font-poppins">
+          <h3 className="text-lg font-semibold text-[#1A1A1A] mb-6" style={{fontFamily: 'Poppins, sans-serif'}}>
             Receitas x Despesas (com gastos provisionados)
           </h3>
           {chartData.length > 0 ? (
@@ -634,22 +510,22 @@ export default function Dashboard() {
               {chartData.map((month: any) => (
                 <div key={month.month} className="space-y-2">
                   <div className="flex items-center justify-between text-sm">
-                    <span className="font-medium text-[#1A1A1A] font-inter">{formatMonth(month.month)}</span>
-                    <span className={`font-semibold font-inter ${month.balance >= 0 ? 'text-[#2ECC9A]' : 'text-[#EF4444]'}`}>
+                    <span className="font-medium text-[#1A1A1A]" style={{fontFamily: 'Inter, sans-serif'}}>{formatMonth(month.month)}</span>
+                    <span className={`font-semibold ${month.balance >= 0 ? 'text-[#22C39A]' : 'text-[#E74C3C]'}`} style={{fontFamily: 'Inter, sans-serif'}}>
                       {formatCurrency(month.balance)}
                     </span>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     {/* Receitas */}
                     <div>
-                      <div className="flex items-center justify-between mb-1 text-xs text-[#4F4F4F] font-inter">
+                      <div className="flex items-center justify-between mb-1 text-xs text-[#4F4F4F]" style={{fontFamily: 'Inter, sans-serif'}}>
                         <span>Receitas (realizado + provisionado)</span>
                         <span className="font-medium">{formatCurrency(month.totalIncome || month.realizedIncome)}</span>
                       </div>
-                      <div className="h-8 bg-[#DCFCE7] rounded overflow-hidden">
+                      <div className="h-8 bg-[#E8F9F4] rounded overflow-hidden">
                         <div className="h-full flex">
                           <div
-                            className="bg-[#2ECC9A]"
+                            className="bg-[#22C39A]"
                             style={{
                               width: month.totalIncome ? `${(month.realizedIncome / month.totalIncome) * 100}%` : '100%',
                             }}
@@ -666,9 +542,9 @@ export default function Dashboard() {
                           )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-3 mt-1 text-xs text-[#4F4F4F] font-inter">
+                      <div className="flex items-center gap-3 mt-1 text-xs text-[#4F4F4F]" style={{fontFamily: 'Inter, sans-serif'}}>
                         <span className="flex items-center gap-1">
-                          <div className="w-3 h-3 bg-[#2ECC9A] rounded"></div>
+                          <div className="w-3 h-3 bg-[#22C39A] rounded"></div>
                           Realizado: {formatCurrency(month.realizedIncome)}
                         </span>
                         {month.projectedIncome > 0 && (
@@ -682,14 +558,14 @@ export default function Dashboard() {
 
                     {/* Despesas */}
                     <div>
-                      <div className="flex items-center justify-between mb-1 text-xs text-[#4F4F4F] font-inter">
+                      <div className="flex items-center justify-between mb-1 text-xs text-[#4F4F4F]" style={{fontFamily: 'Inter, sans-serif'}}>
                         <span>Despesas (realizado + provisionado)</span>
                         <span className="font-medium">{formatCurrency(month.totalExpense)}</span>
                       </div>
                       <div className="h-8 bg-[#FEF2F2] rounded overflow-hidden">
                         <div className="h-full flex">
                           <div
-                            className="bg-[#EF4444]"
+                            className="bg-[#E74C3C]"
                             style={{
                               width: `${(month.realizedExpense / month.totalExpense) * 100}%`,
                             }}
@@ -704,9 +580,9 @@ export default function Dashboard() {
                           ></div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3 mt-1 text-xs text-[#4F4F4F] font-inter">
+                      <div className="flex items-center gap-3 mt-1 text-xs text-[#4F4F4F]" style={{fontFamily: 'Inter, sans-serif'}}>
                         <span className="flex items-center gap-1">
-                          <div className="w-3 h-3 bg-[#EF4444] rounded"></div>
+                          <div className="w-3 h-3 bg-[#E74C3C] rounded"></div>
                           Realizado: {formatCurrency(month.realizedExpense)}
                         </span>
                         <span className="flex items-center gap-1">
@@ -720,121 +596,8 @@ export default function Dashboard() {
               ))}
             </div>
           ) : (
-            <p className="text-[#4F4F4F] text-center py-8 font-inter">Nenhum dado disponível para o período</p>
+            <p className="text-[#4F4F4F] text-center py-8" style={{fontFamily: 'Inter, sans-serif'}}>Nenhum dado disponível para o período</p>
           )}
-        </div>
-
-        {/* 5. Contas Bancárias e Meios de Pagamento */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
-          {/* Contas Bancárias */}
-          <div className="bg-white rounded-xl shadow-sm border p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <Wallet className="text-[#1F4FD8]" size={20} />
-                <h3 className="text-lg font-semibold text-[#1A1A1A] font-poppins">Contas Bancárias</h3>
-              </div>
-              <button
-                onClick={() => setShowBankAccountModal(true)}
-                className="px-3 py-1.5 bg-[#1F4FD8] text-white rounded-lg hover:bg-[#1A44BF] text-sm font-medium flex items-center gap-1"
-              >
-                <span>+</span> Nova Conta
-              </button>
-            </div>
-            {bankAccounts.length > 0 ? (
-              <div className="space-y-3">
-                {bankAccounts.map(account => (
-                  <div key={account.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div>
-                      <p className="font-medium text-[#1A1A1A]">{account.name}</p>
-                      <p className="text-xs text-gray-500">{account.institution || account.type}</p>
-                    </div>
-                    <p className={`font-semibold ${account.currentBalance >= 0 ? 'text-[#2ECC9A]' : 'text-[#EF4444]'}`}>
-                      {formatCurrency(account.currentBalance)}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-8">
-                <Wallet className="mx-auto text-gray-300 mb-2" size={40} />
-                <p className="text-gray-500 text-sm">Nenhuma conta cadastrada</p>
-                <button
-                  onClick={() => setShowBankAccountModal(true)}
-                  className="mt-3 text-[#1F4FD8] text-sm hover:underline"
-                >
-                  Adicionar primeira conta
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Meios de Pagamento */}
-          <div className="bg-white rounded-xl shadow-sm border p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <CreditCard className="text-purple-600" size={20} />
-                <h3 className="text-lg font-semibold text-[#1A1A1A] font-poppins">Meios de Pagamento</h3>
-              </div>
-              <button
-                onClick={() => setShowPaymentMethodModal(true)}
-                className="px-3 py-1.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm font-medium flex items-center gap-1"
-              >
-                <span>+</span> Novo Método
-              </button>
-            </div>
-            {paymentMethods.length > 0 ? (
-              <div className="space-y-3">
-                {paymentMethods.map(method => (
-                  <div key={method.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
-                        <CreditCard className="text-purple-600" size={16} />
-                      </div>
-                      <div>
-                        <p className="font-medium text-[#1A1A1A]">{method.name}</p>
-                        <p className="text-xs text-gray-500 capitalize">{method.type.replace('_', ' ')}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => {
-                          setEditingPaymentMethod(method);
-                          setEditPaymentMethodName(method.name);
-                          setShowEditPaymentMethodModal(true);
-                        }}
-                        className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                        title="Editar"
-                      >
-                        <Edit2 size={14} />
-                      </button>
-                      <button
-                        onClick={() => {
-                          setDeletingPaymentMethod(method);
-                          setTargetPaymentMethodId('');
-                          setShowDeletePaymentMethodModal(true);
-                        }}
-                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        title="Excluir"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-8">
-                <CreditCard className="mx-auto text-gray-300 mb-2" size={40} />
-                <p className="text-gray-500 text-sm">Nenhum método cadastrado</p>
-                <button
-                  onClick={() => setShowPaymentMethodModal(true)}
-                  className="mt-3 text-purple-600 text-sm hover:underline"
-                >
-                  Adicionar primeiro método
-                </button>
-              </div>
-            )}
-          </div>
         </div>
 
       {/* Modal de Período */}
@@ -842,49 +605,49 @@ export default function Dashboard() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-[#1A1A1A] font-poppins">Filtrar por Período</h3>
-              <button onClick={() => setShowPeriodModal(false)} className="p-2 hover:bg-gray-100 rounded-lg" title="Fechar" aria-label="Fechar modal">
+              <h3 className="text-xl font-bold text-[#1A1A1A]" style={{fontFamily: 'Poppins, sans-serif'}}>Filtrar por Período</h3>
+              <button onClick={() => setShowPeriodModal(false)} className="p-2 hover:bg-gray-100 rounded-lg">
                 <X className="w-5 h-5 text-[#4F4F4F]" />
               </button>
             </div>
 
             <div className="space-y-4 mb-6">
               <div>
-                <label className="block text-sm font-medium text-[#1A1A1A] mb-2 font-inter">Data Inicial</label>
+                <label className="block text-sm font-medium text-[#1A1A1A] mb-2" style={{fontFamily: 'Inter, sans-serif'}}>Data Inicial</label>
                 <input
                   type="date"
-                  value={tempStartDate}
-                  onChange={(e) => setTempStartDate(e.target.value)}
-                  className="w-full px-4 py-2 border border-[#D9D9D9] rounded-lg focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] font-inter"
-                  title="Data inicial do período"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full px-4 py-2 border border-[#D9D9D9] rounded-lg focus:ring-2 focus:ring-[#1C6DD0] focus:border-[#1C6DD0]"
+                  style={{fontFamily: 'Inter, sans-serif'}}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-[#1A1A1A] mb-2 font-inter">Data Final</label>
+                <label className="block text-sm font-medium text-[#1A1A1A] mb-2" style={{fontFamily: 'Inter, sans-serif'}}>Data Final</label>
                 <input
                   type="date"
-                  value={tempEndDate}
-                  onChange={(e) => setTempEndDate(e.target.value)}
-                  className="w-full px-4 py-2 border border-[#D9D9D9] rounded-lg focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] font-inter"
-                  title="Data final do período"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="w-full px-4 py-2 border border-[#D9D9D9] rounded-lg focus:ring-2 focus:ring-[#1C6DD0] focus:border-[#1C6DD0]"
+                  style={{fontFamily: 'Inter, sans-serif'}}
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3 mb-6">
-              <button onClick={() => applyQuickFilter('currentMonth')} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium font-inter">
+              <button onClick={() => applyQuickFilter('currentMonth')} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium" style={{fontFamily: 'Inter, sans-serif'}}>
                 Mês Atual
               </button>
-              <button onClick={() => applyQuickFilter('lastMonth')} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium font-inter">
+              <button onClick={() => applyQuickFilter('lastMonth')} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium" style={{fontFamily: 'Inter, sans-serif'}}>
                 Mês Anterior
               </button>
-              <button onClick={() => applyQuickFilter('last3Months')} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium font-inter">
+              <button onClick={() => applyQuickFilter('last3Months')} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium" style={{fontFamily: 'Inter, sans-serif'}}>
                 Últimos 3 Meses
               </button>
-              <button onClick={() => applyQuickFilter('last6Months')} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium font-inter">
+              <button onClick={() => applyQuickFilter('last6Months')} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium" style={{fontFamily: 'Inter, sans-serif'}}>
                 Últimos 6 Meses
               </button>
-              <button onClick={() => applyQuickFilter('currentYear')} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium col-span-2 font-inter">
+              <button onClick={() => applyQuickFilter('currentYear')} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium col-span-2" style={{fontFamily: 'Inter, sans-serif'}}>
                 Ano Atual
               </button>
             </div>
@@ -892,13 +655,15 @@ export default function Dashboard() {
             <div className="flex gap-3">
               <button
                 onClick={() => setShowPeriodModal(false)}
-                className="flex-1 px-4 py-2 border border-[#D9D9D9] rounded-lg hover:bg-gray-50 font-inter"
+                className="flex-1 px-4 py-2 border border-[#D9D9D9] rounded-lg hover:bg-gray-50"
+                style={{fontFamily: 'Inter, sans-serif'}}
               >
                 Cancelar
               </button>
               <button
-                onClick={handleApplyPeriod}
-                className="flex-1 px-4 py-2 bg-[#1F4FD8] text-white rounded-lg hover:bg-[#1A44BF] shadow-md font-inter"
+                onClick={() => setShowPeriodModal(false)}
+                className="flex-1 px-4 py-2 bg-[#1C6DD0] text-white rounded-lg hover:bg-[#1557A8] shadow-md"
+                style={{fontFamily: 'Inter, sans-serif'}}
               >
                 Aplicar
               </button>
@@ -914,15 +679,13 @@ export default function Dashboard() {
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-2">
-                <Wallet className="text-[#1F4FD8]" size={24} />
+                <Wallet className="text-blue-600" size={24} />
                 <h2 className="text-xl font-bold text-gray-900">Nova Conta Bancária</h2>
               </div>
               <button
                 onClick={() => setShowBankAccountModal(false)}
                 className="text-gray-400 hover:text-gray-600"
                 disabled={submitting}
-                title="Fechar"
-                aria-label="Fechar modal"
               >
                 <X size={20} />
               </button>
@@ -939,7 +702,7 @@ export default function Dashboard() {
                   required
                   value={bankAccountForm.name}
                   onChange={(e) => setBankAccountForm({ ...bankAccountForm, name: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   placeholder="Ex: Conta Corrente Itaú"
                 />
               </div>
@@ -953,8 +716,7 @@ export default function Dashboard() {
                   required
                   value={bankAccountForm.type}
                   onChange={(e) => setBankAccountForm({ ...bankAccountForm, type: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
-                  title="Tipo de conta"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="bank">Conta Bancária</option>
                   <option value="wallet">Carteira Digital</option>
@@ -973,7 +735,7 @@ export default function Dashboard() {
                   required
                   value={bankAccountForm.institution}
                   onChange={(e) => setBankAccountForm({ ...bankAccountForm, institution: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   placeholder="Ex: Banco Itaú, Nubank, PicPay..."
                 />
               </div>
@@ -992,7 +754,7 @@ export default function Dashboard() {
                     min="0"
                     value={bankAccountForm.initialBalance}
                     onChange={(e) => setBankAccountForm({ ...bankAccountForm, initialBalance: e.target.value })}
-                    className="w-full pl-12 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
+                    className="w-full pl-12 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     placeholder="0.00"
                   />
                 </div>
@@ -1010,7 +772,7 @@ export default function Dashboard() {
                 </button>
                 <button
                   type="submit"
-                  className={`flex-1 px-4 py-2 rounded-lg text-white font-medium bg-[#1F4FD8] hover:bg-[#1A44BF] ${
+                  className={`flex-1 px-4 py-2 rounded-lg text-white font-medium bg-blue-600 hover:bg-blue-700 ${
                     submitting ? 'opacity-50 cursor-not-allowed' : ''
                   }`}
                   disabled={submitting}
@@ -1029,15 +791,13 @@ export default function Dashboard() {
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-2">
-                <CreditCard className="text-[#1F4FD8]" size={24} />
+                <CreditCard className="text-blue-600" size={24} />
                 <h2 className="text-xl font-bold text-gray-900">Novo Meio de Pagamento</h2>
               </div>
               <button
                 onClick={() => setShowPaymentMethodModal(false)}
                 className="text-gray-400 hover:text-gray-600"
                 disabled={submitting}
-                title="Fechar"
-                aria-label="Fechar modal"
               >
                 <X size={20} />
               </button>
@@ -1054,7 +814,7 @@ export default function Dashboard() {
                   required
                   value={paymentMethodForm.name}
                   onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, name: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   placeholder="Ex: PIX Nubank, Cartão Itaú, Dinheiro..."
                 />
               </div>
@@ -1068,8 +828,7 @@ export default function Dashboard() {
                   required
                   value={paymentMethodForm.type}
                   onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, type: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
-                  title="Tipo de meio de pagamento"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="pix">PIX</option>
                   <option value="credit_card">Cartão de Crédito</option>
@@ -1094,8 +853,7 @@ export default function Dashboard() {
                     required={paymentMethodForm.type === 'credit_card' || paymentMethodForm.type === 'debit_card'}
                     value={paymentMethodForm.bankAccountId}
                     onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, bankAccountId: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
-                    title="Conta bancária vinculada"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="">Selecione uma conta</option>
                     {bankAccounts.map(account => (
@@ -1126,7 +884,7 @@ export default function Dashboard() {
                         maxLength={4}
                         value={paymentMethodForm.lastFourDigits}
                         onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, lastFourDigits: e.target.value.replace(/\D/g, '') })}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                         placeholder="2277"
                       />
                     </div>
@@ -1139,8 +897,7 @@ export default function Dashboard() {
                       <select
                         value={paymentMethodForm.cardNetwork}
                         onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, cardNetwork: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
-                        title="Bandeira do cartão"
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                       >
                         <option value="">Selecione</option>
                         <option value="visa">Visa</option>
@@ -1159,20 +916,10 @@ export default function Dashboard() {
                       Data de Vencimento
                     </label>
                     <input
-                      type="text"
+                      type="month"
                       value={paymentMethodForm.expirationDate}
-                      onChange={(e) => {
-                        // Formata como MM/AA
-                        let value = e.target.value.replace(/\D/g, '');
-                        if (value.length >= 2) {
-                          value = value.slice(0, 2) + '/' + value.slice(2, 4);
-                        }
-                        setPaymentMethodForm({ ...paymentMethodForm, expirationDate: value });
-                      }}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
-                      title="Data de vencimento do cartão"
-                      placeholder="MM/AA"
-                      maxLength={5}
+                      onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, expirationDate: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
                 </>
@@ -1190,7 +937,7 @@ export default function Dashboard() {
                 </button>
                 <button
                   type="submit"
-                  className={`flex-1 px-4 py-2 rounded-lg text-white font-medium bg-[#1F4FD8] hover:bg-[#1A44BF] ${
+                  className={`flex-1 px-4 py-2 rounded-lg text-white font-medium bg-blue-600 hover:bg-blue-700 ${
                     submitting ? 'opacity-50 cursor-not-allowed' : ''
                   }`}
                   disabled={submitting}
@@ -1203,7 +950,7 @@ export default function Dashboard() {
         </div>
       )}
       
-      {/* Modal de Transação Simples (legado) */}
+      {/* Modal de Transação Unificado */}
       <TransactionModal
         isOpen={showTransactionModal}
         onClose={() => setShowTransactionModal(false)}
@@ -1211,17 +958,6 @@ export default function Dashboard() {
           loadDashboardData();
           setShowTransactionModal(false);
         }}
-      />
-
-      {/* Modal de Transação Unificado (Única/Recorrente/Parcelada) */}
-      <UnifiedTransactionModal
-        isOpen={showUnifiedModal}
-        onClose={() => setShowUnifiedModal(false)}
-        onSuccess={() => {
-          loadDashboardData();
-          setShowUnifiedModal(false);
-        }}
-        initialTab={unifiedModalTab}
       />
 
       {/* Wizard de Onboarding de Contas Recorrentes */}
@@ -1239,160 +975,7 @@ export default function Dashboard() {
           loadDashboardData();
         }}
       />
-
-      {/* Modal de Edição de Meio de Pagamento */}
-      {showEditPaymentMethodModal && editingPaymentMethod && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-[#1A1A1A] font-poppins">Editar Meio de Pagamento</h3>
-              <button 
-                onClick={() => {
-                  setShowEditPaymentMethodModal(false);
-                  setEditingPaymentMethod(null);
-                  setEditPaymentMethodName('');
-                }} 
-                className="p-2 hover:bg-gray-100 rounded-lg"
-              >
-                <X className="w-5 h-5 text-[#4F4F4F]" />
-              </button>
-            </div>
-            <form onSubmit={handleEditPaymentMethod} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-[#1A1A1A] mb-2">Nome</label>
-                <input
-                  type="text"
-                  value={editPaymentMethodName}
-                  onChange={(e) => setEditPaymentMethodName(e.target.value)}
-                  className="w-full px-4 py-2 border border-[#D9D9D9] rounded-lg focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8]"
-                  placeholder="Nome do meio de pagamento"
-                  required
-                />
-              </div>
-              <div className="flex gap-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowEditPaymentMethodModal(false);
-                    setEditingPaymentMethod(null);
-                    setEditPaymentMethodName('');
-                  }}
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-                  disabled={submitting}
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className={`flex-1 px-4 py-2 rounded-lg text-white font-medium bg-[#1F4FD8] hover:bg-[#1A44BF] ${
-                    submitting ? 'opacity-50 cursor-not-allowed' : ''
-                  }`}
-                  disabled={submitting}
-                >
-                  {submitting ? 'Salvando...' : 'Salvar'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Modal de Exclusão de Meio de Pagamento */}
-      {showDeletePaymentMethodModal && deletingPaymentMethod && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-[#1A1A1A] font-poppins">Excluir Meio de Pagamento</h3>
-              <button 
-                onClick={() => {
-                  setShowDeletePaymentMethodModal(false);
-                  setDeletingPaymentMethod(null);
-                  setTargetPaymentMethodId('');
-                }} 
-                className="p-2 hover:bg-gray-100 rounded-lg"
-              >
-                <X className="w-5 h-5 text-[#4F4F4F]" />
-              </button>
-            </div>
-            
-            <div className="mb-6">
-              <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg mb-4">
-                <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
-                  <CreditCard className="text-purple-600" size={20} />
-                </div>
-                <div>
-                  <p className="font-semibold text-gray-900">{deletingPaymentMethod.name}</p>
-                  <p className="text-sm text-gray-500 capitalize">{deletingPaymentMethod.type.replace('_', ' ')}</p>
-                </div>
-              </div>
-
-              {(deletingPaymentMethod._count?.transactions || 0) > 0 ? (
-                <div>
-                  <div className="flex items-center gap-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg mb-4">
-                    <AlertTriangle className="w-5 h-5 text-yellow-600 flex-shrink-0" />
-                    <p className="text-sm text-yellow-800">
-                      Este meio de pagamento possui <strong>{deletingPaymentMethod._count?.transactions}</strong> transações vinculadas. 
-                      Selecione outro meio de pagamento para migrar essas transações antes de excluir.
-                    </p>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-[#1A1A1A] mb-2">
-                      Migrar transações para:
-                    </label>
-                    <select
-                      value={targetPaymentMethodId}
-                      onChange={(e) => setTargetPaymentMethodId(e.target.value)}
-                      className="w-full px-4 py-2 border border-[#D9D9D9] rounded-lg focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8]"
-                      required
-                    >
-                      <option value="">Selecione um meio de pagamento</option>
-                      {paymentMethods
-                        .filter(m => m.id !== deletingPaymentMethod.id)
-                        .map(method => (
-                          <option key={method.id} value={method.id}>
-                            {method.name}
-                          </option>
-                        ))}
-                    </select>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-gray-600">
-                  Este meio de pagamento não possui transações vinculadas e pode ser excluído com segurança.
-                </p>
-              )}
-            </div>
-
-            <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowDeletePaymentMethodModal(false);
-                  setDeletingPaymentMethod(null);
-                  setTargetPaymentMethodId('');
-                }}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-                disabled={submitting}
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleDeletePaymentMethod}
-                className={`flex-1 px-4 py-2 rounded-lg text-white font-medium bg-red-600 hover:bg-red-700 ${
-                  submitting || ((deletingPaymentMethod._count?.transactions || 0) > 0 && !targetPaymentMethodId) 
-                    ? 'opacity-50 cursor-not-allowed' 
-                    : ''
-                }`}
-                disabled={submitting || ((deletingPaymentMethod._count?.transactions || 0) > 0 && !targetPaymentMethodId)}
-              >
-                {submitting ? 'Excluindo...' : (deletingPaymentMethod._count?.transactions || 0) > 0 ? 'Migrar e Excluir' : 'Excluir'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
       </div>
-    </>
+    </DashboardLayoutWrapper>
   );
 }

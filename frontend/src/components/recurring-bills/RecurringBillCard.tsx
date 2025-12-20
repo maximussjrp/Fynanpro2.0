@@ -15,21 +15,21 @@ interface RecurringBill {
   dayOfMonth?: number;
   dayOfWeek?: number;
   status: string;
-  category?: {
+  category: {
     id: string;
     name: string;
     type: string;
     icon: string;
     color: string;
-  } | null;
-  bankAccount?: {
+  };
+  bankAccount: {
     id: string;
     name: string;
-  } | null;
+  };
   paymentMethod?: {
     id: string;
     name: string;
-  } | null;
+  };
   _count?: {
     occurrences: number;
   };
@@ -39,10 +39,10 @@ interface RecurringBill {
 
 interface RecurringBillCardProps {
   bill: RecurringBill;
-  onEdit: (bill: RecurringBill) => void | Promise<void>;
-  onDelete: (id: string) => void | Promise<void>;
-  onToggleStatus: (bill: RecurringBill) => void | Promise<void>;
-  onGenerateOccurrences: (id: string) => void | Promise<void>;
+  onEdit: (bill: RecurringBill) => void;
+  onDelete: (id: string) => void;
+  onToggleStatus: (bill: RecurringBill) => void;
+  onGenerateOccurrences: (id: string) => void;
 }
 
 export default function RecurringBillCard({
@@ -60,10 +60,7 @@ export default function RecurringBillCard({
   };
 
   const formatDate = (dateString: string) => {
-    // Parse date string as local date to avoid timezone issues
-    const dateOnly = dateString.split('T')[0];
-    const [year, month, day] = dateOnly.split('-').map(Number);
-    return new Date(year, month - 1, day).toLocaleDateString('pt-BR', {
+    return new Date(dateString).toLocaleDateString('pt-BR', {
       day: '2-digit',
       month: 'short',
     });
@@ -90,16 +87,16 @@ export default function RecurringBillCard({
       <div
         className={`p-4 ${
           bill.type === 'income'
-            ? 'bg-gradient-to-r from-[#2ECC9A] to-[#22C55E]'
-            : 'bg-gradient-to-r from-[#EF4444] to-[#DC2626]'
+            ? 'bg-gradient-to-r from-[#22C39A] to-[#16A085]'
+            : 'bg-gradient-to-r from-[#E74C3C] to-[#C0392B]'
         }`}
       >
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-3xl">{bill.category?.icon || '📋'}</span>
+            <span className="text-3xl">{bill.category.icon}</span>
             <div>
               <h3 className="text-white font-bold text-lg">{bill.name}</h3>
-              <p className="text-white/90 text-sm">{bill.category?.name || 'Sem categoria'}</p>
+              <p className="text-white/90 text-sm">{bill.category.name}</p>
             </div>
           </div>
           <span
@@ -141,14 +138,14 @@ export default function RecurringBillCard({
         <div className="space-y-2 pt-3 border-t border-gray-200">
           {bill.frequency === 'monthly' && (bill.dayOfMonth || bill.dueDay) && (
             <div className="flex items-center gap-2 text-sm text-gray-600">
-              <Calendar className="w-4 h-4 text-[#1F4FD8]" />
+              <Calendar className="w-4 h-4 text-[#1C6DD0]" />
               <span>Dia {bill.dayOfMonth || bill.dueDay} de cada mês</span>
             </div>
           )}
 
           {bill.frequency === 'weekly' && bill.dayOfWeek !== undefined && (
             <div className="flex items-center gap-2 text-sm text-gray-600">
-              <Calendar className="w-4 h-4 text-[#1F4FD8]" />
+              <Calendar className="w-4 h-4 text-[#1C6DD0]" />
               <span>Toda {getDayOfWeekLabel(bill.dayOfWeek)}</span>
             </div>
           )}
@@ -171,14 +168,14 @@ export default function RecurringBillCard({
         {/* Conta Bancária */}
         <div className="pt-3 border-t border-gray-200">
           <p className="text-xs text-gray-500 mb-1">Conta</p>
-          <p className="text-sm font-semibold text-gray-800">{bill.bankAccount?.name || 'Não definida'}</p>
+          <p className="text-sm font-semibold text-gray-800">{bill.bankAccount.name}</p>
         </div>
 
         {/* Contador de Ocorrências */}
         {bill._count && bill._count.occurrences > 0 && (
-          <div className="flex items-center gap-2 px-3 py-2 bg-[#EFF6FF] rounded-lg">
-            <Zap className="w-4 h-4 text-[#1F4FD8]" />
-            <span className="text-sm font-medium text-[#1F4FD8]">
+          <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 rounded-lg">
+            <Zap className="w-4 h-4 text-[#1C6DD0]" />
+            <span className="text-sm font-medium text-[#1C6DD0]">
               {bill._count.occurrences} ocorrências geradas
             </span>
           </div>
@@ -208,14 +205,14 @@ export default function RecurringBillCard({
           </button>
           <button
             onClick={() => onEdit(bill)}
-            className="px-3 py-2 bg-[#DBEAFE] text-[#1F4FD8] rounded-xl hover:bg-blue-200 transition-all duration-200"
+            className="px-3 py-2 bg-blue-100 text-[#1C6DD0] rounded-xl hover:bg-blue-200 transition-all duration-200"
             title="Editar"
           >
             <Edit2 className="w-4 h-4" />
           </button>
           <button
             onClick={() => onDelete(bill.id)}
-            className="px-3 py-2 bg-red-100 text-[#EF4444] rounded-xl hover:bg-red-200 transition-all duration-200"
+            className="px-3 py-2 bg-red-100 text-[#E74C3C] rounded-xl hover:bg-red-200 transition-all duration-200"
             title="Excluir"
           >
             <Trash2 className="w-4 h-4" />
@@ -226,7 +223,7 @@ export default function RecurringBillCard({
         {bill.status === 'active' && (
           <button
             onClick={() => onGenerateOccurrences(bill.id)}
-            className="w-full px-4 py-2 bg-gradient-to-r from-[#2ECC9A] to-[#22C55E] text-white rounded-xl hover:shadow-lg transition-all duration-200 text-sm font-semibold flex items-center justify-center gap-2"
+            className="w-full px-4 py-2 bg-gradient-to-r from-[#22C39A] to-[#16A085] text-white rounded-xl hover:shadow-lg transition-all duration-200 text-sm font-semibold flex items-center justify-center gap-2"
           >
             <Zap className="w-4 h-4" />
             Gerar Ocorrências

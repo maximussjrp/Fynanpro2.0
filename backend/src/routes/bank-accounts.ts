@@ -337,8 +337,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
 });
 
 // ==================== TRANSFER BETWEEN ACCOUNTS ====================
-// POST /api/v1/bank-accounts/transfer/execute
-// CORRIGIDO: Agora usa transação atômica do Prisma
+// POST /api/v1/bank-accounts/transfer
 router.post('/transfer/execute', async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId!;
@@ -368,7 +367,7 @@ router.post('/transfer/execute', async (req: AuthRequest, res: Response) => {
       return errorResponse(res, 'VALIDATION_ERROR', 'Data da transferência é obrigatória', 400);
     }
 
-    // Validate accounts exist (fora da transação para retornar erro específico)
+    // Validate accounts exist
     const [fromAccount, toAccount] = await Promise.all([
       prisma.bankAccount.findFirst({
         where: { id: fromAccountId, tenantId, deletedAt: null },
@@ -388,107 +387,87 @@ router.post('/transfer/execute', async (req: AuthRequest, res: Response) => {
 
     // Check if has sufficient balance
     if (Number(fromAccount.currentBalance) < amount) {
-      return errorResponse(res, 'INSUFFICIENT_BALANCE', 'Saldo insuficiente na conta de origem', 400);
+      return errorResponse(res, 'VALIDATION_ERROR', 'Saldo insuficiente na conta de origem', 400);
     }
 
+    // Create transfer transactions (expense from origin + income to destination)
     const transferDate = new Date(transactionDate);
     const transferDescription = description || `Transferência: ${fromAccount.name} → ${toAccount.name}`;
 
-    // ========== TRANSAÇÃO ATÔMICA ==========
-    // Todas as operações abaixo são executadas como uma única transação.
-    // Se qualquer uma falhar, TODAS são revertidas automaticamente.
-    const result = await prisma.$transaction(async (tx) => {
-      // 1. Criar transação de SAÍDA (da conta origem) - valor NEGATIVO
-      const outTransaction = await tx.transaction.create({
+    const [expenseTransaction, incomeTransaction] = await Promise.all([
+      // Expense from origin account
+      prisma.transaction.create({
         data: {
           tenantId,
           userId,
           type: 'transfer',
           bankAccountId: fromAccountId,
           destinationAccountId: toAccountId,
-          amount: -Math.abs(amount), // Valor negativo para saída
+          amount,
           description: transferDescription,
           transactionDate: transferDate,
           status: 'completed',
-          notes: `Transferência para ${toAccount.name}`,
         },
-      });
-
-      // 2. Criar transação de ENTRADA (na conta destino) - valor POSITIVO
-      const inTransaction = await tx.transaction.create({
+      }),
+      // Income to destination account
+      prisma.transaction.create({
         data: {
           tenantId,
           userId,
           type: 'transfer',
           bankAccountId: toAccountId,
           destinationAccountId: fromAccountId,
-          amount: Math.abs(amount), // Valor positivo para entrada
+          amount,
           description: transferDescription,
           transactionDate: transferDate,
           status: 'completed',
-          notes: `Transferência de ${fromAccount.name}`,
         },
-      });
+      }),
+    ]);
 
-      // 3. Decrementar saldo da conta origem
-      const updatedFromAccount = await tx.bankAccount.update({
+    // Update balances
+    await Promise.all([
+      prisma.bankAccount.update({
         where: { id: fromAccountId },
         data: {
           currentBalance: {
             decrement: amount,
           },
         },
-      });
-
-      // 4. Incrementar saldo da conta destino
-      const updatedToAccount = await tx.bankAccount.update({
+      }),
+      prisma.bankAccount.update({
         where: { id: toAccountId },
         data: {
           currentBalance: {
             increment: amount,
           },
         },
-      });
+      }),
+    ]);
 
-      return {
-        outTransaction,
-        inTransaction,
-        updatedFromAccount,
-        updatedToAccount,
-      };
-    });
-
-    log.info('Transfer completed successfully', {
-      fromAccountId,
-      toAccountId,
-      amount,
-      outTransactionId: result.outTransaction.id,
-      inTransactionId: result.inTransaction.id,
-    });
+    // Get updated accounts
+    const [updatedFromAccount, updatedToAccount] = await Promise.all([
+      prisma.bankAccount.findUnique({ where: { id: fromAccountId } }),
+      prisma.bankAccount.findUnique({ where: { id: toAccountId } }),
+    ]);
 
     return successResponse(res, {
       transfer: {
         from: {
-          account: result.updatedFromAccount,
-          transaction: result.outTransaction,
+          account: updatedFromAccount,
+          transaction: expenseTransaction,
         },
         to: {
-          account: result.updatedToAccount,
-          transaction: result.inTransaction,
+          account: updatedToAccount,
+          transaction: incomeTransaction,
         },
         amount,
         description: transferDescription,
         date: transferDate,
       },
     }, 201);
-  } catch (error: any) {
-    log.error('Transfer error:', { error: error.message, stack: error.stack, tenantId: req.tenantId });
-    
-    // Verificar se foi erro de constraint (ex: saldo negativo se tiver check no banco)
-    if (error.code === 'P2025') {
-      return errorResponse(res, 'NOT_FOUND', 'Conta não encontrada durante transferência', 404);
-    }
-    
+  } catch (error) {
+    log.error('Transfer error:', { error, tenantId: req.tenantId });
     return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao realizar transferência', 500);
   }
 });

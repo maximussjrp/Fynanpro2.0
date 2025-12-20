@@ -1,7 +1,7 @@
 'use client';
 
 import { useAuth } from '@/stores/auth';
-import { toast } from 'sonner';
+
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/api';
@@ -94,7 +94,6 @@ export default function BankAccountsPage() {
         initialBalance: parseFloat(accountForm.initialBalance) || 0,
       });
       
-      toast.success('Conta bancária criada com sucesso!');
       setShowCreateModal(false);
       setAccountForm({ name: '', type: 'bank', institution: '', initialBalance: '0' });
       
@@ -105,7 +104,7 @@ export default function BankAccountsPage() {
     } catch (error: any) {
       console.error('Erro ao criar conta:', error.response?.data || error.message);
       const errorMsg = error.response?.data?.error?.message || error.response?.data?.message || 'Erro ao criar conta bancária';
-      toast.error(errorMsg);
+      alert(errorMsg);
     } finally {
       setSubmitting(false);
     }
@@ -119,14 +118,13 @@ export default function BankAccountsPage() {
     try {
       await api.put(`/bank-accounts/${editingAccount.id}`, accountForm);
       
-      toast.success('Conta bancária atualizada!');
       setShowEditModal(false);
       setEditingAccount(null);
       setAccountForm({ name: '', type: 'bank', institution: '', initialBalance: '0' });
       loadAccounts();
     } catch (error: any) {
       console.error('Erro ao editar conta:', error.response?.data || error.message);
-      toast.error(error.response?.data?.message || 'Erro ao editar conta bancária');
+      alert(error.response?.data?.message || 'Erro ao editar conta bancária');
     } finally {
       setSubmitting(false);
     }
@@ -137,11 +135,10 @@ export default function BankAccountsPage() {
 
     try {
       await api.delete(`/bank-accounts/${id}`);
-      toast.success('Conta bancária excluída!');
       loadAccounts();
     } catch (error: any) {
       console.error('Erro ao excluir conta:', error.response?.data || error.message);
-      toast.error(error.response?.data?.message || 'Erro ao excluir conta bancária');
+      alert(error.response?.data?.message || 'Erro ao excluir conta bancária');
     }
   };
 
@@ -158,13 +155,12 @@ export default function BankAccountsPage() {
         transactionDate: new Date().toISOString(),
       });
       
-      toast.success('Transferência realizada com sucesso!');
       setShowTransferModal(false);
       setTransferForm({ fromAccountId: '', toAccountId: '', amount: '', description: '' });
       loadAccounts();
     } catch (error: any) {
       console.error('Erro ao transferir:', error.response?.data || error.message);
-      toast.error(error.response?.data?.message || 'Erro ao realizar transferência');
+      alert(error.response?.data?.message || 'Erro ao realizar transferência');
     } finally {
       setSubmitting(false);
     }
@@ -237,7 +233,7 @@ export default function BankAccountsPage() {
             </button>
             <button
               onClick={() => setShowCreateModal(true)}
-              className="px-4 py-2 bg-[#1F4FD8] text-white rounded-lg hover:bg-[#1A44BF] transition-colors flex items-center gap-2"
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
             >
               <Plus className="w-5 h-5" />
               Nova Conta
@@ -254,8 +250,8 @@ export default function BankAccountsPage() {
             >
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center gap-3">
-                  <div className="p-3 bg-[#DBEAFE] rounded-lg">
-                    <Building2 className="w-6 h-6 text-[#1F4FD8]" />
+                  <div className="p-3 bg-blue-100 rounded-lg">
+                    <Building2 className="w-6 h-6 text-blue-600" />
                   </div>
                   <div>
                     <h3 className="font-semibold text-lg text-gray-800">{account.name}</h3>
@@ -300,7 +296,7 @@ export default function BankAccountsPage() {
             <p className="text-gray-500 text-lg">Nenhuma conta bancária cadastrada</p>
             <button
               onClick={() => setShowCreateModal(true)}
-              className="mt-4 px-6 py-2 bg-[#1F4FD8] text-white rounded-lg hover:bg-[#1A44BF] transition-colors"
+              className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
               Criar primeira conta
             </button>
@@ -314,7 +310,7 @@ export default function BankAccountsPage() {
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-6 border-b border-gray-200">
               <h2 className="text-xl font-bold text-gray-800">Nova Conta Bancária</h2>
-              <button onClick={() => setShowCreateModal(false)} title="Fechar" aria-label="Fechar modal" className="text-gray-500 hover:text-gray-700">
+              <button onClick={() => setShowCreateModal(false)} className="text-gray-500 hover:text-gray-700">
                 <X className="w-6 h-6" />
               </button>
             </div>
@@ -327,7 +323,7 @@ export default function BankAccountsPage() {
                   required
                   value={accountForm.name}
                   onChange={(e) => setAccountForm({ ...accountForm, name: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   placeholder="Ex: Nubank, Inter, Bradesco..."
                 />
               </div>
@@ -338,8 +334,7 @@ export default function BankAccountsPage() {
                   required
                   value={accountForm.type}
                   onChange={(e) => setAccountForm({ ...accountForm, type: e.target.value })}
-                  aria-label="Tipo de conta"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="bank">Conta Bancária</option>
                   <option value="wallet">Carteira/Dinheiro</option>
@@ -355,7 +350,7 @@ export default function BankAccountsPage() {
                   type="text"
                   value={accountForm.institution}
                   onChange={(e) => setAccountForm({ ...accountForm, institution: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   placeholder="Ex: Nubank, Banco Inter..."
                 />
               </div>
@@ -368,7 +363,7 @@ export default function BankAccountsPage() {
                   step="0.01"
                   value={accountForm.initialBalance}
                   onChange={(e) => setAccountForm({ ...accountForm, initialBalance: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   placeholder="0.00"
                 />
               </div>
@@ -384,7 +379,7 @@ export default function BankAccountsPage() {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="flex-1 px-4 py-2 bg-[#1F4FD8] text-white rounded-lg hover:bg-[#1A44BF] transition-colors disabled:opacity-50"
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
                 >
                   {submitting ? 'Criando...' : 'Criar Conta'}
                 </button>
@@ -400,7 +395,7 @@ export default function BankAccountsPage() {
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-6 border-b border-gray-200">
               <h2 className="text-xl font-bold text-gray-800">Editar Conta</h2>
-              <button onClick={() => setShowEditModal(false)} title="Fechar" aria-label="Fechar modal" className="text-gray-500 hover:text-gray-700">
+              <button onClick={() => setShowEditModal(false)} className="text-gray-500 hover:text-gray-700">
                 <X className="w-6 h-6" />
               </button>
             </div>
@@ -413,9 +408,7 @@ export default function BankAccountsPage() {
                   required
                   value={accountForm.name}
                   onChange={(e) => setAccountForm({ ...accountForm, name: e.target.value })}
-                  aria-label="Nome da Conta"
-                  placeholder="Digite o nome da conta"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
@@ -425,8 +418,7 @@ export default function BankAccountsPage() {
                   required
                   value={accountForm.type}
                   onChange={(e) => setAccountForm({ ...accountForm, type: e.target.value })}
-                  aria-label="Tipo de Conta"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="bank">Conta Bancária</option>
                   <option value="wallet">Carteira/Dinheiro</option>
@@ -442,9 +434,7 @@ export default function BankAccountsPage() {
                   type="text"
                   value={accountForm.institution}
                   onChange={(e) => setAccountForm({ ...accountForm, institution: e.target.value })}
-                  aria-label="Saldo Inicial"
-                  placeholder="Digite o saldo inicial"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
@@ -459,7 +449,7 @@ export default function BankAccountsPage() {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="flex-1 px-4 py-2 bg-[#1F4FD8] text-white rounded-lg hover:bg-[#1A44BF] transition-colors disabled:opacity-50"
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
                 >
                   {submitting ? 'Salvando...' : 'Salvar'}
                 </button>
@@ -475,7 +465,7 @@ export default function BankAccountsPage() {
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
             <div className="flex items-center justify-between p-6 border-b border-gray-200">
               <h2 className="text-xl font-bold text-gray-800">Transferência entre Contas</h2>
-              <button onClick={() => setShowTransferModal(false)} title="Fechar" aria-label="Fechar modal" className="text-gray-500 hover:text-gray-700">
+              <button onClick={() => setShowTransferModal(false)} className="text-gray-500 hover:text-gray-700">
                 <X className="w-6 h-6" />
               </button>
             </div>
@@ -487,8 +477,7 @@ export default function BankAccountsPage() {
                   required
                   value={transferForm.fromAccountId}
                   onChange={(e) => setTransferForm({ ...transferForm, fromAccountId: e.target.value })}
-                  aria-label="Conta Origem"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">Selecione a conta de origem</option>
                   {Array.isArray(accounts) && accounts.map((account) => (
@@ -505,8 +494,7 @@ export default function BankAccountsPage() {
                   required
                   value={transferForm.toAccountId}
                   onChange={(e) => setTransferForm({ ...transferForm, toAccountId: e.target.value })}
-                  aria-label="Conta Destino"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">Selecione a conta de destino</option>
                   {Array.isArray(accounts) && accounts
@@ -528,7 +516,7 @@ export default function BankAccountsPage() {
                   min="0.01"
                   value={transferForm.amount}
                   onChange={(e) => setTransferForm({ ...transferForm, amount: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   placeholder="0.00"
                 />
               </div>
@@ -539,7 +527,7 @@ export default function BankAccountsPage() {
                   type="text"
                   value={transferForm.description}
                   onChange={(e) => setTransferForm({ ...transferForm, description: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   placeholder="Ex: Transferência para reserva de emergência"
                 />
               </div>

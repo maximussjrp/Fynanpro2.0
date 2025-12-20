@@ -2,76 +2,26 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ==================== UTOP DESIGN SYSTEM ==================== */
 :root {
-  /* UTOP - Paleta Principal */
-  --utop-primary: #1F4FD8;
-  --utop-secondary: #2ECC9A;
-  --utop-accent: #9AF0C6;
-  
-  /* Paleta Neutra */
-  --utop-dark: #0F172A;
-  --utop-gray: #475569;
-  --utop-light: #CBD5E1;
-  --utop-background: #F8FAFC;
-  
-  /* Alertas */
-  --utop-success: #22C55E;
-  --utop-warning: #FACC15;
-  --utop-error: #EF4444;
-  
-  --foreground-rgb: 15, 23, 42;
-  --background-start-rgb: 248, 250, 252;
-  --background-end-rgb: 248, 250, 252;
+  --foreground-rgb: 0, 0, 0;
+  --background-start-rgb: 214, 219, 220;
+  --background-end-rgb: 255, 255, 255;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --foreground-rgb: 248, 250, 252;
-    --background-start-rgb: 15, 23, 42;
-    --background-end-rgb: 15, 23, 42;
+    --foreground-rgb: 255, 255, 255;
+    --background-start-rgb: 0, 0, 0;
+    --background-end-rgb: 0, 0, 0;
   }
 }
 
 body {
   color: rgb(var(--foreground-rgb));
-  background: var(--utop-background);
-  font-family: 'Inter', sans-serif;
-}
-
-/* ==================== FONTES CUSTOMIZADAS ==================== */
-@layer utilities {
-  .font-poppins {
-    font-family: 'Poppins', sans-serif;
-  }
-  
-  .font-inter {
-    font-family: 'Inter', sans-serif;
-  }
-  
-  .font-satoshi {
-    font-family: 'Satoshi', sans-serif;
-  }
-}
-
-/* ==================== PROGRESS BAR CUSTOMIZADA ==================== */
-.progress-bar-income {
-  background-color: var(--utop-secondary);
-}
-
-.progress-bar-expense {
-  background-color: var(--utop-error);
-}
-
-/* ==================== VISUALLY HIDDEN (ACESSIBILIDADE) ==================== */
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border-width: 0;
+  background: linear-gradient(
+      to bottom,
+      transparent,
+      rgb(var(--background-end-rgb))
+    )
+    rgb(var(--background-start-rgb));
 }

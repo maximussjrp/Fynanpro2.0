@@ -1,137 +1,110 @@
 /**
  * Serviço de Geração de Transações Recorrentes
- * 
- * REFATORADO: Agora trabalha com RecurringBillOccurrence ao invés de criar Transaction diretamente.
- * ATUALIZADO: Também suporta transações unificadas (transactionType = 'recurring')
- * 
- * Responsabilidades:
- * 1. Gerar novas ocorrências para contas recorrentes ativas
- * 2. Gerar próximas ocorrências de transações unificadas recorrentes
- * 3. Gerar transações de parcelas vencidas
- * 4. Atualizar status de transações/ocorrências vencidas para 'overdue'
- * 
- * IMPORTANTE: O job NÃO cria transações para recorrências!
- * Transações são criadas APENAS quando o usuário paga uma ocorrência.
+ * Responsável por criar transações automáticas baseadas em RecurringBills
  */
 
 import { PrismaClient } from '@prisma/client';
-import { recurringBillService } from './recurring-bill.service';
-import { transactionService } from './transaction.service';
-import { log } from '../utils/logger';
 
 const prisma = new PrismaClient();
 
 interface GenerationResult {
-  generatedOccurrences: number;
-  generatedUnifiedRecurring: number;
+  generatedRecurring: number;
   generatedInstallments: number;
-  updatedOverdueOccurrences: number;
-  updatedOverdueTransactions: number;
+  updatedOverdue: number;
   errors: string[];
 }
 
 /**
- * Gera ocorrências de contas recorrentes ativas
- * CORRIGIDO: Usa RecurringBillOccurrence, não cria Transaction diretamente
+ * Gera transações de contas recorrentes ativas
  */
-export async function generateRecurringOccurrences(
-  tenantId: string
+export async function generateRecurringTransactions(
+  tenantId: string,
+  userId: string
 ): Promise<number> {
-  try {
-    const result = await recurringBillService.generateAllOccurrences(tenantId);
-    
-    if (result.errors.length > 0) {
-      log.warn('Some recurring bills had errors during generation', {
-        tenantId,
-        errors: result.errors,
-      });
+  const activeRecurringBills = await prisma.recurringBill.findMany({
+    where: {
+      tenantId,
+      status: 'active',
+      autoGenerate: true,
+      deletedAt: null,
+    },
+  });
+
+  let generated = 0;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  for (const bill of activeRecurringBills) {
+    const currentDate = new Date(today);
+    const dueDay = bill.dueDay;
+
+    // Se já passou o dia do mês, pegar próximo mês
+    if (currentDate.getDate() > dueDay) {
+      currentDate.setMonth(currentDate.getMonth() + 1);
+    }
+    currentDate.setDate(dueDay);
+
+    // Verificar se está dentro do range permitido
+    if (bill.firstDueDate && currentDate < new Date(bill.firstDueDate)) {
+      continue;
+    }
+    if (bill.lastDueDate && currentDate > new Date(bill.lastDueDate)) {
+      continue;
     }
 
-    return result.totalGenerated;
-  } catch (error) {
-    log.error('generateRecurringOccurrences error', { tenantId, error });
-    throw error;
-  }
-}
-
-/**
- * Gera próximas ocorrências de transações unificadas recorrentes
- * NOVO: Suporta o modelo unificado (transactionType = 'recurring')
- */
-export async function generateUnifiedRecurringOccurrences(
-  tenantId: string
-): Promise<number> {
-  try {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    // Buscar transações pai recorrentes que precisam gerar próxima ocorrência
-    const recurringParents = await prisma.transaction.findMany({
+    // ✅ CORREÇÃO: Query de duplicatas mais específica
+    const existingTransaction = await prisma.transaction.findFirst({
       where: {
         tenantId,
-        transactionType: 'recurring',
-        parentId: null, // É uma transação pai (template)
-        autoGenerateNext: true,
-        deletedAt: null,
-        OR: [
-          { endDate: null }, // Sem data final = infinita
-          { endDate: { gte: today } }, // Data final ainda não atingida
-        ],
-        nextDueDate: {
-          lte: today, // Próxima data é hoje ou já passou
+        transactionDate: {
+          gte: new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate()),
+          lt: new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate() + 1),
         },
+        // Query exata - evita falsos positivos
+        OR: [
+          { description: { equals: `${bill.name} (Recorrente)` } },
+          { description: { equals: `${bill.name} (Previsto)` } },
+          {
+            AND: [
+              { description: { equals: bill.name } },
+              { amount: bill.amount || 0 },
+              { type: bill.type.toUpperCase() },
+            ],
+          },
+        ],
+        deletedAt: null,
       },
     });
 
-    let generated = 0;
-
-    for (const parent of recurringParents) {
-      try {
-        // Verificar se já existe ocorrência para a data
-        const existingOccurrence = await prisma.transaction.findFirst({
-          where: {
-            parentId: parent.id,
-            dueDate: parent.nextDueDate,
-            deletedAt: null,
+    if (!existingTransaction) {
+      // ✅ CORREÇÃO: Usar transação atômica
+      await prisma.$transaction(async (tx) => {
+        await tx.transaction.create({
+          data: {
+            tenantId,
+            userId,
+            categoryId: bill.categoryId,
+            bankAccountId: bill.bankAccountId,
+            paymentMethodId: bill.paymentMethodId,
+            type: bill.type.toUpperCase(),
+            amount: bill.amount || 0,
+            description: `${bill.name} (Recorrente)`,
+            transactionDate: currentDate,
+            status: currentDate <= today ? 'completed' : 'pending',
+            notes: bill.notes || undefined,
           },
         });
+      });
 
-        if (!existingOccurrence) {
-          await transactionService.generateNextOccurrence(parent.id, tenantId);
-          generated++;
-          
-          log.info('Generated unified recurring occurrence', {
-            tenantId,
-            parentId: parent.id,
-            description: parent.description,
-          });
-        }
-      } catch (error) {
-        log.error('Error generating unified recurring occurrence', {
-          tenantId,
-          parentId: parent.id,
-          error,
-        });
-      }
+      generated++;
     }
-
-    return generated;
-  } catch (error) {
-    log.error('generateUnifiedRecurringOccurrences error', { tenantId, error });
-    throw error;
   }
-}
 
-/**
- * Atualiza status de ocorrências vencidas para 'overdue'
- */
-export async function updateOverdueOccurrences(tenantId: string): Promise<number> {
-  return recurringBillService.updateOverdueOccurrences(tenantId);
+  return generated;
 }
 
 /**
  * Gera transações de parcelas vencidas
- * (Parcelas funcionam diferente de recorrências - aqui criamos Transaction)
  */
 export async function generateInstallmentTransactions(
   tenantId: string,
@@ -163,7 +136,7 @@ export async function generateInstallmentTransactions(
     });
 
     if (!existingTransaction) {
-      // Usar transação atômica
+      // ✅ CORREÇÃO: Usar transação atômica
       await prisma.$transaction(async (tx) => {
         await tx.transaction.create({
           data: {
@@ -176,7 +149,6 @@ export async function generateInstallmentTransactions(
             amount: installment.amount,
             description: `${installment.installmentPurchase.name} - Parcela ${installment.installmentNumber}/${installment.installmentPurchase.numberOfInstallments}`,
             transactionDate: installment.dueDate,
-            dueDate: installment.dueDate,
             status: 'pending',
             installmentId: installment.id,
           },
@@ -191,7 +163,7 @@ export async function generateInstallmentTransactions(
 }
 
 /**
- * Atualiza status de transações vencidas para 'overdue'
+ * Atualiza status de transações vencidas
  */
 export async function updateOverdueTransactions(tenantId: string): Promise<number> {
   const today = new Date();
@@ -214,78 +186,38 @@ export async function updateOverdueTransactions(tenantId: string): Promise<numbe
 
 /**
  * Executa todos os processos de geração para um tenant
- * REFATORADO: Gera Occurrences para recorrências, não Transactions
- * ATUALIZADO: Também suporta transações unificadas recorrentes
  */
 export async function generateAllTransactions(
   tenantId: string,
   userId: string
 ): Promise<GenerationResult> {
   const errors: string[] = [];
-  let generatedOccurrences = 0;
-  let generatedUnifiedRecurring = 0;
+  let generatedRecurring = 0;
   let generatedInstallments = 0;
-  let updatedOverdueOccurrences = 0;
-  let updatedOverdueTransactions = 0;
+  let updatedOverdue = 0;
 
-  // 1. Gerar ocorrências de recorrências legadas (RecurringBillOccurrence)
   try {
-    generatedOccurrences = await generateRecurringOccurrences(tenantId);
+    generatedRecurring = await generateRecurringTransactions(tenantId, userId);
   } catch (error) {
-    errors.push(`Occurrences: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    errors.push(`Recurring: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 
-  // 2. Gerar ocorrências de transações unificadas recorrentes (NOVO)
-  try {
-    generatedUnifiedRecurring = await generateUnifiedRecurringOccurrences(tenantId);
-  } catch (error) {
-    errors.push(`Unified Recurring: ${error instanceof Error ? error.message : 'Unknown error'}`);
-  }
-
-  // 3. Gerar transações de parcelas vencidas (legado)
   try {
     generatedInstallments = await generateInstallmentTransactions(tenantId, userId);
   } catch (error) {
     errors.push(`Installments: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 
-  // 4. Atualizar status de ocorrências vencidas (legado)
   try {
-    updatedOverdueOccurrences = await updateOverdueOccurrences(tenantId);
+    updatedOverdue = await updateOverdueTransactions(tenantId);
   } catch (error) {
-    errors.push(`Overdue Occurrences: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    errors.push(`Overdue: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
-
-  // 5. Atualizar status de transações vencidas (incluindo unificadas)
-  try {
-    updatedOverdueTransactions = await updateOverdueTransactions(tenantId);
-  } catch (error) {
-    errors.push(`Overdue Transactions: ${error instanceof Error ? error.message : 'Unknown error'}`);
-  }
-
-  // 6. Atualizar status de transações unificadas vencidas
-  try {
-    await transactionService.updateOverdueStatus(tenantId);
-  } catch (error) {
-    errors.push(`Unified Overdue: ${error instanceof Error ? error.message : 'Unknown error'}`);
-  }
-
-  log.info('generateAllTransactions completed', {
-    tenantId,
-    generatedOccurrences,
-    generatedUnifiedRecurring,
-    generatedInstallments,
-    updatedOverdueOccurrences,
-    updatedOverdueTransactions,
-    errors,
-  });
 
   return {
-    generatedOccurrences,
-    generatedUnifiedRecurring,
+    generatedRecurring,
     generatedInstallments,
-    updatedOverdueOccurrences,
-    updatedOverdueTransactions,
+    updatedOverdue,
     errors,
   };
 }

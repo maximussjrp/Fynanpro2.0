@@ -1,7 +1,7 @@
 'use client';
 
 import { useAuth } from '@/stores/auth';
-import { toast } from 'sonner';
+
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { PlusCircle, TrendingUp, AlertTriangle, CheckCircle, ArrowLeft } from 'lucide-react';
@@ -118,15 +118,14 @@ export default function BudgetsPage() {
 
       const data = await response.json();
       if (data.success) {
-        toast.success(editingBudget ? 'Orçamento atualizado!' : 'Orçamento criado!');
         loadBudgets();
         closeModal();
       } else {
-        toast.error(data.error?.message || 'Erro ao salvar orçamento');
+        alert(data.error?.message || 'Erro ao salvar orçamento');
       }
     } catch (error) {
       console.error('Erro ao salvar:', error);
-      toast.error('Erro ao salvar orçamento');
+      alert('Erro ao salvar orçamento');
     }
   };
 
@@ -142,14 +141,13 @@ export default function BudgetsPage() {
       
       const data = await response.json();
       if (data.success) {
-        toast.success('Orçamento excluído!');
         loadBudgets();
       } else {
-        toast.error(data.error?.message || 'Erro ao deletar');
+        alert(data.error?.message || 'Erro ao deletar');
       }
     } catch (error) {
       console.error('Erro ao deletar:', error);
-      toast.error('Erro ao deletar orçamento');
+      alert('Erro ao deletar orçamento');
     }
   };
 
@@ -225,7 +223,7 @@ export default function BudgetsPage() {
         </div>
         <button
           onClick={openCreateModal}
-          className="flex items-center gap-2 bg-[#1F4FD8] hover:bg-[#1A44BF] text-white px-6 py-3 rounded-lg font-medium transition"
+          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition"
         >
           <PlusCircle className="w-5 h-5" />
           Novo Orçamento
@@ -239,8 +237,7 @@ export default function BudgetsPage() {
           <select
             value={selectedMonth}
             onChange={(e) => setSelectedMonth(e.target.value)}
-            aria-label="Mês"
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8]"
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           >
             <option value="1">Janeiro</option>
             <option value="2">Fevereiro</option>
@@ -258,8 +255,7 @@ export default function BudgetsPage() {
           <select
             value={selectedYear}
             onChange={(e) => setSelectedYear(e.target.value)}
-            aria-label="Ano"
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8]"
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           >
             {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i).map(year => (
               <option key={year} value={year}>{year}</option>
@@ -270,7 +266,7 @@ export default function BudgetsPage() {
               setSelectedMonth(new Date().getMonth() + 1 + '');
               setSelectedYear(new Date().getFullYear() + '');
             }}
-            className="px-4 py-2 text-sm text-[#1F4FD8] hover:bg-[#EFF6FF] rounded-lg transition"
+            className="px-4 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition"
           >
             Mês Atual
           </button>
@@ -282,7 +278,7 @@ export default function BudgetsPage() {
           <p className="text-gray-600 text-lg">Nenhum orçamento cadastrado</p>
           <button
             onClick={openCreateModal}
-            className="mt-4 text-[#1F4FD8] hover:text-[#1A44BF] font-medium"
+            className="mt-4 text-blue-600 hover:text-blue-700 font-medium"
           >
             Criar primeiro orçamento
           </button>
@@ -357,7 +353,7 @@ export default function BudgetsPage() {
               <div className="flex gap-2 pt-4 border-t">
                 <button
                   onClick={() => openEditModal(budget)}
-                  className="flex-1 bg-[#EFF6FF] hover:bg-[#DBEAFE] text-[#1A44BF] py-2 rounded-lg font-medium transition"
+                  className="flex-1 bg-blue-50 hover:bg-blue-100 text-blue-700 py-2 rounded-lg font-medium transition"
                 >
                   Editar
                 </button>
@@ -398,7 +394,7 @@ export default function BudgetsPage() {
                   type="text"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
+                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                   placeholder="Ex: Alimentação Mensal"
                   required
                 />
@@ -411,8 +407,7 @@ export default function BudgetsPage() {
                 <select
                   value={formData.categoryId}
                   onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
-                  aria-label="Categoria do orçamento"
-                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
+                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                   required
                   disabled={!!editingBudget}
                 >
@@ -434,7 +429,7 @@ export default function BudgetsPage() {
                   step="0.01"
                   value={formData.amount}
                   onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
+                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                   placeholder="0.00"
                   required
                 />
@@ -447,8 +442,7 @@ export default function BudgetsPage() {
                 <select
                   value={formData.period}
                   onChange={(e) => setFormData({ ...formData, period: e.target.value })}
-                  aria-label="Período do orçamento"
-                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
+                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                   required
                 >
                   <option value="monthly">Mensal (Renova todo mês)</option>
@@ -504,7 +498,7 @@ export default function BudgetsPage() {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 bg-[#1F4FD8] hover:bg-[#1A44BF] text-white py-3 rounded-lg font-medium transition"
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium transition"
                 >
                   {editingBudget ? 'Salvar' : 'Criar'}
                 </button>

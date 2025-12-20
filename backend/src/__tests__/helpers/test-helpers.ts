@@ -3,17 +3,18 @@
  * Funções auxiliares para testes de integração
  */
 
-import { authService, AuthResponse } from '../../services/auth.service';
+import { authService } from '../../services/auth.service';
 import { mockPrisma } from '../setup';
 
 /**
  * Cria um usuário de teste e retorna tokens
  */
-export async function createTestUser(email = 'test@example.com', password = 'Test123!@#'): Promise<AuthResponse> {
+export async function createTestUser(email = 'test@example.com', password = 'Test123!@#') {
   const userData = {
     email,
     password,
-    fullName: 'Test User',
+    name: 'Test User',
+    tenantName: 'Test Tenant',
   };
 
   const result = await authService.register(userData);
@@ -23,7 +24,7 @@ export async function createTestUser(email = 'test@example.com', password = 'Tes
 /**
  * Faz login e retorna tokens
  */
-export async function loginTestUser(email = 'test@example.com', password = 'Test123!@#'): Promise<AuthResponse> {
+export async function loginTestUser(email = 'test@example.com', password = 'Test123!@#') {
   const result = await authService.login({ email, password });
   return result;
 }

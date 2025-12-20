@@ -64,6 +64,12 @@ router.get('/balance-summary', async (req: AuthRequest, res) => {
       },
     });
 
+    console.log('[BALANCE-SUMMARY] Período:', startDate, 'até', endDate);
+    console.log('[BALANCE-SUMMARY] Ocorrências pendentes encontradas:', pendingOccurrences.length);
+    pendingOccurrences.forEach(occ => {
+      console.log('  - ID:', occ.id, '| Vencimento:', occ.dueDate, '| Valor:', occ.amount, '| Tipo:', occ.recurringBill?.type);
+    });
+
     // RECEITAS
     const receivedIncome = transactions
       .filter(t => t.type === 'income' && t.status === 'completed')
@@ -192,7 +198,6 @@ router.get('/expense-ranking', async (req: AuthRequest, res) => {
     const categoryIds = [...new Set(expenses.map(e => e.categoryId).filter(Boolean))];
     const categories = await prisma.category.findMany({
       where: {
-        tenantId,
         id: { in: categoryIds as string[] },
       },
       select: {
@@ -310,7 +315,6 @@ router.get('/income-ranking', async (req: AuthRequest, res) => {
     const categoryIds = [...new Set(incomes.map(e => e.categoryId).filter(Boolean))];
     const categories = await prisma.category.findMany({
       where: {
-        tenantId,
         id: { in: categoryIds as string[] },
       },
       select: {
@@ -449,7 +453,7 @@ router.get('/income-vs-expenses', async (req: AuthRequest, res) => {
       currentDate.setMonth(currentDate.getMonth() + 1);
     }
     
-    // Adicionar transações - separar realizadas (completed) de pendentes
+    // Adicionar transações realizadas
     transactions.forEach(t => {
       const month = t.transactionDate.toISOString().substring(0, 7);
       if (!monthlyData[month]) {
@@ -462,20 +466,10 @@ router.get('/income-vs-expenses', async (req: AuthRequest, res) => {
         };
       }
       const amount = Number(t.amount);
-      const isCompleted = t.status === 'completed' || t.status === 'paid';
-      
       if (t.type === 'income') {
-        if (isCompleted) {
-          monthlyData[month].realizedIncome += amount;
-        } else {
-          monthlyData[month].projectedIncome += amount;
-        }
+        monthlyData[month].realizedIncome += amount;
       } else if (t.type === 'expense') {
-        if (isCompleted) {
-          monthlyData[month].realizedExpense += amount;
-        } else {
-          monthlyData[month].projectedExpense += amount;
-        }
+        monthlyData[month].realizedExpense += amount;
       }
     });
 

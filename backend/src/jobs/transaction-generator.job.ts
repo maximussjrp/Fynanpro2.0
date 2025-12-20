@@ -35,7 +35,6 @@ export function startTransactionGeneratorJob() {
       log.info('[JOB] Tenants ativos encontrados', { count: tenants.length });
 
       let totalRecurring = 0;
-      let totalUnifiedRecurring = 0;
       let totalInstallments = 0;
       let totalOverdue = 0;
       let errors = 0;
@@ -44,10 +43,9 @@ export function startTransactionGeneratorJob() {
         try {
           const result = await generateAllTransactions(tenant.id, tenant.ownerId);
 
-          totalRecurring += result.generatedOccurrences;
-          totalUnifiedRecurring += result.generatedUnifiedRecurring;
+          totalRecurring += result.generatedRecurring;
           totalInstallments += result.generatedInstallments;
-          totalOverdue += result.updatedOverdueOccurrences + result.updatedOverdueTransactions;
+          totalOverdue += result.updatedOverdue;
 
           if (result.errors.length > 0) {
             log.warn('[JOB] Tenant com erros', { 
@@ -59,8 +57,7 @@ export function startTransactionGeneratorJob() {
 
           log.info('[JOB] Tenant processado', { 
             tenantName: tenant.name, 
-            occurrences: result.generatedOccurrences,
-            unifiedRecurring: result.generatedUnifiedRecurring,
+            recurring: result.generatedRecurring, 
             installments: result.generatedInstallments 
           });
         } catch (error) {
@@ -75,8 +72,7 @@ export function startTransactionGeneratorJob() {
       const duration = Date.now() - startTime;
 
       log.info('[JOB] Geração de transações concluída', {
-        totalOccurrences: totalRecurring,
-        totalUnifiedRecurring,
+        totalRecurring,
         totalInstallments,
         totalOverdue,
         errors,
@@ -105,7 +101,7 @@ export async function runTransactionGeneratorNow() {
 
   for (const tenant of tenants) {
     const result = await generateAllTransactions(tenant.id, tenant.ownerId);
-    const totalGenerated = result.generatedOccurrences + result.generatedInstallments;
+    const totalGenerated = result.generatedRecurring + result.generatedInstallments;
     log.info('[JOB] Tenant processado manualmente', { 
       tenantId: tenant.id, 
       totalGenerated 

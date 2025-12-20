@@ -6,6 +6,7 @@
 import express, { Express } from 'express';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
+import { registerAuthRoutes } from '../../main-routes';
 import transactionRoutes from '../../routes/transactions';
 import dashboardRoutes from '../../routes/dashboard';
 import categoryRoutes from '../../routes/categories';
@@ -31,10 +32,11 @@ export function createTestApp(): Express {
 
   app.use(testLimiter);
 
-  // Registrar rotas (auth está no main.ts, não aqui)
-  app.use('/api/v1/transactions', transactionRoutes);
-  app.use('/api/v1/dashboard', dashboardRoutes);
-  app.use('/api/v1/categories', categoryRoutes);
+  // Registrar rotas
+  registerAuthRoutes(app);
+  app.use('/transactions', transactionRoutes);
+  app.use('/dashboard', dashboardRoutes);
+  app.use('/categories', categoryRoutes);
 
   return app;
 }

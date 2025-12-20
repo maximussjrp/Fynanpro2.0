@@ -1,6 +1,9 @@
 'use client';
 
 import { useAuth } from '@/stores/auth';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
+
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
@@ -137,7 +140,7 @@ export default function ImportsPage() {
 
   const loadBankAccounts = async () => {
     try {
-      const response = await fetch('http://localhost:3000/api/v1/import/accounts', {
+      const response = await fetch(`${API_URL}/import/accounts`, {
         headers: { 'Authorization': `Bearer ${accessToken}` }
       });
       const data = await response.json();
@@ -150,7 +153,7 @@ export default function ImportsPage() {
 
   const loadPaymentMethods = async () => {
     try {
-      const response = await fetch('http://localhost:3000/api/v1/payment-methods', {
+      const response = await fetch(`${API_URL}/payment-methods`, {
         headers: { 'Authorization': `Bearer ${accessToken}` }
       });
       const data = await response.json();
@@ -162,7 +165,7 @@ export default function ImportsPage() {
 
   const loadCategories = async () => {
     try {
-      const response = await fetch('http://localhost:3000/api/v1/import/categories', {
+      const response = await fetch(`${API_URL}/import/categories`, {
         headers: { 'Authorization': `Bearer ${accessToken}` }
       });
       const data = await response.json();
@@ -174,7 +177,7 @@ export default function ImportsPage() {
 
   const loadHistory = async () => {
     try {
-      const response = await fetch('http://localhost:3000/api/v1/import/history', {
+      const response = await fetch(`${API_URL}/import/history`, {
         headers: { 'Authorization': `Bearer ${accessToken}` }
       });
       const data = await response.json();
@@ -252,7 +255,7 @@ export default function ImportsPage() {
       const blob = new Blob([fileContent], { type: 'text/plain' });
       formData.append('file', blob, fileName);
 
-      const response = await fetch('http://localhost:3000/api/v1/import/upload', {
+      const response = await fetch(`${API_URL}/import/upload`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${accessToken}`,
@@ -333,7 +336,7 @@ export default function ImportsPage() {
     setStep('processing');
 
     try {
-      const response = await fetch('http://localhost:3000/api/v1/import/confirm', {
+      const response = await fetch(`${API_URL}/import/confirm`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -377,7 +380,7 @@ export default function ImportsPage() {
     }
 
     try {
-      const response = await fetch(`http://localhost:3000/api/v1/import/${id}`, {
+      const response = await fetch(`${API_URL}/import/${id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${accessToken}`,

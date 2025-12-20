@@ -11,6 +11,10 @@ interface EnvConfig {
   JWT_EXPIRATION: string;
   FRONTEND_URL: string;
   REDIS_URL?: string;
+  // Asaas Payment Gateway
+  ASAAS_API_KEY?: string;
+  ASAAS_SANDBOX?: string;
+  ASAAS_WEBHOOK_TOKEN?: string;
 }
 
 /**
@@ -84,6 +88,10 @@ Gere um secret seguro com:
     JWT_EXPIRATION: process.env.JWT_EXPIRATION!,
     FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:3001',
     REDIS_URL: process.env.REDIS_URL,
+    // Asaas Payment Gateway
+    ASAAS_API_KEY: process.env.ASAAS_API_KEY,
+    ASAAS_SANDBOX: process.env.ASAAS_SANDBOX || 'true',
+    ASAAS_WEBHOOK_TOKEN: process.env.ASAAS_WEBHOOK_TOKEN,
   };
 }
 

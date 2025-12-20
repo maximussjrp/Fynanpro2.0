@@ -2,8 +2,6 @@ import { Router, Response } from 'express';
 import { prisma } from '../main';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { successResponse, errorResponse } from '../utils/response';
-import { recurringBillService } from '../services/recurring-bill.service';
-import { log } from '../utils/logger';
 
 const router = Router();
 
@@ -79,7 +77,7 @@ router.get('/templates', async (req: AuthRequest, res: Response) => {
     });
     
   } catch (error: any) {
-    log.error('Error fetching templates:', { error: error.message });
+    console.error('Error fetching templates:', error);
     return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao buscar templates', 500);
   }
 });
@@ -174,8 +172,8 @@ router.get('/', async (req: AuthRequest, res: Response) => {
         cancelled: recurringBills.filter(b => b.status === 'cancelled').length,
       },
     });
-  } catch (error: any) {
-    log.error('Get recurring bills error:', { error: error.message });
+  } catch (error) {
+    console.error('Get recurring bills error:', error);
     return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao buscar contas fixas', 500);
   }
 });
@@ -210,11 +208,6 @@ router.get('/occurrences', async (req: AuthRequest, res: Response) => {
     if (status && status !== 'all') {
       where.status = status as string;
     }
-
-    // Filtrar apenas ocorrências de contas não deletadas
-    where.recurringBill = {
-      deletedAt: null,
-    };
 
     const occurrences = await prisma.recurringBillOccurrence.findMany({
       where,
@@ -256,8 +249,8 @@ router.get('/occurrences', async (req: AuthRequest, res: Response) => {
       occurrences,
       total: occurrences.length,
     });
-  } catch (error: any) {
-    log.error('Get occurrences error:', { error: error.message });
+  } catch (error) {
+    console.error('Get occurrences error:', error);
     return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao buscar ocorrências', 500);
   }
 });
@@ -293,8 +286,8 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
     }
 
     return successResponse(res, recurringBill);
-  } catch (error: any) {
-    log.error('Get recurring bill error:', { error: error.message });
+  } catch (error) {
+    console.error('Get recurring bill error:', error);
     return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao buscar conta fixa', 500);
   }
 });
@@ -382,12 +375,12 @@ router.post('/', async (req: AuthRequest, res: Response) => {
 
     // Auto-generate first occurrences if enabled
     if (autoGenerate) {
-      await recurringBillService.generateOccurrences(recurringBill.id, tenantId, 3);
+      await generateOccurrences(recurringBill.id, tenantId, 3);
     }
 
     return successResponse(res, recurringBill, 201);
-  } catch (error: any) {
-    log.error('Create recurring bill error:', { error: error.message });
+  } catch (error) {
+    console.error('Create recurring bill error:', error);
     return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao criar conta fixa', 500);
   }
 });
@@ -444,7 +437,7 @@ router.post('/activate-templates', async (req: AuthRequest, res: Response) => {
           include: { category: true, bankAccount: true, paymentMethod: true },
         });
 
-        await recurringBillService.generateOccurrences(recurringBill.id, tenantId, 3);
+        await generateOccurrences(recurringBill.id, tenantId, 3);
 
         activated.push({
           id: recurringBill.id,
@@ -466,8 +459,8 @@ router.post('/activate-templates', async (req: AuthRequest, res: Response) => {
       failed: errors.length,
     }, 201);
     
-  } catch (error: any) {
-    log.error('Error activating templates:', { error: error.message });
+  } catch (error) {
+    console.error('Error activating templates:', error);
     return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao ativar templates', 500);
   }
 });
@@ -544,8 +537,8 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
     });
 
     return successResponse(res, updated);
-  } catch (error: any) {
-    log.error('Update recurring bill error:', { error: error.message });
+  } catch (error) {
+    console.error('Update recurring bill error:', error);
     return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao atualizar conta fixa', 500);
   }
 });
@@ -579,28 +572,26 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
     });
 
     return successResponse(res, { message: 'Conta fixa excluída com sucesso' });
-  } catch (error: any) {
-    log.error('Delete recurring bill error:', { error: error.message });
+  } catch (error) {
+    console.error('Delete recurring bill error:', error);
     return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao excluir conta fixa', 500);
   }
 });
 
 // ==================== PAY OCCURRENCE ====================
 // POST /api/v1/recurring-bills/:id/occurrences/:occurrenceId/pay
-// CORRIGIDO: Usa serviço atômico para garantir consistência
 router.post('/:id/occurrences/:occurrenceId/pay', async (req: AuthRequest, res: Response) => {
   try {
     const { id, occurrenceId } = req.params;
     const tenantId = req.tenantId!;
     const userId = req.userId!;
-    const { paidAmount, paidDate, createTransaction = true, notes } = req.body;
+    const { paidAmount, paidDate, createTransaction = true } = req.body;
 
-    // Verificar se a ocorrência pertence à conta recorrente
+    // Find occurrence
     const occurrence = await prisma.recurringBillOccurrence.findFirst({
       where: {
         id: occurrenceId,
         recurringBillId: id,
-        tenantId,
       },
     });
 
@@ -608,49 +599,101 @@ router.post('/:id/occurrences/:occurrenceId/pay', async (req: AuthRequest, res: 
       return errorResponse(res, 'NOT_FOUND', 'Ocorrência não encontrada', 404);
     }
 
-    // Usar serviço atômico para pagamento
-    const result = await recurringBillService.payOccurrence(
-      occurrenceId,
-      tenantId,
-      userId,
-      {
-        paidAmount: paidAmount ? Number(paidAmount) : undefined,
-        paidDate: paidDate ? new Date(paidDate) : undefined,
-        createTransaction,
-        notes,
+    // Get recurring bill
+    const bill = await prisma.recurringBill.findFirst({
+      where: {
+        id: occurrence.recurringBillId,
+        tenantId,
+        deletedAt: null,
+      },
+    });
+
+    if (!bill) {
+      return errorResponse(res, 'NOT_FOUND', 'Conta fixa não encontrada', 404);
+    }
+
+    // Update occurrence
+    const updated = await prisma.recurringBillOccurrence.update({
+      where: { id: occurrenceId },
+      data: {
+        status: 'paid',
+        paidDate: paidDate ? new Date(paidDate) : new Date(),
+        paidAmount: paidAmount || bill.amount || 0,
+      },
+    });
+
+    // Create transaction if requested
+    if (createTransaction && bill.bankAccountId && bill.categoryId) {
+      const actualPaymentDate = new Date(); // Data real do pagamento (hoje)
+      const dueDate = occurrence.dueDate; // Data de vencimento original
+
+      // Calcular diferença de dias
+      const diffTime = actualPaymentDate.getTime() - dueDate.getTime();
+      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+      
+      const isPaidEarly = diffDays < 0;
+      const isPaidLate = diffDays > 0;
+      const daysEarlyLate = Math.abs(diffDays);
+
+      await prisma.transaction.create({
+        data: {
+          tenantId,
+          userId,
+          type: bill.type, // ✅ Usar tipo da recorrência (income ou expense)
+          categoryId: bill.categoryId,
+          bankAccountId: bill.bankAccountId,
+          paymentMethodId: bill.paymentMethodId,
+          amount: paidAmount || bill.amount || 0,
+          description: `Pagamento: ${bill.name}`,
+          transactionDate: dueDate, // ✅ Data de vencimento
+          paidDate: actualPaymentDate, // ✅ Data real do pagamento
+          isPaidEarly,
+          isPaidLate,
+          daysEarlyLate: diffDays !== 0 ? daysEarlyLate : null,
+          status: 'completed',
+          isRecurring: true,
+          recurringBillId: id,
+        },
+      });
+
+      console.log(`[PAY-OCCURRENCE] Transação criada:`);
+      console.log(`  - Vencimento: ${dueDate.toISOString().split('T')[0]}`);
+      console.log(`  - Pago em: ${actualPaymentDate.toISOString().split('T')[0]}`);
+      console.log(`  - Tipo: ${isPaidEarly ? `ANTECIPADO (${daysEarlyLate} dias)` : isPaidLate ? `ATRASADO (${daysEarlyLate} dias)` : 'EM DIA'}`);
+
+      // Update bank account balance
+      const balanceChange = paidAmount || bill.amount || 0;
+      if (bill.type === 'expense') {
+        // Despesa: diminui saldo
+        await prisma.bankAccount.update({
+          where: { id: bill.bankAccountId },
+          data: { currentBalance: { decrement: balanceChange } },
+        });
+        console.log(`  - Saldo atualizado: -R$ ${balanceChange}`);
+      } else {
+        // Receita: aumenta saldo
+        await prisma.bankAccount.update({
+          where: { id: bill.bankAccountId },
+          data: { currentBalance: { increment: balanceChange } },
+        });
+        console.log(`  - Saldo atualizado: +R$ ${balanceChange}`);
       }
-    );
-
-    log.info('Occurrence paid successfully', {
-      occurrenceId,
-      transactionId: result.transaction?.id,
-      balanceUpdated: result.balanceUpdated,
-      nextOccurrenceGenerated: result.nextOccurrenceGenerated,
-    });
-
-    return successResponse(res, {
-      occurrence: result.occurrence,
-      transaction: result.transaction,
-      balanceUpdated: result.balanceUpdated,
-      nextOccurrenceGenerated: result.nextOccurrenceGenerated,
-    });
-  } catch (error: any) {
-    log.error('Pay occurrence error:', { error: error.message, stack: error.stack });
-    
-    if (error.message === 'Ocorrência não encontrada') {
-      return errorResponse(res, 'NOT_FOUND', error.message, 404);
     }
-    if (error.message === 'Ocorrência já foi paga') {
-      return errorResponse(res, 'ALREADY_PAID', error.message, 400);
+
+    // Auto-generate next occurrence if autoGenerate is enabled
+    if (bill.autoGenerate && bill.status === 'active') {
+      await generateOccurrences(id, tenantId, 1);
     }
-    
+
+    return successResponse(res, updated);
+  } catch (error) {
+    console.error('Pay occurrence error:', error);
     return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao registrar pagamento', 500);
   }
 });
 
 // ==================== GENERATE OCCURRENCES ====================
 // POST /api/v1/recurring-bills/:id/generate-occurrences
-// CORRIGIDO: Usa serviço unificado com tratamento de dueDay em meses curtos
 router.post('/:id/generate-occurrences', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
@@ -669,67 +712,286 @@ router.post('/:id/generate-occurrences', async (req: AuthRequest, res: Response)
       return errorResponse(res, 'NOT_FOUND', 'Conta fixa não encontrada', 404);
     }
 
-    // Usar serviço unificado
-    const result = await recurringBillService.generateOccurrences(id, tenantId, months);
+    await generateOccurrences(id, tenantId, months);
 
-    // Buscar ocorrências geradas para retornar detalhes
-    const occurrences = await prisma.recurringBillOccurrence.findMany({
-      where: {
-        recurringBillId: id,
-        dueDate: { in: result.dates },
-      },
-      orderBy: { dueDate: 'asc' },
-    });
-
-    return successResponse(res, {
-      message: `${result.generated} ocorrências geradas com sucesso`,
-      generated: result.generated,
-      skipped: result.skipped,
-      occurrences,
-    });
-  } catch (error: any) {
-    log.error('Generate occurrences error:', { error: error.message });
+    return successResponse(res, { message: `${months} ocorrências geradas com sucesso` });
+  } catch (error) {
+    console.error('Generate occurrences error:', error);
     return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao gerar ocorrências', 500);
   }
 });
 
-// ==================== SKIP OCCURRENCE ====================
-// POST /api/v1/recurring-bills/:id/occurrences/:occurrenceId/skip
-// NOVO: Permite pular uma ocorrência sem pagar
-router.post('/:id/occurrences/:occurrenceId/skip', async (req: AuthRequest, res: Response) => {
-  try {
-    const { id, occurrenceId } = req.params;
-    const tenantId = req.tenantId!;
-    const { reason } = req.body;
+// ==================== HELPER: GENERATE OCCURRENCES ====================
+async function generateOccurrences(recurringBillId: string, tenantId: string, months: number) {
+  const bill = await prisma.recurringBill.findUnique({
+    where: { id: recurringBillId },
+  });
 
-    // Verificar se a ocorrência pertence à conta recorrente
-    const occurrence = await prisma.recurringBillOccurrence.findFirst({
+  if (!bill || bill.status !== 'active') return;
+
+  // Buscar a última ocorrência existente (seja paga ou pendente)
+  const lastOccurrence = await prisma.recurringBillOccurrence.findFirst({
+    where: {
+      recurringBillId,
+    },
+    orderBy: {
+      dueDate: 'desc',
+    },
+  });
+
+  // Se não houver ocorrências, usar firstDueDate ou calcular a partir de hoje
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  let startDate: Date;
+  
+  if (lastOccurrence) {
+    // Começar a partir da última ocorrência existente
+    startDate = new Date(lastOccurrence.dueDate);
+  } else {
+    // Primeira vez gerando: calcular a partir do mês atual
+    if (bill.firstDueDate) {
+      startDate = new Date(bill.firstDueDate);
+    } else {
+      // Calcular o dia de vencimento no mês atual
+      const currentMonthDueDate = new Date(today.getFullYear(), today.getMonth(), bill.dueDay);
+      currentMonthDueDate.setHours(0, 0, 0, 0);
+      
+      // Se o dia de vencimento no mês atual já passou, começar do próximo mês
+      if (currentMonthDueDate < today) {
+        startDate = new Date(today.getFullYear(), today.getMonth() + 1, bill.dueDay);
+      } else {
+        // Se ainda não passou, incluir o mês atual
+        startDate = currentMonthDueDate;
+      }
+    }
+  }
+
+  console.log(`[GENERATE-OCCURRENCES] Gerando ${months} ocorrências a partir de ${startDate.toISOString().split('T')[0]}`);
+
+  // Ajustar para começar do startDate (i=0) ao invés de startDate+1 (i=1)
+  for (let i = 0; i < months; i++) {
+    const dueDate = new Date(startDate);
+    
+    if (bill.frequency === 'monthly') {
+      dueDate.setMonth(startDate.getMonth() + i);
+    } else if (bill.frequency === 'yearly') {
+      dueDate.setFullYear(startDate.getFullYear() + i);
+    } else if (bill.frequency === 'weekly') {
+      dueDate.setDate(startDate.getDate() + (i * 7));
+    }
+
+    // Check if occurrence already exists
+    const existing = await prisma.recurringBillOccurrence.findFirst({
       where: {
-        id: occurrenceId,
-        recurringBillId: id,
-        tenantId,
+        recurringBillId,
+        dueDate: {
+          gte: new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate()),
+          lt: new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate() + 1),
+        },
       },
     });
 
-    if (!occurrence) {
-      return errorResponse(res, 'NOT_FOUND', 'Ocorrência não encontrada', 404);
+    if (!existing) {
+      await prisma.recurringBillOccurrence.create({
+        data: {
+          tenantId: bill.tenantId,
+          recurringBillId,
+          dueDate,
+          amount: bill.amount || 0,
+          status: 'pending',
+        },
+      });
+      console.log(`[GENERATE-OCCURRENCES] ✅ Criada ocorrência para ${dueDate.toISOString().split('T')[0]}`);
+    } else {
+      console.log(`[GENERATE-OCCURRENCES] ⏭️ Ocorrência já existe para ${dueDate.toISOString().split('T')[0]}`);
+    }
+  }
+}
+
+// ==================== GENERATE OCCURRENCES (AUTO-GENERATION) ====================
+// POST /api/v1/recurring-bills/:id/generate-occurrences
+router.post('/:id/generate-occurrences', async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId!;
+    const recurringBillId = req.params.id;
+    const { monthsAhead } = req.body;
+
+    // Buscar recurring bill
+    const recurringBill = await prisma.recurringBill.findFirst({
+      where: {
+        id: recurringBillId,
+        tenantId,
+        deletedAt: null,
+      },
+    });
+
+    if (!recurringBill) {
+      return errorResponse(res, 'RECURRING_BILL_NOT_FOUND', 'Recurring bill not found', 404);
     }
 
-    // Usar serviço para pular
-    const result = await recurringBillService.skipOccurrence(occurrenceId, tenantId, reason);
+    if (recurringBill.status !== 'active') {
+      return errorResponse(res, 'RECURRING_BILL_INACTIVE', 'Recurring bill is not active', 400);
+    }
 
-    return successResponse(res, result);
-  } catch (error: any) {
-    log.error('Skip occurrence error:', { error: error.message });
-    
-    if (error.message === 'Ocorrência não encontrada') {
-      return errorResponse(res, 'NOT_FOUND', error.message, 404);
+    // Determinar quantos meses gerar
+    const months = monthsAhead || recurringBill.monthsAhead || 3;
+
+    // Buscar última transação gerada para esta recorrência
+    const lastTransaction = await prisma.transaction.findFirst({
+      where: {
+        recurringBillId,
+        tenantId,
+        deletedAt: null,
+      },
+      orderBy: {
+        dueDate: 'desc',
+      },
+    });
+
+    // Data inicial: última transação + 1 período OU startDate
+    let currentDate = new Date();
+    if (lastTransaction && lastTransaction.dueDate) {
+      currentDate = new Date(lastTransaction.dueDate);
+      // Avançar 1 período baseado na frequência
+      switch (recurringBill.frequency) {
+        case 'monthly':
+          currentDate.setMonth(currentDate.getMonth() + 1);
+          break;
+        case 'weekly':
+          currentDate.setDate(currentDate.getDate() + 7);
+          break;
+        case 'biweekly':
+          currentDate.setDate(currentDate.getDate() + 14);
+          break;
+        case 'yearly':
+          currentDate.setFullYear(currentDate.getFullYear() + 1);
+          break;
+        default:
+          currentDate.setMonth(currentDate.getMonth() + 1);
+      }
     }
-    if (error.message === 'Não é possível pular uma ocorrência já paga') {
-      return errorResponse(res, 'ALREADY_PAID', error.message, 400);
+
+    // Gerar transações
+    const transactionsToCreate = [];
+    const createdTransactions = [];
+
+    for (let i = 0; i < months; i++) {
+      // Calcular próxima data de vencimento
+      const dueDate = new Date(currentDate);
+
+      // Verificar se já existe transação nesta data
+      const existingTransaction = await prisma.transaction.findFirst({
+        where: {
+          recurringBillId,
+          tenantId,
+          dueDate: {
+            gte: new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate()),
+            lt: new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate() + 1),
+          },
+          deletedAt: null,
+        },
+      });
+
+      if (!existingTransaction) {
+        transactionsToCreate.push({
+          tenantId,
+          userId: req.userId!,
+          categoryId: recurringBill.categoryId,
+          bankAccountId: recurringBill.bankAccountId,
+          paymentMethodId: recurringBill.paymentMethodId,
+          recurringBillId,
+          description: recurringBill.name,
+          amount: recurringBill.amount ? Number(recurringBill.amount) : 0,
+          type: recurringBill.type,
+          status: 'pending',
+          transactionDate: dueDate,
+          dueDate: dueDate,
+          isFixed: recurringBill.isFixed,
+        });
+      }
+
+      // Avançar para próximo período
+      switch (recurringBill.frequency) {
+        case 'monthly':
+          currentDate.setMonth(currentDate.getMonth() + 1);
+          break;
+        case 'weekly':
+          currentDate.setDate(currentDate.getDate() + 7);
+          break;
+        case 'biweekly':
+          currentDate.setDate(currentDate.getDate() + 14);
+          break;
+        case 'yearly':
+          currentDate.setFullYear(currentDate.getFullYear() + 1);
+          break;
+        default:
+          currentDate.setMonth(currentDate.getMonth() + 1);
+      }
     }
-    
-    return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao pular ocorrência', 500);
+
+    // Criar transações em batch
+    if (transactionsToCreate.length > 0) {
+      const result = await prisma.transaction.createMany({
+        data: transactionsToCreate,
+      });
+
+      // Buscar transações criadas para retornar detalhes
+      const created = await prisma.transaction.findMany({
+        where: {
+          recurringBillId,
+          tenantId,
+          status: 'pending',
+          dueDate: {
+            gte: transactionsToCreate[0].dueDate,
+          },
+          deletedAt: null,
+        },
+        include: {
+          category: {
+            select: {
+              id: true,
+              name: true,
+              type: true,
+              icon: true,
+              color: true,
+            },
+          },
+          bankAccount: {
+            select: {
+              id: true,
+              name: true,
+              type: true,
+            },
+          },
+          paymentMethod: {
+            select: {
+              id: true,
+              name: true,
+              type: true,
+            },
+          },
+        },
+        orderBy: {
+          dueDate: 'asc',
+        },
+      });
+
+      return successResponse(res, {
+        message: `${result.count} occurrences generated successfully`,
+        generated: result.count,
+        transactions: created,
+      }, 201);
+    } else {
+      return successResponse(res, {
+        message: 'No new occurrences to generate',
+        generated: 0,
+        transactions: [],
+      });
+    }
+  } catch (error) {
+    console.error('Generate occurrences error:', error);
+    return errorResponse(res, 'GENERATE_ERROR', 'Failed to generate occurrences', 500);
   }
 });
 
