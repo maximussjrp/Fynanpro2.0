@@ -365,6 +365,121 @@ router.put('/users/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// ==================== UPDATE USER STATUS ====================
+// PUT /api/v1/admin/users/:id/status
+router.put('/users/:id/status', async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { isActive } = req.body;
+
+    if (typeof isActive !== 'boolean') {
+      return errorResponse(res, 'VALIDATION_ERROR', 'isActive deve ser boolean', 400);
+    }
+
+    const user = await prisma.user.update({
+      where: { id },
+      data: { isActive },
+      select: {
+        id: true,
+        email: true,
+        fullName: true,
+        role: true,
+        isActive: true
+      }
+    });
+
+    log.info('Admin updated user status', { targetUserId: id, userId: req.userId, isActive });
+
+    return successResponse(res, { user });
+  } catch (error) {
+    log.error('Admin update user status error:', { error, userId: req.userId });
+    return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao atualizar status do usuário', 500);
+  }
+});
+
+// ==================== DELETE USER (SOFT DELETE) ====================
+// DELETE /api/v1/admin/users/:id
+// Remove o usuário mas permite recadastro com o mesmo email
+router.delete('/users/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    // Não pode deletar a si mesmo
+    if (id === req.userId) {
+      return errorResponse(res, 'FORBIDDEN', 'Você não pode remover a si mesmo', 403);
+    }
+
+    // Verifica se o usuário existe
+    const user = await prisma.user.findUnique({
+      where: { id },
+      include: {
+        ownedTenants: true
+      }
+    });
+
+    if (!user) {
+      return errorResponse(res, 'NOT_FOUND', 'Usuário não encontrado', 404);
+    }
+
+    // Não pode deletar outro super_master
+    if (user.role === 'super_master' && req.userRole !== 'super_master') {
+      return errorResponse(res, 'FORBIDDEN', 'Sem permissão para remover super_master', 403);
+    }
+
+    // Executa exclusão em transação
+    await prisma.$transaction(async (tx) => {
+      // 1. Remove vínculos tenant-user
+      await tx.tenantUser.deleteMany({
+        where: { userId: id }
+      });
+
+      // 2. Remove refresh tokens
+      await tx.refreshToken.deleteMany({
+        where: { userId: id }
+      });
+
+      // 3. Remove notificações do usuário
+      await tx.notification.deleteMany({
+        where: { userId: id }
+      });
+
+      // 4. Para cada tenant que o usuário é dono, remove owner e marca como deletado
+      for (const tenant of user.ownedTenants) {
+        await tx.tenant.update({
+          where: { id: tenant.id },
+          data: { 
+            ownerId: null,
+            deletedAt: new Date() 
+          }
+        });
+      }
+
+      // 5. Deleta o usuário permanentemente (permite recadastro com mesmo email)
+      await tx.user.delete({
+        where: { id }
+      });
+    });
+
+    log.warn('Admin deleted user', { 
+      deletedUserId: id, 
+      deletedEmail: user.email,
+      adminUserId: req.userId 
+    });
+
+    return successResponse(res, { 
+      message: 'Usuário removido com sucesso',
+      deletedUser: {
+        id: user.id,
+        email: user.email,
+        fullName: user.fullName
+      }
+    });
+  } catch (error) {
+    log.error('Admin delete user error:', { error, userId: req.userId });
+    return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao remover usuário', 500);
+  }
+});
+
 // ==================== IMPERSONATE USER (ACESSAR COMO) ====================
 // POST /api/v1/admin/impersonate/:userId
 router.post('/impersonate/:userId', async (req: AuthRequest, res: Response) => {

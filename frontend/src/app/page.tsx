@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
-import { Wallet, TrendingUp, PiggyBank, CreditCard, LogIn, UserPlus } from 'lucide-react';
+import { Wallet, TrendingUp, PiggyBank, CreditCard, LogIn, UserPlus, Eye, EyeOff, Mail, Lock, User, CheckCircle, Shield, Smartphone } from 'lucide-react';
 import { useAuth } from '@/stores/auth';
 import Logo from '@/components/Logo';
 
@@ -14,18 +14,53 @@ export default function Home() {
   const { setAuth } = useAuth();
   
   const [isLogin, setIsLogin] = useState(true);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [showVerificationMessage, setShowVerificationMessage] = useState(false);
+  const [registeredEmail, setRegisteredEmail] = useState('');
   const [formData, setFormData] = useState({
     email: '',
     password: '',
-    fullName: ''
+    confirmPassword: '',
+    fullName: '',
+    phone: ''
   });
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showResendOption, setShowResendOption] = useState(false);
+
+  // Validação de senha
+  const passwordValidation = {
+    minLength: formData.password.length >= 8,
+    hasUppercase: /[A-Z]/.test(formData.password),
+    hasLowercase: /[a-z]/.test(formData.password),
+    hasNumber: /[0-9]/.test(formData.password),
+    passwordsMatch: formData.password === formData.confirmPassword && formData.confirmPassword.length > 0
+  };
+
+  const isPasswordValid = passwordValidation.minLength && 
+    passwordValidation.hasUppercase && 
+    passwordValidation.hasLowercase && 
+    passwordValidation.hasNumber;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setMessage('');
+
+    // Validação adicional no cadastro
+    if (!isLogin) {
+      if (!isPasswordValid) {
+        setMessage('❌ A senha não atende aos requisitos mínimos');
+        setIsLoading(false);
+        return;
+      }
+      if (formData.password !== formData.confirmPassword) {
+        setMessage('❌ As senhas não coincidem');
+        setIsLoading(false);
+        return;
+      }
+    }
 
     try {
       const endpoint = isLogin ? '/auth/login' : '/auth/register';
@@ -35,39 +70,126 @@ export default function Home() {
             email: formData.email, 
             password: formData.password,
             fullName: formData.fullName,
-            tenantName: formData.fullName.split(' ')[0] + ' Finance' // Nome do tenant baseado no nome do usuário
+            tenantName: formData.fullName.split(' ')[0] + ' Finance'
           };
 
       const response = await axios.post(`${API_URL}${endpoint}`, payload);
 
       if (response.data.success) {
-        setMessage(`✅ ${isLogin ? 'Login realizado' : 'Cadastro realizado'} com sucesso!`);
-        console.log('Response:', response.data);
-        
-        // Salvar no Zustand store (que também salva no localStorage)
-        if (response.data.data?.tokens?.accessToken) {
-          setAuth(
-            {
-              accessToken: response.data.data.tokens.accessToken,
-              refreshToken: response.data.data.tokens.refreshToken,
-            },
-            response.data.data.user,
-            response.data.data.tenant
-          );
+        if (isLogin) {
+          setMessage('✅ Login realizado com sucesso!');
           
-          setTimeout(() => {
-            router.push('/dashboard');
-          }, 1500);
+          // Salvar no Zustand store
+          if (response.data.data?.tokens?.accessToken) {
+            setAuth(
+              {
+                accessToken: response.data.data.tokens.accessToken,
+                refreshToken: response.data.data.tokens.refreshToken,
+              },
+              response.data.data.user,
+              response.data.data.tenant
+            );
+            
+            setTimeout(() => {
+              router.push('/dashboard');
+            }, 1500);
+          }
+        } else {
+          // Cadastro - mostrar mensagem de verificação
+          setRegisteredEmail(formData.email);
+          setShowVerificationMessage(true);
         }
       }
     } catch (error: any) {
       console.error('Auth error:', error);
       const errorMsg = error.response?.data?.error?.message || 'Erro ao processar requisição';
       setMessage(`❌ ${errorMsg}`);
+      
+      // Se email já cadastrado ou não verificado, mostrar opção de reenviar
+      if (errorMsg.includes('já cadastrado') || errorMsg.includes('não verificado')) {
+        setRegisteredEmail(formData.email);
+        setShowResendOption(true);
+      } else {
+        setShowResendOption(false);
+      }
     } finally {
       setIsLoading(false);
     }
   };
+
+  const handleResendVerification = async () => {
+    setIsLoading(true);
+    try {
+      await axios.post(`${API_URL}/auth/resend-verification`, { email: registeredEmail });
+      setMessage('✅ Email de verificação reenviado!');
+    } catch (error) {
+      setMessage('❌ Erro ao reenviar email. Tente novamente.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Tela de verificação de email após cadastro
+  if (showVerificationMessage) {
+    return (
+      <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center p-4">
+        <div className="bg-white rounded-3xl shadow-xl p-8 lg:p-12 w-full max-w-md text-center">
+          <div className="flex items-center justify-center gap-3 mb-8">
+            <div className="w-12 h-12 bg-gradient-to-br from-[#1F4FD8] to-[#2ECC9A] rounded-xl flex items-center justify-center">
+              <span className="text-white font-bold text-xl">U</span>
+            </div>
+            <h1 className="text-3xl font-bold text-[#0F172A]" style={{fontFamily: 'Poppins, sans-serif'}}>
+              UTOP
+            </h1>
+          </div>
+
+          <div className="w-20 h-20 mx-auto bg-[#EEF2FF] rounded-full flex items-center justify-center mb-6">
+            <Mail className="w-10 h-10 text-[#1F4FD8]" />
+          </div>
+
+          <h2 className="text-2xl font-bold text-[#0F172A] mb-4">Verifique seu email</h2>
+          
+          <p className="text-[#475569] mb-2">
+            Enviamos um link de verificação para:
+          </p>
+          <p className="text-[#1F4FD8] font-semibold mb-6">{registeredEmail}</p>
+          
+          <p className="text-sm text-[#475569] mb-6">
+            Clique no link do email para ativar sua conta e começar a usar o UTOP.
+          </p>
+
+          <div className="space-y-3">
+            <button
+              onClick={handleResendVerification}
+              disabled={isLoading}
+              className="w-full py-3 border-2 border-[#1F4FD8] text-[#1F4FD8] rounded-xl font-semibold hover:bg-[#EEF2FF] transition-colors disabled:opacity-50"
+            >
+              {isLoading ? 'Reenviando...' : 'Reenviar email'}
+            </button>
+            
+            <button
+              onClick={() => {
+                setShowVerificationMessage(false);
+                setIsLogin(true);
+                setFormData({ email: '', password: '', confirmPassword: '', fullName: '', phone: '' });
+              }}
+              className="w-full py-3 text-[#475569] hover:text-[#0F172A] font-medium"
+            >
+              Voltar para login
+            </button>
+          </div>
+
+          {message && (
+            <div className={`mt-4 p-3 rounded-xl text-sm ${
+              message.startsWith('✅') ? 'bg-[#DCFCE7] text-[#22C55E]' : 'bg-[#FEF2F2] text-[#EF4444]'
+            }`}>
+              {message}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] relative overflow-hidden flex items-center justify-center p-4">
@@ -177,53 +299,151 @@ export default function Home() {
               </div>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-5">
+            <form onSubmit={handleSubmit} className="space-y-4">
               {!isLogin && (
-                <div>
-                  <label className="block text-sm font-semibold text-[#0F172A] mb-2" style={{fontFamily: 'Inter, sans-serif'}}>
-                    Nome Completo
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.fullName}
-                    onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                    className="w-full px-4 py-3.5 border-2 border-[#CBD5E1] rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] transition-all bg-[#F8FAFC]"
-                    style={{fontFamily: 'Inter, sans-serif'}}
-                    placeholder="Seu nome completo"
-                    required={!isLogin}
-                  />
-                </div>
+                <>
+                  {/* Nome Completo */}
+                  <div>
+                    <label className="block text-sm font-semibold text-[#0F172A] mb-2" style={{fontFamily: 'Inter, sans-serif'}}>
+                      Nome Completo
+                    </label>
+                    <div className="relative">
+                      <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#94A3B8]" />
+                      <input
+                        type="text"
+                        value={formData.fullName}
+                        onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+                        className="w-full pl-12 pr-4 py-3.5 border-2 border-[#CBD5E1] rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] transition-all bg-[#F8FAFC] text-[#0F172A] placeholder:text-[#94A3B8]"
+                        style={{fontFamily: 'Inter, sans-serif'}}
+                        placeholder="Seu nome completo"
+                        required={!isLogin}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Telefone (opcional) */}
+                  <div>
+                    <label className="block text-sm font-semibold text-[#0F172A] mb-2" style={{fontFamily: 'Inter, sans-serif'}}>
+                      Telefone <span className="text-[#94A3B8] font-normal">(opcional)</span>
+                    </label>
+                    <div className="relative">
+                      <Smartphone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#94A3B8]" />
+                      <input
+                        type="tel"
+                        value={formData.phone}
+                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                        className="w-full pl-12 pr-4 py-3.5 border-2 border-[#CBD5E1] rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] transition-all bg-[#F8FAFC] text-[#0F172A] placeholder:text-[#94A3B8]"
+                        style={{fontFamily: 'Inter, sans-serif'}}
+                        placeholder="(11) 99999-9999"
+                      />
+                    </div>
+                  </div>
+                </>
               )}
 
+              {/* Email */}
               <div>
                 <label className="block text-sm font-semibold text-[#0F172A] mb-2" style={{fontFamily: 'Inter, sans-serif'}}>
                   Email
                 </label>
-                <input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full px-4 py-3.5 border-2 border-[#CBD5E1] rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] transition-all bg-[#F8FAFC]"
-                  style={{fontFamily: 'Inter, sans-serif'}}
-                  placeholder="seu@email.com"
-                  required
-                />
+                <div className="relative">
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#94A3B8]" />
+                  <input
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    className="w-full pl-12 pr-4 py-3.5 border-2 border-[#CBD5E1] rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] transition-all bg-[#F8FAFC] text-[#0F172A] placeholder:text-[#94A3B8]"
+                    style={{fontFamily: 'Inter, sans-serif'}}
+                    placeholder="seu@email.com"
+                    required
+                  />
+                </div>
               </div>
 
+              {/* Senha */}
               <div>
                 <label className="block text-sm font-semibold text-[#0F172A] mb-2" style={{fontFamily: 'Inter, sans-serif'}}>
                   Senha
                 </label>
-                <input
-                  type="password"
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="w-full px-4 py-3.5 border-2 border-[#CBD5E1] rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] transition-all bg-[#F8FAFC]"
-                  style={{fontFamily: 'Inter, sans-serif'}}
-                  placeholder="••••••••"
-                  required
-                />
+                <div className="relative">
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#94A3B8]" />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    className="w-full pl-12 pr-12 py-3.5 border-2 border-[#CBD5E1] rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] transition-all bg-[#F8FAFC] text-[#0F172A] placeholder:text-[#94A3B8]"
+                    style={{fontFamily: 'Inter, sans-serif'}}
+                    placeholder="••••••••"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#475569]"
+                  >
+                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
+                </div>
               </div>
+
+              {/* Confirmar Senha (apenas no cadastro) */}
+              {!isLogin && (
+                <>
+                  <div>
+                    <label className="block text-sm font-semibold text-[#0F172A] mb-2" style={{fontFamily: 'Inter, sans-serif'}}>
+                      Confirmar Senha
+                    </label>
+                    <div className="relative">
+                      <Shield className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#94A3B8]" />
+                      <input
+                        type={showConfirmPassword ? 'text' : 'password'}
+                        value={formData.confirmPassword}
+                        onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                        className={`w-full pl-12 pr-12 py-3.5 border-2 rounded-xl focus:ring-2 transition-all bg-[#F8FAFC] text-[#0F172A] placeholder:text-[#94A3B8] ${
+                          formData.confirmPassword.length > 0
+                            ? passwordValidation.passwordsMatch
+                              ? 'border-[#22C55E] focus:border-[#22C55E] focus:ring-[#22C55E]'
+                              : 'border-[#EF4444] focus:border-[#EF4444] focus:ring-[#EF4444]'
+                            : 'border-[#CBD5E1] focus:border-[#1F4FD8] focus:ring-[#1F4FD8]'
+                        }`}
+                        style={{fontFamily: 'Inter, sans-serif'}}
+                        placeholder="••••••••"
+                        required={!isLogin}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#475569]"
+                      >
+                        {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Requisitos da Senha */}
+                  <div className="bg-[#F8FAFC] rounded-xl p-4 space-y-2">
+                    <p className="text-xs font-semibold text-[#475569] mb-2">Requisitos da senha:</p>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className={`flex items-center gap-2 ${passwordValidation.minLength ? 'text-[#22C55E]' : 'text-[#94A3B8]'}`}>
+                        <CheckCircle className="w-4 h-4" />
+                        <span>8+ caracteres</span>
+                      </div>
+                      <div className={`flex items-center gap-2 ${passwordValidation.hasUppercase ? 'text-[#22C55E]' : 'text-[#94A3B8]'}`}>
+                        <CheckCircle className="w-4 h-4" />
+                        <span>Letra maiúscula</span>
+                      </div>
+                      <div className={`flex items-center gap-2 ${passwordValidation.hasLowercase ? 'text-[#22C55E]' : 'text-[#94A3B8]'}`}>
+                        <CheckCircle className="w-4 h-4" />
+                        <span>Letra minúscula</span>
+                      </div>
+                      <div className={`flex items-center gap-2 ${passwordValidation.hasNumber ? 'text-[#22C55E]' : 'text-[#94A3B8]'}`}>
+                        <CheckCircle className="w-4 h-4" />
+                        <span>Número</span>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
 
               {message && (
                 <div className={`p-4 rounded-xl text-sm font-medium ${
@@ -235,9 +455,32 @@ export default function Home() {
                 </div>
               )}
 
+              {/* Botão de reenviar verificação quando email já cadastrado */}
+              {showResendOption && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setIsLoading(true);
+                    try {
+                      await axios.post(`${API_URL}/auth/resend-verification`, { email: registeredEmail });
+                      setMessage('✅ Email de verificação reenviado! Verifique sua caixa de entrada.');
+                      setShowResendOption(false);
+                    } catch (error) {
+                      setMessage('❌ Erro ao reenviar email. Tente novamente.');
+                    } finally {
+                      setIsLoading(false);
+                    }
+                  }}
+                  disabled={isLoading}
+                  className="w-full py-3 border-2 border-[#1F4FD8] text-[#1F4FD8] rounded-xl font-semibold hover:bg-[#EEF2FF] transition-colors disabled:opacity-50"
+                >
+                  {isLoading ? 'Reenviando...' : '📧 Reenviar email de verificação'}
+                </button>
+              )}
+
               <button
                 type="submit"
-                disabled={isLoading}
+                disabled={isLoading || (!isLogin && (!isPasswordValid || !passwordValidation.passwordsMatch))}
                 className="w-full bg-gradient-to-r from-[#1F4FD8] to-[#2ECC9A] hover:from-[#1A44BF] hover:to-[#27B589] text-white font-bold py-4 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
                 style={{fontFamily: 'Inter, sans-serif'}}
               >
@@ -251,6 +494,15 @@ export default function Home() {
                   Esqueceu sua senha?
                 </a>
               </div>
+            )}
+
+            {!isLogin && (
+              <p className="mt-6 text-center text-xs text-[#94A3B8]">
+                Ao criar sua conta, você concorda com nossos{' '}
+                <a href="/termos" className="text-[#1F4FD8] hover:underline">Termos de Uso</a>
+                {' '}e{' '}
+                <a href="/privacidade" className="text-[#1F4FD8] hover:underline">Política de Privacidade</a>
+              </p>
             )}
           </div>
         </div>

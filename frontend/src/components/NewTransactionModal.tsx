@@ -317,30 +317,55 @@ export default function TransactionModal({
   };
 
   // Função para construir lista hierárquica de categorias
-  const buildHierarchicalList = (cats: Category[]): Array<{ category: Category; level: number; indent: number }> => {
+  const buildHierarchicalList = (cats: Category[], searchTerm: string = ''): Array<{ category: Category; level: number; indent: number }> => {
     const result: Array<{ category: Category; level: number; indent: number }> = [];
+    const search = searchTerm.toLowerCase().trim();
     
     const addCategoryWithChildren = (cat: Category, indent: number = 0) => {
-      result.push({ category: cat, level: cat.level || 1, indent });
+      // Se há busca, verificar se a categoria ou algum filho corresponde
+      const catMatches = cat.name.toLowerCase().includes(search);
+      const hasMatchingChildren = cat.children?.some(child => 
+        child.name.toLowerCase().includes(search)
+      );
       
+      // Adicionar categoria se não há busca, ou se ela/filhos correspondem
+      if (!search || catMatches || hasMatchingChildren) {
+        result.push({ category: cat, level: cat.level || 1, indent });
+      }
+      
+      // Adicionar filhos
       if (cat.children && cat.children.length > 0) {
-        cat.children.forEach(child => addCategoryWithChildren(child, indent + 1));
+        cat.children.forEach(child => {
+          const childMatches = child.name.toLowerCase().includes(search);
+          // Se não há busca, ou filho corresponde, ou pai correspondeu
+          if (!search || childMatches || catMatches) {
+            result.push({ category: child, level: child.level || 2, indent: indent + 1 });
+            
+            // Adicionar netos se existirem
+            if (child.children && child.children.length > 0) {
+              child.children.forEach(grandchild => {
+                const grandchildMatches = grandchild.name.toLowerCase().includes(search);
+                if (!search || grandchildMatches || childMatches || catMatches) {
+                  result.push({ category: grandchild, level: grandchild.level || 3, indent: indent + 2 });
+                }
+              });
+            }
+          }
+        });
       }
     };
     
-    // Adicionar apenas categorias raiz (nível 1) e suas filhas
-    cats.filter(c => !c.parentId).forEach(cat => addCategoryWithChildren(cat));
+    // Adicionar apenas categorias raiz (parentId null ou undefined) e suas filhas
+    cats
+      .filter(c => !c.parentId && (c.level === 1 || c.level === undefined))
+      .forEach(cat => addCategoryWithChildren(cat));
     
     return result;
   };
 
-  // Filtrar e construir hierarquia
-  const filteredCategoriesFlat = categories.filter(
-    c => c.type === formData.type && 
-    c.name.toLowerCase().includes(categorySearch.toLowerCase())
-  );
-  
-  const filteredCategories = buildHierarchicalList(filteredCategoriesFlat);
+  // Filtrar por tipo e construir hierarquia com busca
+  const categoriesByType = categories.filter(c => c.type === formData.type);
+  const filteredCategories = buildHierarchicalList(categoriesByType, categorySearch);
 
   const handleCategorySelect = (category: Category) => {
     setFormData({ ...formData, categoryId: category.id });

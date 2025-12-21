@@ -9,6 +9,7 @@ import { env } from '../config/env';
 import { log } from '../utils/logger';
 import { RegisterDTO, LoginDTO, RefreshTokenDTO, ChangePasswordDTO } from '../dtos/auth.dto';
 import crypto from 'crypto';
+import { emailService } from './email.service';
 
 // Interfaces
 interface TokenPair {
@@ -39,10 +40,10 @@ export class AuthService {
   /**
    * Gera um par de tokens (access + refresh)
    */
-  private async generateTokenPair(userId: string, email: string, tenantId: string): Promise<TokenPair> {
+  private async generateTokenPair(userId: string, email: string, tenantId: string, role: string = 'owner'): Promise<TokenPair> {
     // Access Token (curta duração)
     const accessToken = jwt.sign(
-      { userId, email, tenantId },
+      { userId, email, tenantId, role },
       env.JWT_SECRET,
       { expiresIn: this.ACCESS_TOKEN_EXPIRATION } as jwt.SignOptions
     );
@@ -98,6 +99,10 @@ export class AuthService {
         counter++;
       }
 
+      // Gera token de verificação de email
+      const emailVerificationToken = crypto.randomBytes(32).toString('hex');
+      const emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 horas
+
       // Cria usuário + tenant + categorias em transação atômica
       const result = await prisma.$transaction(async (tx: any) => {
         // Cria usuário
@@ -108,6 +113,9 @@ export class AuthService {
             fullName: data.fullName,
             role: 'owner',
             lastLoginAt: new Date(),
+            emailVerificationToken,
+            emailVerificationExpires,
+            isEmailVerified: false,
           },
         });
 
@@ -132,24 +140,15 @@ export class AuthService {
           },
         });
 
-        // Importa categorias padrão
-        const { defaultCategories } = await import('../utils/default-categories');
-        await tx.category.createMany({
-          data: defaultCategories.map((cat: any) => ({
-            tenantId: tenant.id,
-            name: cat.name,
-            type: cat.type,
-            icon: cat.icon,
-            color: cat.color,
-            parentId: null,
-          })),
-        });
+        // Cria categorias padrão com hierarquia completa (3 níveis)
+        const { createDefaultCategories } = await import('../utils/default-categories');
+        await createDefaultCategories(tenant.id);
 
         return { user, tenant };
       });
 
       // Gera tokens
-      const tokens = await this.generateTokenPair(result.user.id, result.user.email, result.tenant.id);
+      const tokens = await this.generateTokenPair(result.user.id, result.user.email, result.tenant.id, result.user.role);
 
       // Registra IP e UserAgent no refresh token
       if (ipAddress || userAgent) {
@@ -159,6 +158,13 @@ export class AuthService {
         });
       }
 
+      // Envia email de verificação (async, não bloqueia o registro)
+      const verificationLink = emailService.getVerificationLink(emailVerificationToken);
+      emailService.sendVerificationEmail(result.user.email, {
+        userName: result.user.fullName.split(' ')[0],
+        verificationLink
+      }).catch(err => log.error('Erro ao enviar email de verificação', { error: err }));
+
       log.info('AuthService.register success', { userId: result.user.id, tenantId: result.tenant.id });
 
       return {
@@ -167,6 +173,7 @@ export class AuthService {
           email: result.user.email,
           fullName: result.user.fullName,
           role: result.user.role,
+          isEmailVerified: false,
         },
         tenant: {
           id: result.tenant.id,
@@ -174,9 +181,87 @@ export class AuthService {
           slug: result.tenant.slug,
         },
         tokens,
+        message: 'Cadastro realizado! Verifique seu email para ativar sua conta.',
       };
     } catch (error) {
       log.error('AuthService.register error', { error, email: data.email });
+      throw error;
+    }
+  }
+
+  /**
+   * Verifica email do usuário
+   */
+  async verifyEmail(token: string): Promise<{ success: boolean; message: string }> {
+    try {
+      const user = await prisma.user.findFirst({
+        where: {
+          emailVerificationToken: token,
+          emailVerificationExpires: { gt: new Date() },
+        },
+      });
+
+      if (!user) {
+        return { success: false, message: 'Token inválido ou expirado' };
+      }
+
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          isEmailVerified: true,
+          emailVerificationToken: null,
+          emailVerificationExpires: null,
+        },
+      });
+
+      // Envia email de boas-vindas
+      emailService.sendWelcomeEmail(user.email, {
+        userName: user.fullName.split(' ')[0],
+        loginLink: process.env.FRONTEND_URL || 'https://utopsistema.com.br'
+      }).catch(err => log.error('Erro ao enviar email de boas-vindas', { error: err }));
+
+      log.info('Email verificado com sucesso', { userId: user.id });
+      return { success: true, message: 'Email verificado com sucesso!' };
+    } catch (error) {
+      log.error('Erro ao verificar email', { error });
+      throw error;
+    }
+  }
+
+  /**
+   * Reenvia email de verificação
+   */
+  async resendVerificationEmail(email: string): Promise<{ success: boolean; message: string }> {
+    try {
+      const user = await prisma.user.findUnique({ where: { email } });
+
+      if (!user) {
+        return { success: false, message: 'Email não encontrado' };
+      }
+
+      if (user.isEmailVerified) {
+        return { success: false, message: 'Email já verificado' };
+      }
+
+      // Gera novo token
+      const emailVerificationToken = crypto.randomBytes(32).toString('hex');
+      const emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { emailVerificationToken, emailVerificationExpires },
+      });
+
+      // Envia email
+      const verificationLink = emailService.getVerificationLink(emailVerificationToken);
+      await emailService.sendVerificationEmail(user.email, {
+        userName: user.fullName.split(' ')[0],
+        verificationLink
+      });
+
+      return { success: true, message: 'Email de verificação reenviado!' };
+    } catch (error) {
+      log.error('Erro ao reenviar email de verificação', { error });
       throw error;
     }
   }
@@ -213,6 +298,11 @@ export class AuthService {
         throw new Error('Usuário inativo');
       }
 
+      // Verifica se email foi verificado
+      if (!user.isEmailVerified) {
+        throw new Error('Email não verificado. Verifique sua caixa de entrada.');
+      }
+
       // Verifica senha
       const passwordValid = await bcrypt.compare(data.password, user.passwordHash);
       if (!passwordValid) {
@@ -232,7 +322,7 @@ export class AuthService {
       });
 
       // Gera tokens
-      const tokens = await this.generateTokenPair(user.id, user.email, tenant.id);
+      const tokens = await this.generateTokenPair(user.id, user.email, tenant.id, user.role);
 
       // Registra IP e UserAgent no refresh token
       if (ipAddress || userAgent) {
@@ -332,7 +422,8 @@ export class AuthService {
       const tokens = await this.generateTokenPair(
         refreshToken.user.id,
         refreshToken.user.email,
-        tenant.id
+        tenant.id,
+        refreshToken.user.role
       );
 
       // Registra IP e UserAgent no novo refresh token

@@ -317,6 +317,62 @@ apiRouter.post('/auth/register', authLimiter, async (req: Request, res: Response
   }
 });
 
+// Verificar email
+apiRouter.get('/auth/verify-email', async (req: Request, res: Response) => {
+  try {
+    const { token } = req.query;
+    
+    if (!token || typeof token !== 'string') {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_TOKEN', message: 'Token não fornecido' }
+      });
+    }
+
+    const result = await authService.verifyEmail(token);
+
+    if (result.success) {
+      res.json({ success: true, message: result.message });
+    } else {
+      res.status(400).json({ success: false, error: { message: result.message } });
+    }
+  } catch (error) {
+    log.error('Verify email error', { error });
+    res.status(500).json({
+      success: false,
+      error: { code: 'INTERNAL_ERROR', message: 'Erro ao verificar email' }
+    });
+  }
+});
+
+// Reenviar email de verificação
+apiRouter.post('/auth/resend-verification', authLimiter, async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body;
+    
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_EMAIL', message: 'Email não fornecido' }
+      });
+    }
+
+    const result = await authService.resendVerificationEmail(email);
+
+    if (result.success) {
+      res.json({ success: true, message: result.message });
+    } else {
+      res.status(400).json({ success: false, error: { message: result.message } });
+    }
+  } catch (error) {
+    log.error('Resend verification error', { error });
+    res.status(500).json({
+      success: false,
+      error: { code: 'INTERNAL_ERROR', message: 'Erro ao reenviar email' }
+    });
+  }
+});
+
 /**
  * @swagger
  * /auth/login:

@@ -2,9 +2,9 @@
 
 import { forwardRef, InputHTMLAttributes } from 'react';
 
-// Helper function to merge classNames
-function cn(...classes: (string | undefined | null | false)[]): string {
-  return classes.filter(Boolean).join(' ');
+// Helper function to merge classNames - accepts any falsy values
+function cn(...classes: unknown[]): string {
+  return classes.filter((c): c is string => typeof c === 'string' && c.length > 0).join(' ');
 }
 
 export interface DateInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'type'> {

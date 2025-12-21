@@ -234,27 +234,34 @@ export const adminService = {
 
     const previousPlan = tenant.subscriptionPlan;
 
-    // Atualizar tenant
+    // Calcular nova data de expiração baseada no plano
+    let periodEnd = new Date();
+    switch (newPlanId) {
+      case 'monthly':
+        periodEnd.setMonth(periodEnd.getMonth() + 1);
+        break;
+      case 'quarterly':
+        periodEnd.setMonth(periodEnd.getMonth() + 3);
+        break;
+      case 'semiannual':
+        periodEnd.setMonth(periodEnd.getMonth() + 6);
+        break;
+      case 'yearly':
+        periodEnd.setFullYear(periodEnd.getFullYear() + 1);
+        break;
+      case 'trial':
+        periodEnd.setDate(periodEnd.getDate() + 14);
+        break;
+    }
+
+    // Atualizar tenant com plano e data de expiração
     const updated = await prisma.tenant.update({
       where: { id: tenantId },
       data: {
         subscriptionPlan: newPlanId,
-        subscriptionStatus: 'active'
-      }
-    });
-
-    // Atualizar ou criar subscription
-    await prisma.subscription.upsert({
-      where: { tenantId },
-      update: {
-        planId: newPlanId,
-        status: 'active'
-      },
-      create: {
-        tenantId,
-        planId: newPlanId,
-        billingCycle: 'monthly',
-        status: 'active'
+        subscriptionStatus: 'active',
+        stripeCurrentPeriodEnd: periodEnd,
+        stripePriceId: newPlanId !== 'trial' ? newPlanId : null
       }
     });
 

@@ -268,4 +268,236 @@ router.get('/check-trial', authenticateToken, async (req: AuthRequest, res: Resp
   }
 });
 
+// =============================================================================
+// STRIPE ROUTES - Integração alternativa com Stripe
+// =============================================================================
+
+import { stripeService, PLANS as STRIPE_PLANS } from '../services/stripe.service';
+
+/**
+ * @swagger
+ * /subscription/stripe/plans:
+ *   get:
+ *     summary: Listar planos Stripe disponíveis
+ *     tags: [Subscription - Stripe]
+ */
+router.get('/stripe/plans', (req: Request, res: Response) => {
+  try {
+    const plans = stripeService.getPlans();
+    res.json({
+      success: true,
+      data: { plans }
+    });
+  } catch (error) {
+    log.error('Erro ao listar planos Stripe', { error });
+    res.status(500).json({
+      success: false,
+      error: { code: 'STRIPE_ERROR', message: 'Erro ao listar planos' }
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /subscription/stripe/checkout:
+ *   post:
+ *     summary: Criar sessão de checkout Stripe
+ *     tags: [Subscription - Stripe]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - planId
+ *               - billingPeriod
+ *             properties:
+ *               planId:
+ *                 type: string
+ *                 enum: [trial, basic, plus, premium]
+ *               billingPeriod:
+ *                 type: string
+ *                 enum: [monthly, yearly]
+ */
+router.post('/stripe/checkout', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const { planId } = req.body;
+    const userId = req.userId!;
+    const tenantId = req.tenantId!;
+
+    if (!planId) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_REQUEST', message: 'planId é obrigatório' }
+      });
+    }
+
+    // Buscar dados do usuário
+    const { prisma } = await import('../main');
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true, fullName: true }
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Usuário não encontrado' }
+      });
+    }
+
+    const baseUrl = process.env.FRONTEND_URL || 'https://utopsistema.com.br';
+
+    const session = await stripeService.createCheckoutSession({
+      tenantId,
+      userId,
+      email: user.email,
+      name: user.fullName || user.email,
+      planId,
+      successUrl: `${baseUrl}/dashboard/plans?success=true`,
+      cancelUrl: `${baseUrl}/dashboard/plans?canceled=true`,
+    });
+
+    res.json({
+      success: true,
+      data: session
+    });
+  } catch (error: any) {
+    log.error('Erro ao criar checkout Stripe', { error: error.message, tenantId: req.tenantId });
+    res.status(500).json({
+      success: false,
+      error: { code: 'CHECKOUT_ERROR', message: error.message || 'Erro ao criar sessão de checkout' }
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /subscription/stripe/portal:
+ *   post:
+ *     summary: Criar sessão do portal de clientes Stripe
+ *     tags: [Subscription - Stripe]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.post('/stripe/portal', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId!;
+    const baseUrl = process.env.FRONTEND_URL || 'https://utopsistema.com.br';
+
+    const portalUrl = await stripeService.createPortalSession(
+      tenantId,
+      `${baseUrl}/dashboard/plans`
+    );
+
+    res.json({
+      success: true,
+      data: { url: portalUrl }
+    });
+  } catch (error: any) {
+    log.error('Erro ao criar portal Stripe', { error: error.message, tenantId: req.tenantId });
+    res.status(500).json({
+      success: false,
+      error: { code: 'PORTAL_ERROR', message: error.message || 'Erro ao criar sessão do portal' }
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /subscription/stripe/status:
+ *   get:
+ *     summary: Obter status da assinatura Stripe
+ *     tags: [Subscription - Stripe]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.get('/stripe/status', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId!;
+    const status = await stripeService.getSubscriptionStatus(tenantId);
+    
+    res.json({
+      success: true,
+      data: status
+    });
+  } catch (error: any) {
+    log.error('Erro ao obter status Stripe', { error: error.message, tenantId: req.tenantId });
+    res.status(500).json({
+      success: false,
+      error: { code: 'STATUS_ERROR', message: 'Erro ao obter status da assinatura' }
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /subscription/stripe/cancel:
+ *   post:
+ *     summary: Cancelar assinatura Stripe
+ *     tags: [Subscription - Stripe]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.post('/stripe/cancel', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId!;
+    await stripeService.cancelSubscription(tenantId);
+    
+    res.json({
+      success: true,
+      data: { message: 'Assinatura cancelada com sucesso' }
+    });
+  } catch (error: any) {
+    log.error('Erro ao cancelar assinatura Stripe', { error: error.message, tenantId: req.tenantId });
+    res.status(500).json({
+      success: false,
+      error: { code: 'CANCEL_ERROR', message: error.message || 'Erro ao cancelar assinatura' }
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /subscription/stripe/webhook:
+ *   post:
+ *     summary: Webhook do Stripe
+ *     tags: [Subscription - Stripe]
+ *     description: Endpoint para receber notificações do Stripe (requer raw body)
+ */
+// NOTA: Este webhook precisa de express.raw() configurado. Veja stripe-webhook.ts para uma versão separada.
+router.post('/stripe/webhook', async (req: Request, res: Response) => {
+  try {
+    const signature = req.headers['stripe-signature'] as string;
+
+    if (!signature) {
+      log.warn('Webhook Stripe recebido sem assinatura');
+      return res.status(400).json({
+        success: false,
+        error: { code: 'MISSING_SIGNATURE', message: 'Stripe signature missing' }
+      });
+    }
+
+    // Para funcionar corretamente, o body precisa ser raw buffer
+    // Se não for, o webhook não vai validar
+    let rawBody = req.body;
+    if (typeof rawBody === 'object' && !Buffer.isBuffer(rawBody)) {
+      rawBody = Buffer.from(JSON.stringify(rawBody));
+    }
+
+    await stripeService.handleWebhook(rawBody, signature);
+
+    res.json({ received: true });
+  } catch (error: any) {
+    log.error('Erro ao processar webhook Stripe', { error: error.message });
+    res.status(400).json({
+      success: false,
+      error: { code: 'WEBHOOK_ERROR', message: error.message }
+    });
+  }
+});
+
 export default router;
