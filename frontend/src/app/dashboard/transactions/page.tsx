@@ -358,7 +358,10 @@ export default function TransactionsPage() {
                   type="date"
                   value={filters.startDate}
                   onChange={(e) => setFilters({ ...filters, startDate: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-4 py-2 min-h-[44px] border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white appearance-none"
+                  style={{ colorScheme: 'light' }}
+                  title="Data inicial do filtro"
+                  aria-label="Data inicial"
                 />
               </div>
 
@@ -368,7 +371,10 @@ export default function TransactionsPage() {
                   type="date"
                   value={filters.endDate}
                   onChange={(e) => setFilters({ ...filters, endDate: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-4 py-2 min-h-[44px] border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white appearance-none"
+                  style={{ colorScheme: 'light' }}
+                  title="Data final do filtro"
+                  aria-label="Data final"
                 />
               </div>
 
@@ -377,7 +383,8 @@ export default function TransactionsPage() {
                 <select
                   value={filters.categoryId}
                   onChange={(e) => setFilters({ ...filters, categoryId: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-4 py-2 min-h-[44px] border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white"
+                  title="Filtrar por categoria"
                 >
                   <option value="">Todas</option>
                   {categories.filter(c => c.type === filters.type || filters.type === 'all').map((cat) => (
@@ -393,7 +400,8 @@ export default function TransactionsPage() {
                 <select
                   value={filters.bankAccountId}
                   onChange={(e) => setFilters({ ...filters, bankAccountId: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-4 py-2 min-h-[44px] border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white"
+                  title="Filtrar por conta"
                 >
                   <option value="">Todas</option>
                   {bankAccounts.map((account) => (
@@ -409,7 +417,8 @@ export default function TransactionsPage() {
                 <select
                   value={filters.type}
                   onChange={(e) => setFilters({ ...filters, type: e.target.value as any })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-4 py-2 min-h-[44px] border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white"
+                  title="Filtrar por tipo"
                 >
                   <option value="all">Todas</option>
                   <option value="income">Receitas</option>
@@ -422,7 +431,8 @@ export default function TransactionsPage() {
                 <select
                   value={filters.status}
                   onChange={(e) => setFilters({ ...filters, status: e.target.value as any })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-4 py-2 min-h-[44px] border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white"
+                  title="Filtrar por status"
                 >
                   <option value="all">Todas</option>
                   <option value="completed">Pagas</option>

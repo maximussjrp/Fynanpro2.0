@@ -323,7 +323,7 @@ export default function ChatbotWidget() {
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 placeholder="Digite sua mensagem..."
-                className="flex-1 px-4 py-2.5 bg-gray-100 rounded-full focus:outline-none focus:ring-2 focus:ring-[#1F4FD8]/50 text-sm"
+                className="flex-1 px-4 py-2.5 min-h-[44px] bg-gray-100 rounded-full focus:outline-none focus:ring-2 focus:ring-[#1F4FD8]/50 text-sm text-gray-900 placeholder:text-gray-400"
                 disabled={state.isLoading}
               />
               <button
