@@ -18,8 +18,8 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
-import { api } from '@/lib/api';
+import { useAuth } from '@/stores/auth';
+import api from '@/lib/api';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // TIPOS

@@ -13,7 +13,6 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient, Prisma } from '@prisma/client';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
-import { tenantMiddleware } from '../middleware/tenant';
 import { z } from 'zod';
 
 const router = Router();
@@ -44,7 +43,7 @@ const UpdateSemanticsSchema = z.object({
 // Lista todas as categorias com suas classificações energéticas
 // ═══════════════════════════════════════════════════════════════════════════════
 
-router.get('/categories', authMiddleware, tenantMiddleware, async (req: AuthRequest, res: Response) => {
+router.get('/categories', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId!;
     
@@ -168,7 +167,7 @@ router.get('/categories', authMiddleware, tenantMiddleware, async (req: AuthRequ
 // Atualiza a classificação energética de uma categoria
 // ═══════════════════════════════════════════════════════════════════════════════
 
-router.put('/categories/:categoryId', authMiddleware, tenantMiddleware, async (req: AuthRequest, res: Response) => {
+router.put('/categories/:categoryId', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId!;
     const userId = req.user!.id;
@@ -264,7 +263,7 @@ router.put('/categories/:categoryId', authMiddleware, tenantMiddleware, async (r
 // Auditoria: Lista categorias que precisam de validação
 // ═══════════════════════════════════════════════════════════════════════════════
 
-router.get('/audit', authMiddleware, tenantMiddleware, async (req: AuthRequest, res: Response) => {
+router.get('/audit', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId!;
     

@@ -131,12 +131,9 @@ model Category {
 
 // ==================== SEMÂNTICA DE ENERGIA ====================
 
-/**
- * CategorySemantics - Classificação energética de categorias
- * 
- * Define como cada categoria impacta a vida financeira do usuário.
- * Segue o CONTRATO OFICIAL em backend/src/contracts/ENERGY-CONTRACT.md
- */
+// CategorySemantics - Classificação energética de categorias
+// Define como cada categoria impacta a vida financeira do usuário.
+// Segue o CONTRATO OFICIAL em backend/src/contracts/ENERGY-CONTRACT.md
 model CategorySemantics {
   id                String    @id @default(uuid())
   categoryId        String    @unique
