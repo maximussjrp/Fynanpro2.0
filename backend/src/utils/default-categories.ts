@@ -257,19 +257,26 @@ export const defaultCategories: CategoryStructure[] = [
 
 /**
  * Cria as categorias padrão para um tenant
+ * @param tenantId - ID do tenant
+ * @param tx - Instância do Prisma (pode ser transação ou cliente padrão)
  */
-export async function createDefaultCategories(tenantId: string): Promise<void> {
+export async function createDefaultCategories(tenantId: string, tx?: any): Promise<void> {
   log.info('Criando categorias padrão', { tenantId });
+  
+  // Usa a transação se fornecida, senão usa o prisma global
+  const db = tx || prisma;
   
   let totalCreated = 0;
 
   for (const category of defaultCategories) {
     // Criar categoria pai (nível 1)
-    const parentCategory = await prisma.category.create({
+    const parentCategory = await db.category.create({
       data: {
         tenantId,
         name: category.name,
         type: category.type,
+        icon: category.icon || '📝',
+        color: '#3B82F6',
         level: 1,
         isActive: true,
       },
@@ -279,11 +286,13 @@ export async function createDefaultCategories(tenantId: string): Promise<void> {
     // Criar categorias filhas (nível 2) e netas (nível 3)
     if (category.children) {
       for (const child of category.children) {
-        const childCategory = await prisma.category.create({
+        const childCategory = await db.category.create({
           data: {
             tenantId,
             name: child.name,
             type: category.type,
+            icon: '📝',
+            color: '#6B7280',
             level: 2,
             parentId: parentCategory.id,
             isActive: true,
@@ -294,11 +303,13 @@ export async function createDefaultCategories(tenantId: string): Promise<void> {
         // Criar categorias netas (nível 3)
         if (child.children && child.children.length > 0) {
           for (const grandchild of child.children) {
-            await prisma.category.create({
+            await db.category.create({
               data: {
                 tenantId,
                 name: grandchild,
                 type: category.type,
+                icon: '📝',
+                color: '#9CA3AF',
                 level: 3,
                 parentId: childCategory.id,
                 isActive: true,

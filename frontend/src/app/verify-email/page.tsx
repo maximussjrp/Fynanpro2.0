@@ -14,7 +14,7 @@ export default function VerifyEmailPage() {
 
   useEffect(() => {
     const token = searchParams.get('token');
-
+    
     if (!token) {
       setStatus('error');
       setMessage('Token de verificação não encontrado');
@@ -32,7 +32,7 @@ export default function VerifyEmailPage() {
       if (data.success) {
         setStatus('success');
         setMessage('Email verificado com sucesso!');
-
+        
         // Redireciona para login após 3 segundos
         setTimeout(() => {
           router.push('/');

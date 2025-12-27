@@ -109,7 +109,7 @@ export default function CreateInstallmentModal({
                 value={form.name}
                 onChange={(e) => handleInputChange('name', e.target.value)}
                 placeholder="Ex: Notebook Dell"
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#8B5CF6] transition-colors"
+                className="w-full px-4 py-3 min-h-[44px] border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#8B5CF6] transition-colors bg-white text-gray-900 placeholder:text-gray-400"
                 required
               />
             </div>
@@ -132,7 +132,7 @@ export default function CreateInstallmentModal({
                     value={form.totalAmount}
                     onChange={(e) => handleInputChange('totalAmount', e.target.value)}
                     placeholder="0,00"
-                    className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#8B5CF6] transition-colors"
+                    className="w-full pl-12 pr-4 py-3 min-h-[44px] border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#8B5CF6] transition-colors bg-white text-gray-900 placeholder:text-gray-400"
                     required
                   />
                 </div>
@@ -150,7 +150,7 @@ export default function CreateInstallmentModal({
                   value={form.numberOfInstallments}
                   onChange={(e) => handleInputChange('numberOfInstallments', e.target.value)}
                   placeholder="Ex: 12"
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#8B5CF6] transition-colors"
+                  className="w-full px-4 py-3 min-h-[44px] border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#8B5CF6] transition-colors bg-white text-gray-900 placeholder:text-gray-400"
                   required
                 />
               </div>
@@ -194,7 +194,10 @@ export default function CreateInstallmentModal({
                   type="date"
                   value={form.firstDueDate}
                   onChange={(e) => handleInputChange('firstDueDate', e.target.value)}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#8B5CF6] transition-colors"
+                  className="w-full px-4 py-3 min-h-[44px] border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#8B5CF6] transition-colors bg-white text-gray-900"
+                  style={{ colorScheme: 'light' }}
+                  title="Data da primeira parcela"
+                  aria-label="Data da primeira parcela"
                   required
                 />
               </div>
@@ -207,7 +210,7 @@ export default function CreateInstallmentModal({
                 <select
                   value={form.categoryId}
                   onChange={(e) => handleInputChange('categoryId', e.target.value)}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#8B5CF6] transition-colors"
+                  className="w-full px-4 py-3 min-h-[44px] border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#8B5CF6] transition-colors bg-white text-gray-900"
                   required
                 >
                   <option value="">Selecione</option>
@@ -230,7 +233,7 @@ export default function CreateInstallmentModal({
                 <select
                   value={form.bankAccountId}
                   onChange={(e) => handleInputChange('bankAccountId', e.target.value)}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#8B5CF6] transition-colors"
+                  className="w-full px-4 py-3 min-h-[44px] border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#8B5CF6] transition-colors bg-white text-gray-900"
                   required
                 >
                   <option value="">Selecione</option>
@@ -250,7 +253,7 @@ export default function CreateInstallmentModal({
                 <select
                   value={form.paymentMethodId}
                   onChange={(e) => handleInputChange('paymentMethodId', e.target.value)}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#8B5CF6] transition-colors"
+                  className="w-full px-4 py-3 min-h-[44px] border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#8B5CF6] transition-colors bg-white text-gray-900"
                 >
                   <option value="">Selecione (opcional)</option>
                   {paymentMethods.map((pm) => (

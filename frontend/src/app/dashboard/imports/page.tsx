@@ -32,7 +32,7 @@ interface ImportedTransaction {
 interface ImportPreview {
   id: string;
   fileName: string;
-  fileType: 'csv' | 'ofx';
+  fileType: 'csv' | 'ofx' | 'xml';
   totalTransactions: number;
   totalIncome: number;
   totalExpense: number;
@@ -218,8 +218,8 @@ export default function ImportsPage() {
 
   const processFile = (file: File) => {
     const name = file.name.toLowerCase();
-    if (!name.endsWith('.csv') && !name.endsWith('.ofx') && !name.endsWith('.txt')) {
-      setError('Formato não suportado. Use arquivos CSV ou OFX.');
+    if (!name.endsWith('.csv') && !name.endsWith('.ofx') && !name.endsWith('.xml') && !name.endsWith('.txt')) {
+      setError('Formato não suportado. Use arquivos CSV, OFX ou XML.');
       return;
     }
     
@@ -450,7 +450,7 @@ export default function ImportsPage() {
           <div>
             <h1 className="text-2xl font-bold">📥 Importar Extrato</h1>
             <p className="text-gray-400 text-sm">
-              Importe transações de arquivos CSV ou OFX do seu banco
+              Importe transações de arquivos CSV, OFX ou XML do seu banco
             </p>
           </div>
         </div>
@@ -573,7 +573,7 @@ export default function ImportsPage() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".csv,.ofx,.txt"
+                accept=".csv,.ofx,.xml,.txt"
                 onChange={handleFileSelect}
                 className="hidden"
               />
@@ -598,7 +598,7 @@ export default function ImportsPage() {
                     Arraste um arquivo aqui ou clique para selecionar
                   </p>
                   <p className="text-sm text-gray-400">
-                    Formatos suportados: CSV, OFX
+                    Formatos suportados: CSV, OFX, XML
                   </p>
                 </div>
               )}

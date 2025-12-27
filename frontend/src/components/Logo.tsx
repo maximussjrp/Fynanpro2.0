@@ -33,8 +33,8 @@ export default function Logo({
     return (
       <div className={`flex items-center justify-center ${className}`}>
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-gradient-to-br from-[#1F4FD8] to-[#2ECC9A] rounded-xl flex items-center justify-center">
-            <span className="text-white font-bold text-xl">U</span>
+          <div className="w-12 h-12 bg-gradient-to-br from-[#1A1A1A] to-[#2A2A2A] rounded-xl flex items-center justify-center border border-[#C9A962]">
+            <span className="text-[#C9A962] font-bold text-xl">U</span>
           </div>
           <span className="text-3xl font-bold text-[#0F172A] font-poppins">UTOP</span>
         </div>
@@ -45,8 +45,8 @@ export default function Logo({
   // UTOP Logo Icon
   return (
     <div className={`flex items-center gap-2 ${className}`} style={style}>
-      <div className="w-8 h-8 bg-gradient-to-br from-[#1F4FD8] to-[#2ECC9A] rounded-lg flex items-center justify-center">
-        <span className="text-white font-bold text-sm">U</span>
+      <div className="w-8 h-8 bg-gradient-to-br from-[#1A1A1A] to-[#2A2A2A] rounded-lg flex items-center justify-center border border-[#C9A962]">
+        <span className="text-[#C9A962] font-bold text-sm">U</span>
       </div>
       {!style?.width || (style.width as number) > 50 ? (
         <span className="text-xl font-bold text-[#0F172A] font-poppins">UTOP</span>

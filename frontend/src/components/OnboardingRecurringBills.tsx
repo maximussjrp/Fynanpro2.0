@@ -117,6 +117,7 @@ export default function OnboardingRecurringBills({
 
   const handleSubmit = async () => {
     if (selectedTemplates.size === 0) {
+      localStorage.setItem('hasSeenRecurringBillsWizard', 'true');
       onComplete();
       return;
     }
@@ -130,6 +131,7 @@ export default function OnboardingRecurringBills({
         templates,
       });
 
+      localStorage.setItem('hasSeenRecurringBillsWizard', 'true');
       onComplete();
     } catch (error) {
       console.error('Erro ao ativar templates:', error);
@@ -160,6 +162,8 @@ export default function OnboardingRecurringBills({
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600 transition-colors"
+            title="Fechar"
+            aria-label="Fechar modal de contas fixas"
           >
             <X size={24} />
           </button>
@@ -170,7 +174,7 @@ export default function OnboardingRecurringBills({
           {loading ? (
             <div className="flex items-center justify-center h-64">
               <div className="text-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#1F4FD8] mx-auto mb-4"></div>
                 <p className="text-gray-600">Carregando templates...</p>
               </div>
             </div>
@@ -206,7 +210,7 @@ export default function OnboardingRecurringBills({
                           <div
                             key={template.id}
                             className={`p-4 transition-colors ${
-                              isSelected ? 'bg-blue-50' : 'bg-white hover:bg-gray-50'
+                              isSelected ? 'bg-[#EFF6FF]' : 'bg-white hover:bg-gray-50'
                             }`}
                           >
                             <div className="flex items-start gap-4">
@@ -216,7 +220,8 @@ export default function OnboardingRecurringBills({
                                   type="checkbox"
                                   checked={isSelected}
                                   onChange={() => toggleTemplate(template)}
-                                  className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
+                                  className="w-5 h-5 text-[#1F4FD8] rounded focus:ring-[#1F4FD8]"
+                                  aria-label={`Selecionar ${template.name}`}
                                 />
                               </div>
 
@@ -252,9 +257,11 @@ export default function OnboardingRecurringBills({
                                         onChange={(e) =>
                                           updateTemplateValue(template.id, 'amount', parseFloat(e.target.value) || 0)
                                         }
-                                        className="w-full pl-8 pr-2 py-1 text-sm border rounded focus:ring-2 focus:ring-blue-500"
+                                        className="w-full pl-8 pr-2 py-1 text-sm border rounded focus:ring-2 focus:ring-[#1F4FD8]"
                                         step="0.01"
                                         min="0"
+                                        aria-label="Valor em reais"
+                                        placeholder="0.00"
                                       />
                                     </div>
                                   </div>
@@ -272,9 +279,11 @@ export default function OnboardingRecurringBills({
                                         onChange={(e) =>
                                           updateTemplateValue(template.id, 'dueDay', parseInt(e.target.value) || 1)
                                         }
-                                        className="w-full pl-8 pr-2 py-1 text-sm border rounded focus:ring-2 focus:ring-blue-500"
+                                        className="w-full pl-8 pr-2 py-1 text-sm border rounded focus:ring-2 focus:ring-[#1F4FD8]"
                                         min="1"
                                         max="31"
+                                        aria-label="Dia do vencimento"
+                                        placeholder="1"
                                       />
                                     </div>
                                   </div>
@@ -304,7 +313,7 @@ export default function OnboardingRecurringBills({
           ) : (
             // Review Step
             <div className="space-y-6">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="bg-[#EFF6FF] border border-blue-200 rounded-lg p-4">
                 <h3 className="font-semibold text-blue-900 mb-2">
                   ✨ Tudo pronto para começar!
                 </h3>
@@ -373,7 +382,10 @@ export default function OnboardingRecurringBills({
               {currentStep === 'selection' ? (
                 <>
                   <button
-                    onClick={onClose}
+                    onClick={() => {
+                      localStorage.setItem('hasSeenRecurringBillsWizard', 'true');
+                      onClose();
+                    }}
                     className="px-4 py-2 text-gray-700 hover:text-gray-900 font-medium transition-colors"
                   >
                     Pular por enquanto
@@ -381,7 +393,7 @@ export default function OnboardingRecurringBills({
                   <button
                     onClick={() => selectedTemplates.size > 0 && setCurrentStep('review')}
                     disabled={selectedTemplates.size === 0}
-                    className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                    className="px-6 py-2 bg-[#1F4FD8] text-white rounded-lg font-medium hover:bg-[#1A44BF] disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
                   >
                     Continuar
                     <Check size={18} />

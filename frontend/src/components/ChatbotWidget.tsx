@@ -188,19 +188,19 @@ export default function ChatbotWidget() {
     return (
       <button
         onClick={toggleChat}
-        className="fixed bottom-6 right-6 w-14 h-14 bg-gradient-to-br from-[#1F4FD8] to-[#2ECC9A] rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center group z-50"
+        className="fixed bottom-20 sm:bottom-6 right-4 sm:right-6 w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-[#1F4FD8] to-[#2ECC9A] rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center group z-40"
         title="Falar com Utop Assistant"
       >
-        <MessageCircle className="w-6 h-6 text-white group-hover:scale-110 transition-transform" />
+        <MessageCircle className="w-5 h-5 sm:w-6 sm:h-6 text-white group-hover:scale-110 transition-transform" />
         
         {/* Indicador de notificação */}
-        <span className="absolute -top-1 -right-1 w-4 h-4 bg-[#2ECC9A] rounded-full border-2 border-white animate-pulse" />
+        <span className="absolute -top-1 -right-1 w-3 h-3 sm:w-4 sm:h-4 bg-[#2ECC9A] rounded-full border-2 border-white animate-pulse" />
       </button>
     );
   }
 
   return (
-    <div className={`fixed bottom-6 right-6 w-96 bg-white rounded-2xl shadow-2xl z-50 flex flex-col overflow-hidden transition-all duration-300 ${isMinimized ? 'h-16' : 'h-[600px] max-h-[80vh]'}`}>
+    <div className={`fixed bottom-0 right-0 sm:bottom-6 sm:right-6 w-full sm:w-96 bg-white sm:rounded-2xl shadow-2xl z-50 flex flex-col overflow-hidden transition-all duration-300 ${isMinimized ? 'h-16' : 'h-[100dvh] sm:h-[600px] sm:max-h-[80vh]'}`}>
       {/* Header */}
       <div 
         className="bg-gradient-to-r from-[#1F4FD8] to-[#2ECC9A] text-white p-4 flex items-center justify-between cursor-pointer"

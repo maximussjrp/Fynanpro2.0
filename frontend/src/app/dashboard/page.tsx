@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import api, { logout } from '@/lib/api';
 import { useAuth, useUser, useTenant } from '@/stores/auth';
-import TransactionModal from '@/components/NewTransactionModal';
+import CreateTransactionModal from '@/components/UnifiedTransactionModal';
 import DashboardLayoutWrapper from '@/components/DashboardLayoutWrapper';
 import QuickActions from '@/components/QuickActions';
 import OnboardingRecurringBills from '@/components/OnboardingRecurringBills';
@@ -79,6 +79,7 @@ export default function Dashboard() {
   const { isAuthenticated } = useAuth();
   const [loading, setLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState<DashboardData>({});
+  const [todaySummary, setTodaySummary] = useState<any>(null);
   const [showPeriodModal, setShowPeriodModal] = useState(false);
   const [showTransactionModal, setShowTransactionModal] = useState(false);
   const [showBankAccountModal, setShowBankAccountModal] = useState(false);
@@ -122,6 +123,10 @@ export default function Dashboard() {
     date.setDate(0); // Último dia do mês
     return date.toISOString().split('T')[0];
   });
+  
+  // Estados temporários para o modal de período (evita filtrar enquanto navega no calendário)
+  const [tempStartDate, setTempStartDate] = useState(startDate);
+  const [tempEndDate, setTempEndDate] = useState(endDate);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -130,6 +135,7 @@ export default function Dashboard() {
     }
     loadDashboardData();
     loadFormData();
+    loadTodaySummary();
     
     // Verificar se é primeiro acesso para mostrar wizard de contas recorrentes
     const hasSeenWizard = localStorage.getItem('hasSeenRecurringBillsWizard');
@@ -141,6 +147,15 @@ export default function Dashboard() {
       return () => clearTimeout(timer);
     }
   }, [startDate, endDate, isAuthenticated]);
+
+  const loadTodaySummary = async () => {
+    try {
+      const response = await api.get('/dashboard/today-summary');
+      setTodaySummary(response.data.data);
+    } catch (error: any) {
+      console.error('Erro ao carregar resumo do dia:', error.response?.data || error.message);
+    }
+  };
 
   const loadDashboardData = async () => {
     try {
@@ -347,6 +362,102 @@ export default function Dashboard() {
           onOpenCalendar={() => router.push('/dashboard/calendar')}
         />
 
+        {/* Cards do Dia - Resumo HOJE */}
+        {todaySummary && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            {/* Receitas a Receber HOJE */}
+            <div className="bg-white rounded-xl shadow-sm border border-l-4 border-l-[#2563EB] p-4 hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-medium text-gray-600" style={{fontFamily: 'Inter, sans-serif'}}>
+                  💰 Receitas a Receber Hoje
+                </h3>
+                {todaySummary.today?.incomeToReceive?.count > 0 && (
+                  <span className="bg-[#DBEAFE] text-[#2563EB] text-xs font-semibold px-2 py-0.5 rounded-full">
+                    {todaySummary.today.incomeToReceive.count}
+                  </span>
+                )}
+              </div>
+              <p className="text-2xl font-bold text-[#2563EB]" style={{fontFamily: 'Poppins, sans-serif'}}>
+                {formatCurrency(todaySummary.today?.incomeToReceive?.total || 0)}
+              </p>
+              {todaySummary.today?.incomeToReceive?.items?.length > 0 && (
+                <div className="mt-2 space-y-1">
+                  {todaySummary.today.incomeToReceive.items.slice(0, 2).map((item: any) => (
+                    <p key={item.id} className="text-xs text-gray-500 truncate">
+                      {item.icon || '📄'} {item.description}
+                    </p>
+                  ))}
+                  {todaySummary.today.incomeToReceive.items.length > 2 && (
+                    <p className="text-xs text-gray-400">+{todaySummary.today.incomeToReceive.items.length - 2} mais</p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Despesas a Pagar HOJE */}
+            <div className="bg-white rounded-xl shadow-sm border border-l-4 border-l-[#F59E0B] p-4 hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-medium text-gray-600" style={{fontFamily: 'Inter, sans-serif'}}>
+                  💸 Despesas a Pagar Hoje
+                </h3>
+                {todaySummary.today?.expenseToPay?.count > 0 && (
+                  <span className="bg-[#FEF3C7] text-[#F59E0B] text-xs font-semibold px-2 py-0.5 rounded-full">
+                    {todaySummary.today.expenseToPay.count}
+                  </span>
+                )}
+              </div>
+              <p className="text-2xl font-bold text-[#F59E0B]" style={{fontFamily: 'Poppins, sans-serif'}}>
+                {formatCurrency(todaySummary.today?.expenseToPay?.total || 0)}
+              </p>
+              {todaySummary.today?.expenseToPay?.items?.length > 0 && (
+                <div className="mt-2 space-y-1">
+                  {todaySummary.today.expenseToPay.items.slice(0, 2).map((item: any) => (
+                    <p key={item.id} className="text-xs text-gray-500 truncate">
+                      {item.icon || '📄'} {item.description}
+                    </p>
+                  ))}
+                  {todaySummary.today.expenseToPay.items.length > 2 && (
+                    <p className="text-xs text-gray-400">+{todaySummary.today.expenseToPay.items.length - 2} mais</p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Despesas ATRASADAS */}
+            <div className={`bg-white rounded-xl shadow-sm border border-l-4 p-4 hover:shadow-md transition-shadow ${
+              todaySummary.overdue?.count > 0 ? 'border-l-[#E11D48]' : 'border-l-gray-300'
+            }`}>
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-medium text-gray-600" style={{fontFamily: 'Inter, sans-serif'}}>
+                  ⚠️ Despesas Atrasadas
+                </h3>
+                {todaySummary.overdue?.count > 0 && (
+                  <span className="bg-[#FFF1F2] text-[#E11D48] text-xs font-semibold px-2 py-0.5 rounded-full animate-pulse">
+                    {todaySummary.overdue.count}
+                  </span>
+                )}
+              </div>
+              <p className={`text-2xl font-bold ${todaySummary.overdue?.count > 0 ? 'text-[#E11D48]' : 'text-gray-400'}`} style={{fontFamily: 'Poppins, sans-serif'}}>
+                {formatCurrency(todaySummary.overdue?.total || 0)}
+              </p>
+              {todaySummary.overdue?.items?.length > 0 ? (
+                <div className="mt-2 space-y-1">
+                  {todaySummary.overdue.items.slice(0, 2).map((item: any) => (
+                    <p key={item.id} className="text-xs text-[#E11D48] truncate">
+                      {item.icon || '📄'} {item.description} ({item.daysOverdue}d atrás)
+                    </p>
+                  ))}
+                  {todaySummary.overdue.items.length > 2 && (
+                    <p className="text-xs text-gray-400">+{todaySummary.overdue.items.length - 2} mais</p>
+                  )}
+                </div>
+              ) : (
+                <p className="mt-2 text-xs text-green-600">✅ Nenhuma despesa atrasada!</p>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Period Filter */}
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-3 text-sm text-gray-600" style={{fontFamily: 'Inter, sans-serif'}}>
@@ -356,7 +467,7 @@ export default function Dashboard() {
             </span>
           </div>
           <button
-            onClick={() => setShowPeriodModal(true)}
+            onClick={() => { setTempStartDate(startDate); setTempEndDate(endDate); setShowPeriodModal(true); }}
             className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
             style={{fontFamily: 'Inter, sans-serif'}}
           >
@@ -368,49 +479,77 @@ export default function Dashboard() {
         {/* 1. Saldo Final Detalhado */}
         <div className={`rounded-xl p-6 mb-8 text-white shadow-lg ${
           balance?.isPositive 
-            ? 'bg-gradient-to-r from-[#1C6DD0] to-[#1557A8]' 
-            : 'bg-gradient-to-r from-[#DC2626] to-[#B91C1C]'
+            ? 'bg-gradient-to-r from-[#1A1A1A] to-[#2A2A2A] border border-[#C9A962]' 
+            : 'bg-gradient-to-r from-[#E11D48] to-[#BE123C]'
         }`}>
           <h2 className="text-lg font-semibold mb-6" style={{fontFamily: 'Poppins, sans-serif'}}>Saldo Final do Período</h2>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             {/* COLUNA RECEITAS */}
-            <div className="bg-white/10 rounded-lg p-4">
-              <h3 className={`text-sm font-medium mb-3 ${balance?.isPositive ? 'text-blue-100' : 'text-red-100'}`}>💰 RECEITAS</h3>
+            <div className="bg-white/10 rounded-lg p-4 border border-[#2563EB]/30">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-medium text-[#93C5FD]">💰 RECEITAS</h3>
+                <span 
+                  className="text-xs opacity-70 hover:opacity-100 cursor-pointer hover:underline"
+                  onClick={() => router.push(`/dashboard/transactions?type=INCOME&startDate=${startDate}&endDate=${endDate}`)}
+                >
+                  Ver todas →
+                </span>
+              </div>
               
               <div className="mb-4">
-                <p className={`text-xs mb-1 ${balance?.isPositive ? 'text-blue-200' : 'text-red-200'}`}>Total de Receitas</p>
+                <p className="text-xs mb-1 text-[#93C5FD]">Total de Receitas</p>
                 <p className="text-2xl font-bold">{formatCurrency(balance?.totalIncome || 0)}</p>
               </div>
               
               <div className="space-y-2 text-sm">
-                <div className="flex justify-between items-center">
-                  <span className={balance?.isPositive ? 'text-blue-200' : 'text-red-200'}>✅ Receitas Recebidas</span>
+                <div 
+                  className="flex justify-between items-center cursor-pointer hover:bg-white/10 rounded px-2 py-1 -mx-2 transition-colors"
+                  onClick={() => router.push(`/dashboard/transactions?type=INCOME&status=completed&startDate=${startDate}&endDate=${endDate}`)}
+                >
+                  <span className="text-[#93C5FD]">✅ Receitas Recebidas</span>
                   <span className="font-semibold">{formatCurrency(balance?.receivedIncome || 0)}</span>
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className={balance?.isPositive ? 'text-blue-200' : 'text-red-200'}>⏳ Receitas a Receber</span>
+                <div 
+                  className="flex justify-between items-center cursor-pointer hover:bg-white/10 rounded px-2 py-1 -mx-2 transition-colors"
+                  onClick={() => router.push(`/dashboard/transactions?type=INCOME&status=pending&startDate=${startDate}&endDate=${endDate}`)}
+                >
+                  <span className="text-[#93C5FD]">⏳ Receitas a Receber</span>
                   <span className="font-semibold">{formatCurrency(balance?.pendingIncome || 0)}</span>
                 </div>
               </div>
             </div>
 
             {/* COLUNA DESPESAS */}
-            <div className="bg-white/10 rounded-lg p-4">
-              <h3 className={`text-sm font-medium mb-3 ${balance?.isPositive ? 'text-blue-100' : 'text-red-100'}`}>💸 DESPESAS</h3>
+            <div className="bg-white/10 rounded-lg p-4 border border-[#E11D48]/30">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-medium text-[#FDA4AF]">💸 DESPESAS</h3>
+                <span 
+                  className="text-xs opacity-70 hover:opacity-100 cursor-pointer hover:underline"
+                  onClick={() => router.push(`/dashboard/transactions?type=EXPENSE&startDate=${startDate}&endDate=${endDate}`)}
+                >
+                  Ver todas →
+                </span>
+              </div>
               
               <div className="mb-4">
-                <p className={`text-xs mb-1 ${balance?.isPositive ? 'text-blue-200' : 'text-red-200'}`}>Total de Despesas</p>
+                <p className="text-xs mb-1 text-[#FDA4AF]">Total de Despesas</p>
                 <p className="text-2xl font-bold">{formatCurrency(balance?.totalExpense || 0)}</p>
               </div>
               
               <div className="space-y-2 text-sm">
-                <div className="flex justify-between items-center">
-                  <span className={balance?.isPositive ? 'text-blue-200' : 'text-red-200'}>✅ Despesas Pagas</span>
+                <div 
+                  className="flex justify-between items-center cursor-pointer hover:bg-white/10 rounded px-2 py-1 -mx-2 transition-colors"
+                  onClick={() => router.push(`/dashboard/transactions?type=EXPENSE&status=completed&startDate=${startDate}&endDate=${endDate}`)}
+                >
+                  <span className="text-[#FDA4AF]">✅ Despesas Pagas</span>
                   <span className="font-semibold">{formatCurrency(balance?.paidExpense || 0)}</span>
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className={balance?.isPositive ? 'text-blue-200' : 'text-red-200'}>⏳ Despesas a Pagar</span>
+                <div 
+                  className="flex justify-between items-center cursor-pointer hover:bg-white/10 rounded px-2 py-1 -mx-2 transition-colors"
+                  onClick={() => router.push(`/dashboard/transactions?type=EXPENSE&status=pending&startDate=${startDate}&endDate=${endDate}`)}
+                >
+                  <span className="text-[#FDA4AF]">⏳ Despesas a Pagar</span>
                   <span className="font-semibold">{formatCurrency(balance?.pendingExpense || 0)}</span>
                 </div>
               </div>
@@ -421,7 +560,7 @@ export default function Dashboard() {
           <div className="border-t border-white/20 pt-4">
             <div className={`rounded-lg p-4 text-center ${balance?.isPositive ? 'bg-white/20' : 'bg-white/10'}`}>
               <p className="text-sm text-white mb-2 font-medium">Saldo Final (Receitas - Despesas)</p>
-              <p className={`text-4xl font-bold ${balance?.isPositive ? 'text-[#22C39A]' : 'text-[#FFEB3B]'}`}>
+              <p className={`text-4xl font-bold ${balance?.isPositive ? 'text-[#60A5FA]' : 'text-[#FCD34D]'}`}>
                 {formatCurrency(balance?.finalBalance || 0)}
               </p>
             </div>
@@ -439,7 +578,7 @@ export default function Dashboard() {
               <div className="space-y-3">
                 {expenseData.pareto80.map((item: any) => (
                   <div key={item.rank} className="flex items-center gap-3">
-                    <div className="flex-shrink-0 w-8 h-8 bg-[#FEF2F2] rounded-full flex items-center justify-center text-[#E74C3C] font-semibold text-sm">
+                    <div className="flex-shrink-0 w-8 h-8 bg-[#FFF1F2] rounded-full flex items-center justify-center text-[#E11D48] font-semibold text-sm">
                       {item.rank}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -449,7 +588,7 @@ export default function Dashboard() {
                       </div>
                       <div className="w-full bg-[#D9D9D9] rounded-full h-2">
                         <div
-                          className="bg-[#E74C3C] h-2 rounded-full transition-all"
+                          className="bg-[#E11D48] h-2 rounded-full transition-all"
                           style={{ width: `${item.percentage}%` }}
                         ></div>
                       </div>
@@ -475,7 +614,7 @@ export default function Dashboard() {
               <div className="space-y-3">
                 {incomeData.ranking.slice(0, 8).map((item: any) => (
                   <div key={item.rank} className="flex items-center gap-3">
-                    <div className="flex-shrink-0 w-8 h-8 bg-[#E8F9F4] rounded-full flex items-center justify-center text-[#22C39A] font-semibold text-sm">
+                    <div className="flex-shrink-0 w-8 h-8 bg-[#DBEAFE] rounded-full flex items-center justify-center text-[#2563EB] font-semibold text-sm">
                       {item.rank}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -485,7 +624,7 @@ export default function Dashboard() {
                       </div>
                       <div className="w-full bg-[#D9D9D9] rounded-full h-2">
                         <div
-                          className="bg-[#22C39A] h-2 rounded-full transition-all"
+                          className="bg-[#2563EB] h-2 rounded-full transition-all"
                           style={{ width: `${item.percentage}%` }}
                         ></div>
                       </div>
@@ -511,7 +650,7 @@ export default function Dashboard() {
                 <div key={month.month} className="space-y-2">
                   <div className="flex items-center justify-between text-sm">
                     <span className="font-medium text-[#1A1A1A]" style={{fontFamily: 'Inter, sans-serif'}}>{formatMonth(month.month)}</span>
-                    <span className={`font-semibold ${month.balance >= 0 ? 'text-[#22C39A]' : 'text-[#E74C3C]'}`} style={{fontFamily: 'Inter, sans-serif'}}>
+                    <span className={`font-semibold ${month.balance >= 0 ? 'text-[#2563EB]' : 'text-[#E11D48]'}`} style={{fontFamily: 'Inter, sans-serif'}}>
                       {formatCurrency(month.balance)}
                     </span>
                   </div>
@@ -522,10 +661,10 @@ export default function Dashboard() {
                         <span>Receitas (realizado + provisionado)</span>
                         <span className="font-medium">{formatCurrency(month.totalIncome || month.realizedIncome)}</span>
                       </div>
-                      <div className="h-8 bg-[#E8F9F4] rounded overflow-hidden">
+                      <div className="h-8 bg-[#DBEAFE] rounded overflow-hidden">
                         <div className="h-full flex">
                           <div
-                            className="bg-[#22C39A]"
+                            className="bg-[#2563EB]"
                             style={{
                               width: month.totalIncome ? `${(month.realizedIncome / month.totalIncome) * 100}%` : '100%',
                             }}
@@ -533,7 +672,7 @@ export default function Dashboard() {
                           ></div>
                           {month.projectedIncome > 0 && (
                             <div
-                              className="bg-[#6DD9B9]"
+                              className="bg-[#93C5FD]"
                               style={{
                                 width: `${((month.projectedIncome || 0) / month.totalIncome) * 100}%`,
                               }}
@@ -544,12 +683,12 @@ export default function Dashboard() {
                       </div>
                       <div className="flex items-center gap-3 mt-1 text-xs text-[#4F4F4F]" style={{fontFamily: 'Inter, sans-serif'}}>
                         <span className="flex items-center gap-1">
-                          <div className="w-3 h-3 bg-[#22C39A] rounded"></div>
+                          <div className="w-3 h-3 bg-[#2563EB] rounded"></div>
                           Realizado: {formatCurrency(month.realizedIncome)}
                         </span>
                         {month.projectedIncome > 0 && (
                           <span className="flex items-center gap-1">
-                            <div className="w-3 h-3 bg-[#6DD9B9] rounded"></div>
+                            <div className="w-3 h-3 bg-[#93C5FD] rounded"></div>
                             Provisionado: {formatCurrency(month.projectedIncome || 0)}
                           </span>
                         )}
@@ -562,17 +701,17 @@ export default function Dashboard() {
                         <span>Despesas (realizado + provisionado)</span>
                         <span className="font-medium">{formatCurrency(month.totalExpense)}</span>
                       </div>
-                      <div className="h-8 bg-[#FEF2F2] rounded overflow-hidden">
+                      <div className="h-8 bg-[#FFF1F2] rounded overflow-hidden">
                         <div className="h-full flex">
                           <div
-                            className="bg-[#E74C3C]"
+                            className="bg-[#E11D48]"
                             style={{
                               width: `${(month.realizedExpense / month.totalExpense) * 100}%`,
                             }}
                             title={`Realizado: ${formatCurrency(month.realizedExpense)}`}
                           ></div>
                           <div
-                            className="bg-[#F39C8F]"
+                            className="bg-[#FDA4AF]"
                             style={{
                               width: `${(month.projectedExpense / month.totalExpense) * 100}%`,
                             }}
@@ -582,11 +721,11 @@ export default function Dashboard() {
                       </div>
                       <div className="flex items-center gap-3 mt-1 text-xs text-[#4F4F4F]" style={{fontFamily: 'Inter, sans-serif'}}>
                         <span className="flex items-center gap-1">
-                          <div className="w-3 h-3 bg-[#E74C3C] rounded"></div>
+                          <div className="w-3 h-3 bg-[#E11D48] rounded"></div>
                           Realizado: {formatCurrency(month.realizedExpense)}
                         </span>
                         <span className="flex items-center gap-1">
-                          <div className="w-3 h-3 bg-[#F39C8F] rounded"></div>
+                          <div className="w-3 h-3 bg-[#FDA4AF] rounded"></div>
                           Provisionado: {formatCurrency(month.projectedExpense)}
                         </span>
                       </div>
@@ -606,7 +745,7 @@ export default function Dashboard() {
           <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-xl font-bold text-[#1A1A1A]" style={{fontFamily: 'Poppins, sans-serif'}}>Filtrar por Período</h3>
-              <button onClick={() => setShowPeriodModal(false)} className="p-2 hover:bg-gray-100 rounded-lg">
+              <button onClick={() => { setTempStartDate(startDate); setTempEndDate(endDate); setShowPeriodModal(false); }} className="p-2 hover:bg-gray-100 rounded-lg">
                 <X className="w-5 h-5 text-[#4F4F4F]" />
               </button>
             </div>
@@ -616,20 +755,24 @@ export default function Dashboard() {
                 <label className="block text-sm font-medium text-[#1A1A1A] mb-2" style={{fontFamily: 'Inter, sans-serif'}}>Data Inicial</label>
                 <input
                   type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="w-full px-4 py-2 border border-[#D9D9D9] rounded-lg focus:ring-2 focus:ring-[#1C6DD0] focus:border-[#1C6DD0]"
-                  style={{fontFamily: 'Inter, sans-serif'}}
+                  value={tempStartDate}
+                  onChange={(e) => setTempStartDate(e.target.value)}
+                  className="w-full px-4 py-2 min-h-[44px] border border-[#D9D9D9] rounded-lg focus:ring-2 focus:ring-[#1C6DD0] focus:border-[#1C6DD0] text-gray-900 bg-white"
+                  style={{fontFamily: 'Inter, sans-serif', colorScheme: 'light'}}
+                  title="Data inicial do período"
+                  aria-label="Data inicial"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-[#1A1A1A] mb-2" style={{fontFamily: 'Inter, sans-serif'}}>Data Final</label>
                 <input
                   type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="w-full px-4 py-2 border border-[#D9D9D9] rounded-lg focus:ring-2 focus:ring-[#1C6DD0] focus:border-[#1C6DD0]"
-                  style={{fontFamily: 'Inter, sans-serif'}}
+                  value={tempEndDate}
+                  onChange={(e) => setTempEndDate(e.target.value)}
+                  className="w-full px-4 py-2 min-h-[44px] border border-[#D9D9D9] rounded-lg focus:ring-2 focus:ring-[#1C6DD0] focus:border-[#1C6DD0] text-gray-900 bg-white"
+                  style={{fontFamily: 'Inter, sans-serif', colorScheme: 'light'}}
+                  title="Data final do período"
+                  aria-label="Data final"
                 />
               </div>
             </div>
@@ -654,14 +797,14 @@ export default function Dashboard() {
 
             <div className="flex gap-3">
               <button
-                onClick={() => setShowPeriodModal(false)}
+                onClick={() => { setTempStartDate(startDate); setTempEndDate(endDate); setShowPeriodModal(false); }}
                 className="flex-1 px-4 py-2 border border-[#D9D9D9] rounded-lg hover:bg-gray-50"
                 style={{fontFamily: 'Inter, sans-serif'}}
               >
                 Cancelar
               </button>
               <button
-                onClick={() => setShowPeriodModal(false)}
+                onClick={() => { setStartDate(tempStartDate); setEndDate(tempEndDate); setShowPeriodModal(false); }}
                 className="flex-1 px-4 py-2 bg-[#1C6DD0] text-white rounded-lg hover:bg-[#1557A8] shadow-md"
                 style={{fontFamily: 'Inter, sans-serif'}}
               >
@@ -950,8 +1093,8 @@ export default function Dashboard() {
         </div>
       )}
       
-      {/* Modal de Transação Unificado */}
-      <TransactionModal
+      {/* Modal de Transação Unificado com Tabs: Única | Recorrente | Parcelada */}
+      <CreateTransactionModal
         isOpen={showTransactionModal}
         onClose={() => setShowTransactionModal(false)}
         onSuccess={() => {

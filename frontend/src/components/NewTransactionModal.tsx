@@ -317,36 +317,40 @@ export default function TransactionModal({
   };
 
   // Função para construir lista hierárquica de categorias
-  const buildHierarchicalList = (cats: Category[], searchTerm: string = ''): Array<{ category: Category; level: number; indent: number }> => {
-    const result: Array<{ category: Category; level: number; indent: number }> = [];
+  // IMPORTANTE: Só permite selecionar categorias "folha" (sem filhos)
+  const buildHierarchicalList = (cats: Category[], searchTerm: string = ''): Array<{ category: Category; level: number; indent: number; hasChildren: boolean }> => {
+    const result: Array<{ category: Category; level: number; indent: number; hasChildren: boolean }> = [];
     const search = searchTerm.toLowerCase().trim();
     
     const addCategoryWithChildren = (cat: Category, indent: number = 0) => {
       // Se há busca, verificar se a categoria ou algum filho corresponde
       const catMatches = cat.name.toLowerCase().includes(search);
+      const hasChildren = cat.children && cat.children.length > 0;
       const hasMatchingChildren = cat.children?.some(child => 
         child.name.toLowerCase().includes(search)
       );
       
       // Adicionar categoria se não há busca, ou se ela/filhos correspondem
       if (!search || catMatches || hasMatchingChildren) {
-        result.push({ category: cat, level: cat.level || 1, indent });
+        result.push({ category: cat, level: cat.level || 1, indent, hasChildren: !!hasChildren });
       }
       
       // Adicionar filhos
-      if (cat.children && cat.children.length > 0) {
-        cat.children.forEach(child => {
+      if (hasChildren) {
+        cat.children!.forEach(child => {
           const childMatches = child.name.toLowerCase().includes(search);
+          const childHasChildren = child.children && child.children.length > 0;
           // Se não há busca, ou filho corresponde, ou pai correspondeu
           if (!search || childMatches || catMatches) {
-            result.push({ category: child, level: child.level || 2, indent: indent + 1 });
+            result.push({ category: child, level: child.level || 2, indent: indent + 1, hasChildren: !!childHasChildren });
             
             // Adicionar netos se existirem
-            if (child.children && child.children.length > 0) {
-              child.children.forEach(grandchild => {
+            if (childHasChildren) {
+              child.children!.forEach(grandchild => {
                 const grandchildMatches = grandchild.name.toLowerCase().includes(search);
+                const grandchildHasChildren = grandchild.children && grandchild.children.length > 0;
                 if (!search || grandchildMatches || childMatches || catMatches) {
-                  result.push({ category: grandchild, level: grandchild.level || 3, indent: indent + 2 });
+                  result.push({ category: grandchild, level: grandchild.level || 3, indent: indent + 2, hasChildren: !!grandchildHasChildren });
                 }
               });
             }
@@ -398,6 +402,49 @@ export default function TransactionModal({
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-5 overflow-y-auto flex-1 font-inter">
+          {/* Tipo: Receita ou Despesa */}
+          <div>
+            <label className="block text-sm font-semibold text-[#1A1A1A] mb-2">
+              Tipo de Transação *
+            </label>
+            <div className="flex gap-3">
+              <label className={`flex-1 flex items-center justify-center gap-3 p-4 border-2 rounded-xl cursor-pointer transition-all hover:shadow-md ${
+                formData.type === 'expense'
+                  ? 'border-[#EF4444] bg-red-50'
+                  : 'border-gray-200 bg-white hover:border-gray-300'
+              }`}>
+                <input
+                  type="radio"
+                  value="expense"
+                  checked={formData.type === 'expense'}
+                  onChange={(e) => {
+                    setFormData({ ...formData, type: e.target.value as 'income' | 'expense', categoryId: '' });
+                    setCategorySearch('');
+                  }}
+                  className="w-5 h-5 text-[#E11D48] focus:ring-[#E11D48]"
+                />
+                <span className={`font-semibold ${formData.type === 'expense' ? 'text-[#E11D48]' : 'text-gray-700'}`}>💸 Despesa</span>
+              </label>
+              <label className={`flex-1 flex items-center justify-center gap-3 p-4 border-2 rounded-xl cursor-pointer transition-all hover:shadow-md ${
+                formData.type === 'income'
+                  ? 'border-[#2563EB] bg-[#DBEAFE]'
+                  : 'border-gray-200 bg-white hover:border-gray-300'
+              }`}>
+                <input
+                  type="radio"
+                  value="income"
+                  checked={formData.type === 'income'}
+                  onChange={(e) => {
+                    setFormData({ ...formData, type: e.target.value as 'income' | 'expense', categoryId: '' });
+                    setCategorySearch('');
+                  }}
+                  className="w-5 h-5 text-[#2563EB] focus:ring-[#2563EB]"
+                />
+                <span className={`font-semibold ${formData.type === 'income' ? 'text-[#2563EB]' : 'text-gray-700'}`}>💰 Receita</span>
+              </label>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {/* Valor */}
             <div>
@@ -482,12 +529,15 @@ export default function TransactionModal({
               
               {showCategoryDropdown && filteredCategories.length > 0 && (
                 <div className="absolute z-10 w-full mt-2 bg-white border-2 border-gray-200 rounded-xl shadow-xl max-h-60 overflow-y-auto">
-                  {filteredCategories.map(({ category, level, indent }) => (
-                    <button
+                  {filteredCategories.map(({ category, level, indent, hasChildren }) => (
+                    <div
                       key={category.id}
-                      type="button"
-                      onClick={() => handleCategorySelect(category)}
-                      className="w-full py-3 text-left hover:bg-[#F4F7FB] transition-colors flex items-center gap-3 border-b border-gray-100 last:border-0"
+                      onClick={() => !hasChildren && handleCategorySelect(category)}
+                      className={`w-full py-3 text-left flex items-center gap-3 border-b border-gray-100 last:border-0 ${
+                        hasChildren 
+                          ? 'bg-gray-50 cursor-default' 
+                          : 'hover:bg-[#F4F7FB] transition-colors cursor-pointer'
+                      }`}
                       style={{ paddingLeft: `${16 + (indent * 24)}px`, paddingRight: '16px' }}
                     >
                       {indent > 0 && (
@@ -497,18 +547,22 @@ export default function TransactionModal({
                       )}
                       <span className="text-xl">{category.icon}</span>
                       <div className="flex-1">
-                        <p className={`${level === 1 ? 'font-bold' : level === 2 ? 'font-semibold' : 'font-medium'} text-[#1A1A1A]`}>
+                        <p className={`${level === 1 ? 'font-bold' : level === 2 ? 'font-semibold' : 'font-medium'} ${
+                          hasChildren ? 'text-gray-500' : 'text-[#1A1A1A]'
+                        }`}>
                           {category.name}
                         </p>
-                        {level === 1 && category.children && category.children.length > 0 && (
-                          <p className="text-xs text-gray-500 mt-0.5">{category.children.length} subcategorias</p>
+                        {hasChildren && (
+                          <p className="text-xs text-gray-400 mt-0.5">📂 {category.children?.length} subcategorias (selecione uma abaixo)</p>
                         )}
                       </div>
-                      <div
-                        className="w-3 h-3 rounded-full shadow-sm"
-                        style={{ backgroundColor: category.color }}
-                      />
-                    </button>
+                      {!hasChildren && (
+                        <div
+                          className="w-3 h-3 rounded-full shadow-sm"
+                          style={{ backgroundColor: category.color }}
+                        />
+                      )}
+                    </div>
                   ))}
                 </div>
               )}
@@ -538,13 +592,13 @@ export default function TransactionModal({
                     placeholder="Nome da conta"
                     value={quickBankAccount.name}
                     onChange={(e) => setQuickBankAccount({ ...quickBankAccount, name: e.target.value })}
-                    className="w-full px-3 py-2 text-sm border rounded-lg"
+                    className="w-full px-3 py-2 text-sm border rounded-lg bg-white text-gray-900 placeholder:text-gray-400"
                   />
                   <div className="grid grid-cols-2 gap-2">
                     <select
                       value={quickBankAccount.type}
                       onChange={(e) => setQuickBankAccount({ ...quickBankAccount, type: e.target.value })}
-                      className="px-3 py-2 text-sm border rounded-lg"
+                      className="px-3 py-2 text-sm border rounded-lg bg-white text-gray-900"
                       title="Tipo de conta"
                     >
                       <option value="bank">Conta Bancária</option>
@@ -556,7 +610,7 @@ export default function TransactionModal({
                       placeholder="Instituição"
                       value={quickBankAccount.institution}
                       onChange={(e) => setQuickBankAccount({ ...quickBankAccount, institution: e.target.value })}
-                      className="px-3 py-2 text-sm border rounded-lg"
+                      className="px-3 py-2 text-sm border rounded-lg bg-white text-gray-900 placeholder:text-gray-400"
                     />
                   </div>
                   <div className="flex justify-end gap-2">
@@ -622,7 +676,7 @@ export default function TransactionModal({
                     placeholder="Ex: PIX Nubank, Cartão Inter, Dinheiro..."
                     value={quickPaymentMethod.name}
                     onChange={(e) => setQuickPaymentMethod({ ...quickPaymentMethod, name: e.target.value })}
-                    className="w-full px-3 py-2 text-sm border rounded-lg"
+                    className="w-full px-3 py-2 text-sm border rounded-lg bg-white text-gray-900 placeholder:text-gray-400"
                     aria-label="Nome do meio de pagamento"
                   />
                   <div className="flex justify-end gap-2">
@@ -674,7 +728,7 @@ export default function TransactionModal({
             <div className="flex gap-3">
               <label className="flex-1 flex items-center gap-3 p-4 border-2 rounded-xl cursor-pointer transition-all hover:shadow-md ${
                 formData.status === 'completed'
-                  ? 'border-[#2ECC9A] bg-[#DCFCE7]'
+                  ? 'border-[#2563EB] bg-[#DBEAFE]'
                   : 'border-gray-200 bg-white hover:border-gray-300'
               }">
                 <input
@@ -682,9 +736,9 @@ export default function TransactionModal({
                   value="completed"
                   checked={formData.status === 'completed'}
                   onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                  className="w-5 h-5 text-[#2ECC9A] focus:ring-[#2ECC9A]"
+                  className="w-5 h-5 text-[#2563EB] focus:ring-[#2563EB]"
                 />
-                <span className={`font-semibold ${formData.status === 'completed' ? 'text-[#2ECC9A]' : 'text-gray-700'}`}>Pago</span>
+                <span className={`font-semibold ${formData.status === 'completed' ? 'text-[#2563EB]' : 'text-gray-700'}`}>Pago</span>
               </label>
               <label className="flex-1 flex items-center gap-3 p-4 border-2 rounded-xl cursor-pointer transition-all hover:shadow-md ${
                 formData.status === 'pending'
@@ -771,8 +825,8 @@ export default function TransactionModal({
               onClick={handleSubmit}
               className={`flex-1 px-6 py-3.5 rounded-xl font-bold transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5 text-white ${
                 formData.type === 'income'
-                  ? 'bg-gradient-to-r from-[#2ECC9A] to-[#27B589] hover:from-[#27B589] hover:to-[#1D9A6B]'
-                  : 'bg-gradient-to-r from-[#EF4444] to-[#DC2626] hover:from-[#DC2626] hover:to-[#B91C1C]'
+                  ? 'bg-gradient-to-r from-[#2563EB] to-[#1D4ED8] hover:from-[#1D4ED8] hover:to-[#1E40AF]'
+                  : 'bg-gradient-to-r from-[#E11D48] to-[#BE123C] hover:from-[#BE123C] hover:to-[#9F1239]'
               } disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none`}
               disabled={loading}
             >
@@ -853,10 +907,10 @@ export default function TransactionModal({
               <button
                 onClick={() => handleScopeSelect('all')}
                 disabled={loading}
-                className="w-full p-4 text-left border-2 border-gray-200 rounded-xl hover:border-[#2ECC9A] hover:bg-emerald-50 transition-all group"
+                className="w-full p-4 text-left border-2 border-gray-200 rounded-xl hover:border-[#C9A962] hover:bg-[#F5F0E6] transition-all group"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-gray-100 group-hover:bg-[#2ECC9A] rounded-lg flex items-center justify-center transition-all">
+                  <div className="w-10 h-10 bg-gray-100 group-hover:bg-[#C9A962] rounded-lg flex items-center justify-center transition-all">
                     <span className="text-xl">🔄</span>
                   </div>
                   <div>

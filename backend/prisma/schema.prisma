@@ -10,17 +10,25 @@ datasource db {
 // ==================== USUÁRIOS E TENANTS ====================
 
 model User {
-  id                String    @id @default(uuid())
-  email             String    @unique
-  passwordHash      String
-  fullName          String
-  role              String    @default("owner") // owner, member, super_master
-  isActive          Boolean   @default(true)
-  isEmailVerified   Boolean   @default(false)
-  lastLoginAt       DateTime?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-  deletedAt         DateTime?
+  id                        String    @id @default(uuid())
+  email                     String    @unique
+  passwordHash              String
+  fullName                  String
+  role                      String    @default("owner") // owner, member, super_master
+  isActive                  Boolean   @default(true)
+  isEmailVerified           Boolean   @default(false)
+  lastLoginAt               DateTime?
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
+  deletedAt                 DateTime?
+  
+  // Campos para verificação de email
+  emailVerificationToken    String?
+  emailVerificationExpires  DateTime?
+  
+  // Campos para reset de senha
+  passwordResetToken        String?
+  passwordResetExpires      DateTime?
 
   ownedTenants      Tenant[]  @relation("TenantOwner")
   tenantUsers       TenantUser[]
@@ -30,16 +38,22 @@ model User {
 }
 
 model Tenant {
-  id                  String    @id @default(uuid())
-  ownerId             String
-  name                String
-  slug                String    @unique
-  subscriptionPlan    String    @default("trial") // trial, basic, plus, premium, business
-  subscriptionStatus  String    @default("active") // active, suspended, cancelled
-  trialEndsAt         DateTime?
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
-  deletedAt           DateTime?
+  id                    String    @id @default(uuid())
+  ownerId               String
+  name                  String
+  slug                  String    @unique
+  subscriptionPlan      String    @default("trial") // trial, basic, plus, premium, business
+  subscriptionStatus    String    @default("active") // active, suspended, cancelled
+  trialEndsAt           DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  deletedAt             DateTime?
+  
+  // Campos para integração Stripe
+  stripeCustomerId      String?   // ID do cliente no Stripe
+  stripeSubscriptionId  String?   // ID da assinatura no Stripe
+  stripePriceId         String?   // ID do preço/plano no Stripe
+  stripeCurrentPeriodEnd DateTime? // Fim do período atual da assinatura
 
   owner               User           @relation("TenantOwner", fields: [ownerId], references: [id])
   tenantUsers         TenantUser[]
@@ -60,6 +74,8 @@ model Tenant {
 
   @@index([ownerId])
   @@index([subscriptionPlan])
+  @@index([stripeCustomerId])
+  @@index([stripeSubscriptionId])
 }
 
 model TenantUser {
@@ -100,6 +116,7 @@ model Category {
   tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   parent      Category?    @relation("CategoryChildren", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   children    Category[]   @relation("CategoryChildren")
+  semantics   CategorySemantics?
   transactions Transaction[]
   recurringBills RecurringBill[]
   installmentPurchases InstallmentPurchase[]
@@ -110,6 +127,50 @@ model Category {
   @@index([type])
   @@index([tenantId, type, isActive])
   @@index([tenantId, isActive])
+}
+
+// ==================== SEMÂNTICA DE ENERGIA ====================
+
+/**
+ * CategorySemantics - Classificação energética de categorias
+ * 
+ * Define como cada categoria impacta a vida financeira do usuário.
+ * Segue o CONTRATO OFICIAL em backend/src/contracts/ENERGY-CONTRACT.md
+ */
+model CategorySemantics {
+  id                String    @id @default(uuid())
+  categoryId        String    @unique
+  tenantId          String
+  
+  // Pesos de energia (soma DEVE ser 1.0)
+  generatedWeight   Decimal   @default(0) @db.Decimal(5, 4) // Para receitas
+  survivalWeight    Decimal   @default(0) @db.Decimal(5, 4) // Sobrevivência
+  choiceWeight      Decimal   @default(0) @db.Decimal(5, 4) // Escolha
+  futureWeight      Decimal   @default(0) @db.Decimal(5, 4) // Futuro
+  lossWeight        Decimal   @default(0) @db.Decimal(5, 4) // Energia Perdida
+  
+  // Metadados
+  isFixed           Boolean   @default(false) // Gasto fixo?
+  isEssential       Boolean   @default(false) // Essencial para sobrevivência?
+  isInvestment      Boolean   @default(false) // É investimento?
+  
+  // Status de validação
+  validationStatus  String    @default("inferred") // validated, inferred, not_validated, default
+  validatedAt       DateTime?
+  validatedBy       String?   // User ID que validou
+  justification     String?   // Justificativa para híbridos
+  
+  // Override do usuário?
+  userOverride      Boolean   @default(false)
+  
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  category          Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([validationStatus])
+  @@index([tenantId, validationStatus])
 }
 
 // ==================== CONTAS E PAGAMENTOS ====================
@@ -172,11 +233,13 @@ model Transaction {
   tenantId        String
   userId          String
   type            String    // income, expense, transfer
+  transactionType String    @default("single") // single, recurring, installment
   categoryId      String?
   bankAccountId   String?
   paymentMethodId String?
   destinationAccountId String? // Para transferências internas
   amount          Decimal   @db.Decimal(15, 2)
+  originalAmount  Decimal?  @db.Decimal(15, 2) // Valor original (para parceladas)
   description     String?
   transactionDate DateTime
   dueDate         DateTime? // Data de vencimento
@@ -184,22 +247,62 @@ model Transaction {
   isPaidEarly     Boolean?  // Pago antecipado?
   isPaidLate      Boolean?  // Pago atrasado?
   daysEarlyLate   Int?      // Quantos dias antes/depois
-  status          String    @default("completed") // completed, pending, cancelled
+  status          String    @default("completed") // completed, pending, cancelled, scheduled
   isRecurring     Boolean   @default(false)
   isFixed         Boolean   @default(true) // true = Fixa, false = Variável
   recurringBillId String?
   installmentId   String?
+  
+  // Campos para hierarquia pai/filho
+  parentId        String?   // ID da transação pai (template)
+  
+  // Campos para transações RECORRENTES
+  frequency       String?   // daily, weekly, biweekly, monthly, bimonthly, quarterly, semiannual, yearly
+  frequencyInterval Int?    // A cada X períodos (ex: a cada 2 meses)
+  totalOccurrences Int?     // Número total de ocorrências (null = infinito)
+  currentOccurrence Int?    // Ocorrência atual (1, 2, 3...)
+  occurrenceNumber Int?     // Número da ocorrência para ordenação
+  startDate       DateTime? // Data de início da recorrência
+  endDate         DateTime? // Data de fim (calculada ou manual)
+  nextDueDate     DateTime? // Próxima data de vencimento
+  alertDaysBefore Int?      // Dias antes para alertar
+  autoGenerateNext Boolean? // Gerar próxima automaticamente
+  
+  // Campos para transações PARCELADAS
+  totalInstallments Int?    // Total de parcelas
+  installmentNumber Int?    // Número da parcela atual (1/12, 2/12...)
+  hasDownPayment  Boolean?  // Tem entrada?
+  downPaymentAmount Decimal? @db.Decimal(15, 2) // Valor da entrada
+  
+  // ══════════════════════════════════════════════════════════════════
+  // SEMÂNTICA DE ENERGIA (Override por transação)
+  // Ref: backend/src/contracts/ENERGY-CONTRACT.md
+  // ══════════════════════════════════════════════════════════════════
+  
+  // Fonte da energia para esta transação
+  energySource      String?   // 'category' (padrão) ou 'user_override'
+  
+  // Override de pesos (só usado se energySource = 'user_override')
+  energySurvival    Decimal?  @db.Decimal(5, 4) // Peso Sobrevivência
+  energyChoice      Decimal?  @db.Decimal(5, 4) // Peso Escolha
+  energyFuture      Decimal?  @db.Decimal(5, 4) // Peso Futuro
+  energyLoss        Decimal?  @db.Decimal(5, 4) // Peso Energia Perdida
+  energyJustification String? // Justificativa do override
+  
   tags            String?   // JSON array
   notes           String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   deletedAt       DateTime?
 
+  // Relações
   tenant          Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   user            User         @relation(fields: [userId], references: [id])
   category        Category?    @relation(fields: [categoryId], references: [id])
   bankAccount     BankAccount? @relation(fields: [bankAccountId], references: [id])
   paymentMethod   PaymentMethod? @relation(fields: [paymentMethodId], references: [id])
+  parent          Transaction? @relation("TransactionHierarchy", fields: [parentId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  children        Transaction[] @relation("TransactionHierarchy")
 
   @@index([tenantId, transactionDate])
   @@index([categoryId])
@@ -212,6 +315,9 @@ model Transaction {
   @@index([tenantId, dueDate, status])
   @@index([tenantId, isFixed, status])
   @@index([recurringBillId])
+  @@index([parentId])
+  @@index([transactionType])
+  @@index([tenantId, transactionType, status])
 }
 
 // ==================== CONTAS FIXAS (RECORRENTES) ====================

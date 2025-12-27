@@ -111,7 +111,7 @@ export default function CreateBillModal({
                   required
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-transparent bg-[#F9FAFB] transition-all"
+                  className="w-full px-4 py-3 min-h-[44px] border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-transparent bg-white text-gray-900 transition-all placeholder:text-gray-400"
                   placeholder="Ex: Aluguel, Netflix, Salário..."
                 />
               </div>
@@ -124,7 +124,7 @@ export default function CreateBillModal({
                   type="text"
                   value={form.description}
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-transparent bg-[#F9FAFB] transition-all"
+                  className="w-full px-4 py-3 min-h-[44px] border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-transparent bg-white text-gray-900 transition-all placeholder:text-gray-400"
                   placeholder="Detalhes adicionais..."
                 />
               </div>
@@ -177,7 +177,7 @@ export default function CreateBillModal({
                   min="0"
                   value={form.amount}
                   onChange={(e) => setForm({ ...form, amount: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-transparent bg-[#F9FAFB] transition-all"
+                  className="w-full px-4 py-3 min-h-[44px] border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-transparent bg-white text-gray-900 transition-all placeholder:text-gray-400"
                   placeholder="0,00"
                 />
               </div>
@@ -191,7 +191,7 @@ export default function CreateBillModal({
                   required
                   value={form.frequency}
                   onChange={(e) => setForm({ ...form, frequency: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-transparent bg-[#F9FAFB] transition-all"
+                  className="w-full px-4 py-3 min-h-[44px] border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-transparent bg-white text-gray-900 transition-all"
                 >
                   <option value="daily">📅 Diário</option>
                   <option value="weekly">📅 Semanal</option>
@@ -211,7 +211,7 @@ export default function CreateBillModal({
                   required
                   value={form.dayOfWeek}
                   onChange={(e) => setForm({ ...form, dayOfWeek: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-transparent bg-[#F9FAFB] transition-all"
+                  className="w-full px-4 py-3 min-h-[44px] border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-transparent bg-white text-gray-900 transition-all"
                 >
                   <option value="0">Domingo</option>
                   <option value="1">Segunda-feira</option>
@@ -235,7 +235,10 @@ export default function CreateBillModal({
                   required
                   value={form.startDate}
                   onChange={(e) => setForm({ ...form, startDate: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-transparent bg-[#F9FAFB] transition-all"
+                  className="w-full px-4 py-3 min-h-[44px] border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-transparent bg-white text-gray-900 transition-all"
+                  style={{ colorScheme: 'light' }}
+                  title="Data de início da recorrência"
+                  aria-label="Data de início"
                 />
                 {form.frequency === 'monthly' && form.startDate && (
                   <p className="text-xs text-gray-500 mt-1">
@@ -252,7 +255,10 @@ export default function CreateBillModal({
                   type="date"
                   value={form.endDate}
                   onChange={(e) => setForm({ ...form, endDate: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-transparent bg-[#F9FAFB] transition-all"
+                  className="w-full px-4 py-3 min-h-[44px] border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-transparent bg-white text-gray-900 transition-all"
+                  style={{ colorScheme: 'light' }}
+                  title="Data de fim da recorrência (opcional)"
+                  aria-label="Data de fim"
                 />
               </div>
             </div>
@@ -268,7 +274,7 @@ export default function CreateBillModal({
                   required
                   value={form.categoryId}
                   onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-transparent bg-[#F9FAFB] transition-all"
+                  className="w-full px-4 py-3 min-h-[44px] border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-transparent bg-white text-gray-900 transition-all"
                 >
                   <option value="">Selecione uma categoria</option>
                   {categories.map((cat) => (
@@ -288,7 +294,7 @@ export default function CreateBillModal({
                   required
                   value={form.bankAccountId}
                   onChange={(e) => setForm({ ...form, bankAccountId: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-transparent bg-[#F9FAFB] transition-all"
+                  className="w-full px-4 py-3 min-h-[44px] border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-transparent bg-white text-gray-900 transition-all"
                 >
                   <option value="">Selecione uma conta</option>
                   {bankAccounts.map((account) => (
@@ -307,7 +313,7 @@ export default function CreateBillModal({
                 <select
                   value={form.paymentMethodId}
                   onChange={(e) => setForm({ ...form, paymentMethodId: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-transparent bg-[#F9FAFB] transition-all"
+                  className="w-full px-4 py-3 min-h-[44px] border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-transparent bg-white text-gray-900 transition-all"
                 >
                   <option value="">Selecione (opcional)</option>
                   {paymentMethods.map((method) => (

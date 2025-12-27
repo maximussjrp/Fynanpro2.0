@@ -21,15 +21,15 @@ const upload = multer({
     fileSize: 10 * 1024 * 1024, // 10MB máximo
   },
   fileFilter: (req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
-    const allowedMimes = ['text/csv', 'text/plain', 'application/x-ofx', 'application/ofx'];
-    const allowedExtensions = ['.csv', '.ofx', '.txt'];
+    const allowedMimes = ['text/csv', 'text/plain', 'application/x-ofx', 'application/ofx', 'text/xml', 'application/xml'];
+    const allowedExtensions = ['.csv', '.ofx', '.txt', '.xml'];
     
     const ext = file.originalname.toLowerCase().slice(file.originalname.lastIndexOf('.'));
     
     if (allowedMimes.includes(file.mimetype) || allowedExtensions.includes(ext)) {
       cb(null, true);
     } else {
-      cb(new Error('Formato de arquivo não suportado. Use CSV ou OFX.'));
+      cb(new Error('Formato de arquivo não suportado. Use CSV, OFX ou XML.'));
     }
   },
 });
@@ -45,20 +45,29 @@ router.post('/upload', authMiddleware, upload.single('file'), async (req: Multer
     const userId = req.userId!;
     const tenantId = req.tenantId!;
     
+    log.info(`[Import] Upload iniciado - userId: ${userId}, tenantId: ${tenantId}`);
+    
     if (!req.file) {
+      log.warn('[Import] Nenhum arquivo no request');
       return res.status(400).json({ error: 'Nenhum arquivo enviado' });
     }
+    
+    log.info(`[Import] Arquivo recebido: ${req.file.originalname}, size: ${req.file.size}, mimetype: ${req.file.mimetype}`);
     
     const content = req.file.buffer.toString('utf-8');
     const fileName = req.file.originalname;
     const ext = fileName.toLowerCase().slice(fileName.lastIndexOf('.'));
     
     // Detectar tipo de arquivo
-    let fileType: 'csv' | 'ofx' = 'csv';
+    let fileType: 'csv' | 'ofx' | 'xml' = 'csv';
     
     if (ext === '.ofx' || content.includes('<OFX>') || content.includes('<STMTTRN>')) {
       fileType = 'ofx';
+    } else if (ext === '.xml' || (content.includes('<?xml') && (content.includes('<extrato>') || content.includes('<transacao>') || content.includes('<lancamento>')))) {
+      fileType = 'xml';
     }
+    
+    log.info(`[Import] Tipo detectado: ${fileType}, extensão: ${ext}`);
     
     // Parsing opcional de colunas (para CSV)
     let columnMapping: ColumnMapping | undefined;
@@ -75,6 +84,8 @@ router.post('/upload', authMiddleware, upload.single('file'), async (req: Multer
     
     if (fileType === 'ofx') {
       preview = await importService.createOFXPreview(tenantId, userId, fileName, content);
+    } else if (fileType === 'xml') {
+      preview = await importService.createXMLPreview(tenantId, userId, fileName, content);
     } else {
       preview = await importService.createCSVPreview(tenantId, userId, fileName, content, columnMapping);
     }
@@ -96,7 +107,7 @@ router.post('/upload', authMiddleware, upload.single('file'), async (req: Multer
       },
     });
   } catch (error: any) {
-    log.error('[Import] Erro no upload:', error);
+    log.error('[Import] Erro no upload:', { message: error.message, stack: error.stack });
     res.status(400).json({ error: error.message || 'Erro ao processar arquivo' });
   }
 });

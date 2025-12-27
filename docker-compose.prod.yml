@@ -1,0 +1,119 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: utop-postgres
+    restart: always
+    environment:
+      POSTGRES_DB: utop
+      POSTGRES_USER: ${POSTGRES_USER:-utop_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-utop_secure_pass_2025}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - utop_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-utop_user} -d utop"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: utop-redis
+    restart: always
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    networks:
+      - utop_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: utop-backend
+    restart: always
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-utop_user}:${POSTGRES_PASSWORD:-utop_secure_pass_2025}@postgres:5432/utop?schema=public&connection_limit=10&pool_timeout=20
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      JWT_EXPIRATION: 2h
+      JWT_REFRESH_EXPIRATION: 30d
+      FRONTEND_URL: ${FRONTEND_URL:-https://utopsistema.com.br}
+      APP_URL: ${APP_URL:-https://api.utopsistema.com.br}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
+      STRIPE_PRICE_MONTHLY: ${STRIPE_PRICE_MONTHLY}
+      STRIPE_PRICE_QUARTERLY: ${STRIPE_PRICE_QUARTERLY}
+      STRIPE_PRICE_SEMIANNUAL: ${STRIPE_PRICE_SEMIANNUAL}
+      STRIPE_PRICE_YEARLY: ${STRIPE_PRICE_YEARLY}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      EMAIL_FROM: ${EMAIL_FROM:-UTOP <noreply@utopsistema.com.br>}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - utop_net
+    expose:
+      - "3000"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: utop-frontend
+    restart: always
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: ${API_URL:-https://api.utopsistema.com.br}
+    depends_on:
+      - backend
+    networks:
+      - utop_net
+    expose:
+      - "3000"
+
+  nginx:
+    image: nginx:alpine
+    container_name: utop-nginx
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/certs:ro
+      - ./nginx/logs:/var/log/nginx
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - utop_net
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  utop_net:
+    driver: bridge

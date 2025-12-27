@@ -235,7 +235,10 @@ export default function EditBillModal({
                   required
                   value={form.startDate}
                   onChange={(e) => setForm({ ...form, startDate: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#F59E0B] focus:border-transparent bg-[#F9FAFB] transition-all"
+                  className="w-full px-4 py-3 min-h-[44px] border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#F59E0B] focus:border-transparent bg-[#F9FAFB] text-gray-900 transition-all"
+                  style={{ colorScheme: 'light' }}
+                  title="Data de início da recorrência"
+                  aria-label="Data de início"
                 />
                 {form.frequency === 'monthly' && form.startDate && (
                   <p className="text-xs text-gray-500 mt-1">
@@ -252,7 +255,10 @@ export default function EditBillModal({
                   type="date"
                   value={form.endDate}
                   onChange={(e) => setForm({ ...form, endDate: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#F59E0B] focus:border-transparent bg-[#F9FAFB] transition-all"
+                  className="w-full px-4 py-3 min-h-[44px] border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#F59E0B] focus:border-transparent bg-[#F9FAFB] text-gray-900 transition-all"
+                  style={{ colorScheme: 'light' }}
+                  title="Data de fim da recorrência"
+                  aria-label="Data de fim"
                 />
               </div>
             </div>

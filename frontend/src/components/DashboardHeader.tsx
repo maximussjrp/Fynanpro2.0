@@ -85,7 +85,7 @@ export default function DashboardHeader({ onAddTransaction, showAddButton = true
               <input
                 type="text"
                 placeholder="Buscar..."
-                className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1C6DD0] focus:border-transparent"
+                className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A962] focus:border-transparent"
                 style={{ fontFamily: 'Inter, sans-serif' }}
               />
             </div>
@@ -96,14 +96,14 @@ export default function DashboardHeader({ onAddTransaction, showAddButton = true
               title="Notificações"
             >
               <Bell className="w-5 h-5" />
-              <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+              <span className="absolute top-1 right-1 w-2 h-2 bg-[#E11D48] rounded-full"></span>
             </button>
 
             {/* Add Transaction Button */}
             {showAddButton && onAddTransaction && (
               <button
                 onClick={onAddTransaction}
-                className="flex items-center gap-2 px-4 py-2 bg-[#1C6DD0] text-white rounded-lg hover:bg-[#1557A8] transition-all font-medium"
+                className="flex items-center gap-2 px-4 py-2 bg-[#1A1A1A] text-[#C9A962] border border-[#C9A962] rounded-lg hover:bg-[#2A2A2A] transition-all font-medium"
                 style={{ fontFamily: 'Inter, sans-serif' }}
               >
                 <Plus className="w-4 h-4" />

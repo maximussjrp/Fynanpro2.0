@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { Bell, X, Check, AlertCircle, Clock, DollarSign } from 'lucide-react';
-import { api } from '@/lib/api';
-import { toast } from 'react-hot-toast';
+import api from '@/lib/api';
+import { toast } from 'sonner';
 
 interface Notification {
   id: string;
@@ -107,7 +107,7 @@ export default function NotificationBell() {
     switch (priority) {
       case 'urgent': return 'text-red-600 bg-red-50';
       case 'high': return 'text-orange-600 bg-orange-50';
-      case 'normal': return 'text-blue-600 bg-blue-50';
+      case 'normal': return 'text-[#1F4FD8] bg-[#EFF6FF]';
       case 'low': return 'text-gray-600 bg-gray-50';
       default: return 'text-gray-600 bg-gray-50';
     }
@@ -163,7 +163,7 @@ export default function NotificationBell() {
                 {unreadCount > 0 && (
                   <button
                     onClick={markAllAsRead}
-                    className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                    className="text-sm text-[#1F4FD8] hover:text-[#1A44BF] font-medium"
                   >
                     Marcar todas como lidas
                   </button>
@@ -171,6 +171,8 @@ export default function NotificationBell() {
                 <button
                   onClick={() => setIsOpen(false)}
                   className="text-gray-400 hover:text-gray-600"
+                  title="Fechar notificações"
+                  aria-label="Fechar notificações"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -181,7 +183,7 @@ export default function NotificationBell() {
             <div className="overflow-y-auto flex-1">
               {loading ? (
                 <div className="p-8 text-center">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#1F4FD8] mx-auto"></div>
                   <p className="mt-2 text-sm text-gray-500">Carregando...</p>
                 </div>
               ) : notifications.length === 0 ? (
@@ -195,7 +197,7 @@ export default function NotificationBell() {
                     <div
                       key={notification.id}
                       className={`p-4 hover:bg-gray-50 transition-colors ${
-                        !notification.isRead ? 'bg-blue-50' : ''
+                        !notification.isRead ? 'bg-[#EFF6FF]' : ''
                       }`}
                     >
                       <div className="flex gap-3">
@@ -214,7 +216,7 @@ export default function NotificationBell() {
                             {!notification.isRead && (
                               <button
                                 onClick={() => markAsRead(notification.id)}
-                                className="flex-shrink-0 text-blue-600 hover:text-blue-700"
+                                className="flex-shrink-0 text-[#1F4FD8] hover:text-[#1A44BF]"
                                 title="Marcar como lida"
                               >
                                 <Check className="w-4 h-4" />
@@ -248,7 +250,7 @@ export default function NotificationBell() {
                             <a
                               href={notification.actionUrl}
                               onClick={() => setIsOpen(false)}
-                              className="inline-block mt-2 text-xs text-blue-600 hover:text-blue-700 font-medium"
+                              className="inline-block mt-2 text-xs text-[#1F4FD8] hover:text-[#1A44BF] font-medium"
                             >
                               Ver detalhes →
                             </a>
@@ -267,7 +269,7 @@ export default function NotificationBell() {
                 <a
                   href="/dashboard/notifications"
                   onClick={() => setIsOpen(false)}
-                  className="block text-center text-sm text-blue-600 hover:text-blue-700 font-medium"
+                  className="block text-center text-sm text-[#1F4FD8] hover:text-[#1A44BF] font-medium"
                 >
                   Ver todas as notificações
                 </a>

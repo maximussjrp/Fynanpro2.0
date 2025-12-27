@@ -816,5 +816,222 @@ router.get('/upcoming-bills', async (req: AuthRequest, res) => {
   }
 });
 
+// 9. Resumo do DIA (receitas a receber hoje, despesas a pagar hoje, atrasadas)
+router.get('/today-summary', async (req: AuthRequest, res) => {
+  try {
+    const tenantId = req.tenantId!;
+    
+    // Data de hoje (início e fim do dia)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+    
+    // Data de ontem (para pegar atrasados)
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    // TRANSAÇÕES DO DIA (hoje)
+    const todayTransactions = await prisma.transaction.findMany({
+      where: {
+        tenantId,
+        status: 'pending',
+        transactionDate: {
+          gte: today,
+          lte: todayEnd,
+        },
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        type: true,
+        amount: true,
+        description: true,
+        transactionDate: true,
+        category: {
+          select: { name: true, icon: true }
+        },
+      },
+    });
+
+    // OCORRÊNCIAS RECORRENTES DO DIA (hoje)
+    const todayOccurrences = await prisma.recurringBillOccurrence.findMany({
+      where: {
+        tenantId,
+        status: 'pending',
+        dueDate: {
+          gte: today,
+          lte: todayEnd,
+        },
+      },
+      include: {
+        recurringBill: {
+          select: {
+            type: true,
+            name: true,
+            category: { select: { name: true, icon: true } },
+          },
+        },
+      },
+    });
+
+    // TRANSAÇÕES ATRASADAS (data < hoje e status pending)
+    const overdueTransactions = await prisma.transaction.findMany({
+      where: {
+        tenantId,
+        type: 'expense',
+        status: 'pending',
+        transactionDate: {
+          lt: today,
+        },
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        amount: true,
+        description: true,
+        transactionDate: true,
+        category: {
+          select: { name: true, icon: true }
+        },
+      },
+      orderBy: {
+        transactionDate: 'asc',
+      },
+    });
+
+    // OCORRÊNCIAS ATRASADAS (dueDate < hoje e status pending)
+    const overdueOccurrences = await prisma.recurringBillOccurrence.findMany({
+      where: {
+        tenantId,
+        status: 'pending',
+        dueDate: {
+          lt: today,
+        },
+        recurringBill: {
+          type: 'expense',
+        },
+      },
+      include: {
+        recurringBill: {
+          select: {
+            name: true,
+            category: { select: { name: true, icon: true } },
+          },
+        },
+      },
+      orderBy: {
+        dueDate: 'asc',
+      },
+    });
+
+    // Calcular totais do dia
+    const todayIncomeTransactions = todayTransactions.filter(t => t.type === 'income');
+    const todayExpenseTransactions = todayTransactions.filter(t => t.type === 'expense');
+    const todayIncomeOccurrences = todayOccurrences.filter(o => o.recurringBill?.type === 'income');
+    const todayExpenseOccurrences = todayOccurrences.filter(o => o.recurringBill?.type === 'expense');
+
+    const incomeToReceiveToday = 
+      todayIncomeTransactions.reduce((sum, t) => sum + Number(t.amount), 0) +
+      todayIncomeOccurrences.reduce((sum, o) => sum + Number(o.amount), 0);
+
+    const expenseToPayToday = 
+      todayExpenseTransactions.reduce((sum, t) => sum + Number(t.amount), 0) +
+      todayExpenseOccurrences.reduce((sum, o) => sum + Number(o.amount), 0);
+
+    const overdueTotal = 
+      overdueTransactions.reduce((sum, t) => sum + Number(t.amount), 0) +
+      overdueOccurrences.reduce((sum, o) => sum + Number(o.amount), 0);
+
+    // Montar lista de receitas do dia
+    const incomeItems = [
+      ...todayIncomeTransactions.map(t => ({
+        id: t.id,
+        type: 'transaction' as const,
+        description: t.description,
+        amount: Number(t.amount),
+        category: t.category?.name,
+        icon: t.category?.icon,
+      })),
+      ...todayIncomeOccurrences.map(o => ({
+        id: o.id,
+        type: 'recurring' as const,
+        description: o.recurringBill?.name || 'Conta Recorrente',
+        amount: Number(o.amount),
+        category: o.recurringBill?.category?.name,
+        icon: o.recurringBill?.category?.icon,
+      })),
+    ];
+
+    // Montar lista de despesas do dia
+    const expenseItems = [
+      ...todayExpenseTransactions.map(t => ({
+        id: t.id,
+        type: 'transaction' as const,
+        description: t.description,
+        amount: Number(t.amount),
+        category: t.category?.name,
+        icon: t.category?.icon,
+      })),
+      ...todayExpenseOccurrences.map(o => ({
+        id: o.id,
+        type: 'recurring' as const,
+        description: o.recurringBill?.name || 'Conta Recorrente',
+        amount: Number(o.amount),
+        category: o.recurringBill?.category?.name,
+        icon: o.recurringBill?.category?.icon,
+      })),
+    ];
+
+    // Montar lista de atrasados
+    const overdueItems = [
+      ...overdueTransactions.map(t => ({
+        id: t.id,
+        type: 'transaction' as const,
+        description: t.description,
+        amount: Number(t.amount),
+        dueDate: t.transactionDate,
+        daysOverdue: Math.ceil((today.getTime() - new Date(t.transactionDate).getTime()) / (1000 * 60 * 60 * 24)),
+        category: t.category?.name,
+        icon: t.category?.icon,
+      })),
+      ...overdueOccurrences.map(o => ({
+        id: o.id,
+        type: 'recurring' as const,
+        description: o.recurringBill?.name || 'Conta Recorrente',
+        amount: Number(o.amount),
+        dueDate: o.dueDate,
+        daysOverdue: Math.ceil((today.getTime() - new Date(o.dueDate).getTime()) / (1000 * 60 * 60 * 24)),
+        category: o.recurringBill?.category?.name,
+        icon: o.recurringBill?.category?.icon,
+      })),
+    ];
+
+    return successResponse(res, {
+      date: today.toISOString().split('T')[0],
+      today: {
+        incomeToReceive: {
+          total: incomeToReceiveToday,
+          count: incomeItems.length,
+          items: incomeItems,
+        },
+        expenseToPay: {
+          total: expenseToPayToday,
+          count: expenseItems.length,
+          items: expenseItems,
+        },
+      },
+      overdue: {
+        total: overdueTotal,
+        count: overdueItems.length,
+        items: overdueItems,
+      },
+    });
+  } catch (error: any) {
+    log.error('Today summary error', { error, tenantId: req.tenantId });
+    return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao carregar resumo do dia', 500);
+  }
+});
+
 export default router;
 

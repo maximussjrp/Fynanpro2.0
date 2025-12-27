@@ -17,7 +17,9 @@ import {
   Settings,
   LogOut,
   Bell,
-  Target
+  Target,
+  Upload,
+  Zap
 } from 'lucide-react';
 import Logo from './Logo';
 import { logout } from '@/lib/api';
@@ -39,6 +41,7 @@ interface MenuItem {
 const menuItems: MenuItem[] = [
   { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard' },
   { icon: Receipt, label: 'Transações', href: '/dashboard/transactions' },
+  { icon: Upload, label: 'Importar Extrato', href: '/dashboard/imports' },
   { icon: Wallet, label: 'Contas Bancárias', href: '/dashboard/bank-accounts' },
   { icon: Tag, label: 'Categorias', href: '/dashboard/categories' },
   { icon: Repeat, label: 'Contas Recorrentes', href: '/dashboard/recurring-bills' },
@@ -47,6 +50,8 @@ const menuItems: MenuItem[] = [
   { icon: Target, label: 'Planejamento Anual', href: '/dashboard/planning' },
   { icon: Calendar, label: 'Calendário', href: '/dashboard/calendar' },
   { icon: FileText, label: 'Relatórios', href: '/dashboard/reports' },
+  { icon: Zap, label: 'Energia Financeira', href: '/dashboard/reports/energy' },
+  { icon: Zap, label: '⚡ Governança', href: '/dashboard/energy-governance' },
 ];
 
 export default function Sidebar({ className = '', isMobileOpen = false, onCloseMobile }: SidebarProps) {
@@ -101,7 +106,7 @@ export default function Sidebar({ className = '', isMobileOpen = false, onCloseM
       {!isCollapsed && (
         <div className="p-4 border-b border-gray-200">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#1C6DD0] to-[#1557A8] flex items-center justify-center text-white font-semibold">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#1A1A1A] to-[#2A2A2A] border border-[#C9A962] flex items-center justify-center text-[#C9A962] font-semibold">
               {user?.fullName?.charAt(0).toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
@@ -129,7 +134,7 @@ export default function Sidebar({ className = '', isMobileOpen = false, onCloseM
                 onClick={() => handleNavigation(item.href)}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all ${
                   isActive 
-                    ? 'bg-[#E8F4FD] text-[#1C6DD0] font-medium' 
+                    ? 'bg-[#F5F0E6] text-[#1A1A1A] font-medium border-l-2 border-[#C9A962]' 
                     : 'text-gray-600 hover:bg-gray-50'
                 }`}
                 style={{ fontFamily: 'Inter, sans-serif' }}

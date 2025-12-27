@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { TrendingUp, TrendingDown, Lightbulb, Calendar, Target, AlertCircle } from 'lucide-react';
-import { api } from '@/lib/api';
+import api from '@/lib/api';
 
 interface Insight {
   type: string;

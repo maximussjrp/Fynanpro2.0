@@ -5,13 +5,15 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/api';
 import { toast } from 'sonner';
-import TransactionModal from '@/components/NewTransactionModal';
+import EditTransactionModal from '@/components/NewTransactionModal';
+import CreateTransactionModal from '@/components/UnifiedTransactionModal';
 import { Receipt, Filter, Edit2, Trash2, Calendar, TrendingDown, TrendingUp, CheckCircle, XCircle, Clock, Plus, ArrowLeft } from 'lucide-react';
 
 interface Transaction {
   id: string;
   amount: string;
   description: string;
+  type: 'income' | 'expense';
   transactionDate: string;
   dueDate?: string; // Para ocorrências
   paidDate?: string; // Data real do pagamento
@@ -69,6 +71,7 @@ export default function TransactionsPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
   
   // Filtros
   const [filters, setFilters] = useState({
@@ -80,17 +83,27 @@ export default function TransactionsPage() {
     status: 'all' as 'all' | 'completed' | 'pending',
   });
 
-  // Verificar se há data na URL
+  // Verificar se há parâmetros na URL
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const dateParam = urlParams.get('date');
+    const typeParam = urlParams.get('type');
+    const statusParam = urlParams.get('status');
+    const startDateParam = urlParams.get('startDate');
+    const endDateParam = urlParams.get('endDate');
     
-    if (dateParam) {
-      // Filtrar pelo dia específico
+    if (dateParam || typeParam || statusParam || startDateParam || endDateParam) {
       setFilters(prev => ({
         ...prev,
-        startDate: dateParam,
-        endDate: dateParam
+        // Se tiver date específico, usa como start e end
+        ...(dateParam && { startDate: dateParam, endDate: dateParam }),
+        // Se tiver startDate e endDate, usa eles
+        ...(startDateParam && { startDate: startDateParam }),
+        ...(endDateParam && { endDate: endDateParam }),
+        // Tipo: INCOME ou EXPENSE
+        ...(typeParam && { type: typeParam.toLowerCase() as 'all' | 'income' | 'expense' }),
+        // Status: completed ou pending
+        ...(statusParam && { status: statusParam.toLowerCase() as 'all' | 'completed' | 'pending' })
       }));
       setShowFilters(true);
     }
@@ -209,11 +222,13 @@ export default function TransactionsPage() {
   };
 
   const handleEdit = (transaction: Transaction) => {
+    setIsCreating(false);
     setEditingTransaction(transaction);
     setShowModal(true);
   };
 
   const handleAddNew = () => {
+    setIsCreating(true);
     setEditingTransaction(null);
     setShowModal(true);
   };
@@ -221,6 +236,7 @@ export default function TransactionsPage() {
   const handleModalClose = () => {
     setShowModal(false);
     setEditingTransaction(null);
+    setIsCreating(false);
   };
 
   const handleModalSuccess = () => {
@@ -240,11 +256,11 @@ export default function TransactionsPage() {
 
   const getTotals = () => {
     const income = transactions
-      .filter(t => t.category && t.category.type === 'income')
+      .filter(t => t.type === 'income')
       .reduce((sum, t) => sum + Number(t.amount), 0);
     
     const expense = transactions
-      .filter(t => t.category && t.category.type === 'expense')
+      .filter(t => t.type === 'expense')
       .reduce((sum, t) => sum + Number(t.amount), 0);
 
     return { income, expense, balance: income - expense };
@@ -528,31 +544,45 @@ export default function TransactionsPage() {
                         {transaction.bankAccount?.name || 'Não informada'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold">
-                        <span className={transaction.category?.type === 'income' ? 'text-green-600' : 'text-red-600'}>
-                          {transaction.category?.type === 'income' ? '+' : '-'} {formatCurrency(Number(transaction.amount))}
+                        <span className={transaction.type === 'income' ? 'text-green-600' : 'text-red-600'}>
+                          {transaction.type === 'income' ? '+' : '-'} {formatCurrency(Number(transaction.amount))}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <button
-                          onClick={() => togglePaidStatus(transaction)}
-                          className={`px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1 transition-colors hover:opacity-80 ${
-                            transaction.status === 'completed'
-                              ? 'bg-green-100 text-green-800'
-                              : 'bg-yellow-100 text-yellow-800'
-                          }`}
-                        >
-                          {transaction.status === 'completed' ? (
-                            <>
-                              <CheckCircle className="w-3 h-3" />
-                              Paga
-                            </>
-                          ) : (
-                            <>
-                              <Clock className="w-3 h-3" />
-                              Pendente
-                            </>
-                          )}
-                        </button>
+                        {(() => {
+                          const isOverdue = transaction.status !== 'completed' && 
+                            new Date(transaction.dueDate || transaction.transactionDate) < new Date(new Date().setHours(0, 0, 0, 0));
+                          
+                          return (
+                            <button
+                              onClick={() => togglePaidStatus(transaction)}
+                              className={`px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1 transition-colors hover:opacity-80 ${
+                                transaction.status === 'completed'
+                                  ? 'bg-green-100 text-green-800'
+                                  : isOverdue
+                                    ? 'bg-red-100 text-red-800'
+                                    : 'bg-yellow-100 text-yellow-800'
+                              }`}
+                            >
+                              {transaction.status === 'completed' ? (
+                                <>
+                                  <CheckCircle className="w-3 h-3" />
+                                  Paga
+                                </>
+                              ) : isOverdue ? (
+                                <>
+                                  <XCircle className="w-3 h-3" />
+                                  Atrasado
+                                </>
+                              ) : (
+                                <>
+                                  <Clock className="w-3 h-3" />
+                                  Pendente
+                                </>
+                              )}
+                            </button>
+                          );
+                        })()}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <div className="flex justify-end gap-2">
@@ -606,13 +636,24 @@ export default function TransactionsPage() {
         </div>
       </div>
 
-      {/* Modal de Transação */}
-      <TransactionModal
-        isOpen={showModal}
-        onClose={handleModalClose}
-        onSuccess={handleModalSuccess}
-        transaction={editingTransaction}
-      />
+      {/* Modal de Criar - com tabs Única/Recorrente/Parcelada */}
+      {isCreating && (
+        <CreateTransactionModal
+          isOpen={showModal}
+          onClose={handleModalClose}
+          onSuccess={handleModalSuccess}
+        />
+      )}
+
+      {/* Modal de Editar - formulário simples */}
+      {!isCreating && editingTransaction && (
+        <EditTransactionModal
+          isOpen={showModal}
+          onClose={handleModalClose}
+          onSuccess={handleModalSuccess}
+          transaction={editingTransaction}
+        />
+      )}
     </div>
   );
 }

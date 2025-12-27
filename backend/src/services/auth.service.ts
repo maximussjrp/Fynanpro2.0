@@ -141,8 +141,9 @@ export class AuthService {
         });
 
         // Cria categorias padrão com hierarquia completa (3 níveis)
+        // IMPORTANTE: Passar tx para usar a mesma transação
         const { createDefaultCategories } = await import('../utils/default-categories');
-        await createDefaultCategories(tenant.id);
+        await createDefaultCategories(tenant.id, tx);
 
         return { user, tenant };
       });
@@ -306,6 +307,8 @@ export class AuthService {
       // Verifica senha
       const passwordValid = await bcrypt.compare(data.password, user.passwordHash);
       if (!passwordValid) {
+        // Registra tentativa falha
+        await this.recordFailedLogin(data.email);
         throw new Error('Credenciais inválidas');
       }
 
@@ -565,6 +568,178 @@ export class AuthService {
     } catch (error) {
       log.error('AuthService.cleanExpiredTokens error', { error });
       throw error;
+    }
+  }
+
+  /**
+   * Solicita recuperação de senha - envia email com link
+   */
+  async forgotPassword(email: string): Promise<void> {
+    try {
+      log.info('AuthService.forgotPassword', { email });
+
+      const user = await prisma.user.findUnique({
+        where: { email: email.toLowerCase().trim() },
+      });
+
+      // Não revelamos se o email existe ou não (segurança)
+      if (!user) {
+        log.info('AuthService.forgotPassword - email not found (silent)', { email });
+        return;
+      }
+
+      // Gera token de reset
+      const resetToken = crypto.randomBytes(32).toString('hex');
+      const resetExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
+
+      // Salva token no usuário
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          passwordResetToken: resetToken,
+          passwordResetExpires: resetExpires,
+        },
+      });
+
+      // Envia email
+      const resetLink = emailService.getPasswordResetLink(resetToken);
+      await emailService.sendPasswordResetEmail(user.email, {
+        userName: user.fullName.split(' ')[0],
+        resetLink,
+      });
+
+      log.info('AuthService.forgotPassword success', { userId: user.id });
+    } catch (error) {
+      log.error('AuthService.forgotPassword error', { error, email });
+      throw error;
+    }
+  }
+
+  /**
+   * Reseta a senha usando o token recebido por email
+   */
+  async resetPassword(token: string, newPassword: string): Promise<void> {
+    try {
+      log.info('AuthService.resetPassword');
+
+      // Busca usuário pelo token
+      const user = await prisma.user.findFirst({
+        where: {
+          passwordResetToken: token,
+          passwordResetExpires: { gt: new Date() },
+        },
+      });
+
+      if (!user) {
+        throw new Error('Token inválido ou expirado');
+      }
+
+      // Hash da nova senha
+      const passwordHash = await bcrypt.hash(newPassword, this.SALT_ROUNDS);
+
+      // Atualiza senha e limpa tokens
+      await prisma.$transaction(async (tx: any) => {
+        await tx.user.update({
+          where: { id: user.id },
+          data: {
+            passwordHash,
+            passwordResetToken: null,
+            passwordResetExpires: null,
+          },
+        });
+
+        // Revoga todos os refresh tokens
+        await tx.refreshToken.updateMany({
+          where: { userId: user.id, isRevoked: false },
+          data: {
+            isRevoked: true,
+            revokedAt: new Date(),
+            revokedReason: 'password_reset',
+          },
+        });
+      });
+
+      log.info('AuthService.resetPassword success', { userId: user.id });
+    } catch (error) {
+      log.error('AuthService.resetPassword error', { error });
+      throw error;
+    }
+  }
+
+  /**
+   * Registra tentativa de login falha (para rate limiting por usuário)
+   */
+  async recordFailedLogin(email: string): Promise<{ blocked: boolean; attemptsLeft: number }> {
+    const key = `login_attempts:${email.toLowerCase()}`;
+    const MAX_ATTEMPTS = 5;
+    const BLOCK_DURATION = 15 * 60; // 15 minutos em segundos
+    
+    try {
+      // Usa ioredis para controlar tentativas
+      const Redis = (await import('ioredis')).default;
+      const redis = new Redis(env.REDIS_URL);
+      
+      const attempts = await redis.incr(key);
+      
+      if (attempts === 1) {
+        // Primeira tentativa - define expiração
+        await redis.expire(key, BLOCK_DURATION);
+      }
+      
+      await redis.quit();
+      
+      if (attempts >= MAX_ATTEMPTS) {
+        return { blocked: true, attemptsLeft: 0 };
+      }
+      
+      return { blocked: false, attemptsLeft: MAX_ATTEMPTS - attempts };
+    } catch (error) {
+      log.error('AuthService.recordFailedLogin error', { error, email });
+      // Em caso de erro no Redis, não bloqueia
+      return { blocked: false, attemptsLeft: MAX_ATTEMPTS };
+    }
+  }
+
+  /**
+   * Verifica se usuário está bloqueado por tentativas de login
+   */
+  async isLoginBlocked(email: string): Promise<{ blocked: boolean; remainingTime?: number }> {
+    const key = `login_attempts:${email.toLowerCase()}`;
+    const MAX_ATTEMPTS = 5;
+    
+    try {
+      const Redis = (await import('ioredis')).default;
+      const redis = new Redis(env.REDIS_URL);
+      
+      const attempts = await redis.get(key);
+      const ttl = await redis.ttl(key);
+      
+      await redis.quit();
+      
+      if (attempts && parseInt(attempts) >= MAX_ATTEMPTS) {
+        return { blocked: true, remainingTime: ttl > 0 ? ttl : undefined };
+      }
+      
+      return { blocked: false };
+    } catch (error) {
+      log.error('AuthService.isLoginBlocked error', { error, email });
+      return { blocked: false };
+    }
+  }
+
+  /**
+   * Limpa tentativas de login após sucesso
+   */
+  async clearFailedLogins(email: string): Promise<void> {
+    const key = `login_attempts:${email.toLowerCase()}`;
+    
+    try {
+      const Redis = (await import('ioredis')).default;
+      const redis = new Redis(env.REDIS_URL);
+      await redis.del(key);
+      await redis.quit();
+    } catch (error) {
+      log.error('AuthService.clearFailedLogins error', { error, email });
     }
   }
 }

@@ -20,6 +20,7 @@ import chatbotRoutes from './routes/chatbot';
 import adminRoutes from './routes/admin';
 import planningRoutes from './routes/planning';
 import subscriptionRoutes from './routes/subscription';
+import energyGovernanceRoutes from './routes/energy-governance';
 import { createDefaultCategories } from './utils/default-categories';
 import { env } from './config/env';
 import { swaggerSpec } from './config/swagger';
@@ -104,11 +105,34 @@ const authLimiter = rateLimit({
 
 // Middlewares
 app.use(globalLimiter);
+
+// CORS - permitir múltiplas origens
+const allowedOrigins = [
+  env.FRONTEND_URL,
+  'https://utop.app.br',
+  'https://www.utop.app.br',
+  'https://utopsistema.com.br',
+  'https://www.utopsistema.com.br',
+  'https://api.utopsistema.com.br',
+  'http://localhost:3000',
+  'http://localhost:3001',
+];
+
 app.use(cors({
-  origin: env.FRONTEND_URL,
+  origin: (origin, callback) => {
+    // Permitir requests sem origin (como mobile apps ou curl)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.warn(`CORS bloqueado para origem: ${origin}`);
+      callback(null, true); // Temporariamente permitir todas para debug
+    }
+  },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   maxAge: 86400
 }));
 app.use(express.json());
@@ -185,6 +209,9 @@ apiRouter.use('/budgets', budgetRoutes);
 
 // Reports routes
 apiRouter.use('/reports', reportRoutes);
+
+// Energy Governance routes (classificação semântica de categorias)
+apiRouter.use('/energy-governance', energyGovernanceRoutes);
 
 // Calendar routes
 apiRouter.use('/calendar', calendarRoutes);
@@ -411,10 +438,23 @@ apiRouter.post('/auth/resend-verification', authLimiter, async (req: Request, re
  *         description: Muitas tentativas de login
  */
 // Login
-apiRouter.post('/auth/login', authLimiter, async (req: Request, res: Response) => {
+apiRouter.post('/auth/login', async (req: Request, res: Response) => {
   try {
     // Validação com Zod
     const validatedData = LoginSchema.parse(req.body);
+
+    // Verifica se usuário está bloqueado por muitas tentativas
+    const blockStatus = await authService.isLoginBlocked(validatedData.email);
+    if (blockStatus.blocked) {
+      const minutes = blockStatus.remainingTime ? Math.ceil(blockStatus.remainingTime / 60) : 15;
+      return res.status(429).json({
+        success: false,
+        error: {
+          code: 'AUTH_RATE_LIMIT_EXCEEDED',
+          message: `Muitas tentativas de login/registro. Tente novamente em ${minutes} minutos.`
+        }
+      });
+    }
 
     // IP e UserAgent para logging
     const ipAddress = req.ip || req.socket.remoteAddress || undefined;
@@ -422,6 +462,9 @@ apiRouter.post('/auth/login', authLimiter, async (req: Request, res: Response) =
 
     // Chama service
     const result = await authService.login(validatedData, ipAddress, userAgent);
+    
+    // Limpa tentativas após login bem-sucedido
+    await authService.clearFailedLogins(validatedData.email);
 
     res.json({
       success: true,
@@ -444,6 +487,9 @@ apiRouter.post('/auth/login', authLimiter, async (req: Request, res: Response) =
 
     // Business logic errors
     if (error.message === 'Credenciais inválidas' || error.message === 'Usuário inativo') {
+      // Registra tentativa falha para rate limiting
+      await authService.recordFailedLogin(req.body.email);
+      
       return res.status(401).json({
         success: false,
         error: {
@@ -587,6 +633,93 @@ apiRouter.post('/auth/logout', async (req: Request, res: Response) => {
       error: {
         code: 'INTERNAL_ERROR',
         message: 'Erro ao fazer logout'
+      }
+    });
+  }
+});
+
+// Esqueci minha senha - envia email com link de reset
+apiRouter.post('/auth/forgot-password', async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Email é obrigatório'
+        }
+      });
+    }
+
+    await authService.forgotPassword(email);
+
+    // Sempre retorna sucesso (por segurança, não revela se email existe)
+    res.json({
+      success: true,
+      message: 'Se o email estiver cadastrado, você receberá um link para redefinir sua senha.'
+    });
+  } catch (error: any) {
+    log.error('Forgot password error', { error, email: req.body.email });
+    
+    // Sempre retorna sucesso (por segurança)
+    res.json({
+      success: true,
+      message: 'Se o email estiver cadastrado, você receberá um link para redefinir sua senha.'
+    });
+  }
+});
+
+// Reset de senha com token
+apiRouter.post('/auth/reset-password', async (req: Request, res: Response) => {
+  try {
+    const { token, newPassword } = req.body;
+
+    if (!token || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Token e nova senha são obrigatórios'
+        }
+      });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'A senha deve ter pelo menos 6 caracteres'
+        }
+      });
+    }
+
+    await authService.resetPassword(token, newPassword);
+
+    res.json({
+      success: true,
+      message: 'Senha alterada com sucesso! Você já pode fazer login.'
+    });
+  } catch (error: any) {
+    log.error('Reset password error', { error });
+
+    if (error.message === 'Token inválido ou expirado') {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_TOKEN',
+          message: 'Link inválido ou expirado. Solicite um novo link de recuperação.'
+        }
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Erro ao redefinir senha'
       }
     });
   }

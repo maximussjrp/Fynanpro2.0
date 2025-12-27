@@ -299,6 +299,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     const tenantId = req.tenantId!;
     const {
       name,
+      type,
       amount,
       isVariableAmount = false,
       categoryId,
@@ -319,6 +320,10 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       return errorResponse(res, 'VALIDATION_ERROR', 'Nome da conta é obrigatório', 400);
     }
 
+    if (!type || !['income', 'expense'].includes(type)) {
+      return errorResponse(res, 'VALIDATION_ERROR', 'Tipo deve ser income ou expense', 400);
+    }
+
     if (!isVariableAmount && (!amount || amount <= 0)) {
       return errorResponse(res, 'VALIDATION_ERROR', 'Valor deve ser maior que zero', 400);
     }
@@ -327,7 +332,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       return errorResponse(res, 'VALIDATION_ERROR', 'Dia de vencimento inválido (1-31)', 400);
     }
 
-    if (!['monthly', 'weekly', 'yearly'].includes(frequency)) {
+    if (!['monthly', 'weekly', 'yearly', 'daily'].includes(frequency)) {
       return errorResponse(res, 'VALIDATION_ERROR', 'Frequência inválida', 400);
     }
 
@@ -351,6 +356,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       data: {
         tenantId,
         name: name.trim(),
+        type,
         amount: isVariableAmount ? null : amount,
         isVariableAmount,
         categoryId,

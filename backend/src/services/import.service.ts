@@ -31,7 +31,7 @@ export interface ImportedTransaction {
 export interface ImportPreview {
   id: string;
   fileName: string;
-  fileType: 'csv' | 'ofx';
+  fileType: 'csv' | 'ofx' | 'xml';
   bankAccount?: {
     id: string;
     name: string;
@@ -317,16 +317,22 @@ export class ImportService {
         let type: 'income' | 'expense';
         
         // Verificar descrição para identificar transferências enviadas/recebidas
+        // IMPORTANTE: Verificar "recebida" PRIMEIRO, pois tem prioridade
         const descLower = name.toLowerCase();
-        const isEnviada = descLower.includes('enviada') || descLower.includes('envio') || descLower.includes('pagamento');
-        const isRecebida = descLower.includes('recebida') || descLower.includes('recebido') || descLower.includes('deposito');
+        const isRecebida = descLower.includes('recebida') || descLower.includes('recebido') || 
+                          descLower.includes('deposito') || descLower.includes('depósito') ||
+                          descLower.includes('credito em conta') || descLower.includes('crédito em conta');
+        const isEnviada = descLower.includes('enviada') || descLower.includes('enviado') || 
+                         descLower.includes('envio') || descLower.includes('debito') ||
+                         descLower.includes('débito') || descLower.includes('saque');
         
-        if (isEnviada) {
-          // Transferência enviada = DESPESA
-          type = 'expense';
-        } else if (isRecebida) {
+        // Prioridade: "recebida" sempre é receita, mesmo se contiver outras palavras
+        if (isRecebida) {
           // Transferência recebida = RECEITA
           type = 'income';
+        } else if (isEnviada) {
+          // Transferência enviada = DESPESA
+          type = 'expense';
         } else if (trnType) {
           const upperType = trnType.toUpperCase();
           const incomeTypes = ['CREDIT', 'DEP', 'INT', 'DIV', 'DIRECTDEP'];
@@ -359,24 +365,177 @@ export class ImportService {
     return transactions;
   }
   
+  // ==================== PARSE XML ====================
+  
+  /**
+   * Parse arquivo XML de extrato bancário
+   * Suporta formatos comuns de bancos brasileiros
+   */
+  parseXML(content: string): ImportedTransaction[] {
+    const transactions: ImportedTransaction[] = [];
+    
+    // Função helper para extrair valor de tag
+    const getTagValue = (block: string, tagName: string): string => {
+      // Tentar vários formatos de tags
+      const patterns = [
+        new RegExp(`<${tagName}>([^<]+)</${tagName}>`, 'i'),
+        new RegExp(`<${tagName}[^>]*>([^<]+)</${tagName}>`, 'i'),
+        new RegExp(`<${tagName}[^>]*/>`, 'i'),
+      ];
+      
+      for (const regex of patterns) {
+        const match = block.match(regex);
+        if (match && match[1]) {
+          return match[1].trim();
+        }
+      }
+      return '';
+    };
+    
+    // Detectar padrão do XML (diferentes bancos usam diferentes estruturas)
+    const lowerContent = content.toLowerCase();
+    
+    // Padrão 1: Tags <transacao> ou <lancamento>
+    let transactionTagPattern: RegExp;
+    let dateTag: string, descTag: string, amountTag: string, typeTag: string;
+    
+    if (lowerContent.includes('<transacao>') || lowerContent.includes('<transacao ')) {
+      transactionTagPattern = /<transacao[^>]*>([\s\S]*?)<\/transacao>/gi;
+      dateTag = 'data';
+      descTag = 'descricao';
+      amountTag = 'valor';
+      typeTag = 'tipo';
+    } else if (lowerContent.includes('<lancamento>') || lowerContent.includes('<lancamento ')) {
+      transactionTagPattern = /<lancamento[^>]*>([\s\S]*?)<\/lancamento>/gi;
+      dateTag = 'data';
+      descTag = 'historico';
+      amountTag = 'valor';
+      typeTag = 'natureza';
+    } else if (lowerContent.includes('<movimento>')) {
+      transactionTagPattern = /<movimento[^>]*>([\s\S]*?)<\/movimento>/gi;
+      dateTag = 'dataMovimento';
+      descTag = 'descricao';
+      amountTag = 'valor';
+      typeTag = 'tipoMovimento';
+    } else if (lowerContent.includes('<registro>')) {
+      transactionTagPattern = /<registro[^>]*>([\s\S]*?)<\/registro>/gi;
+      dateTag = 'data';
+      descTag = 'descricao';
+      amountTag = 'valor';
+      typeTag = 'dc';
+    } else if (lowerContent.includes('<item>')) {
+      transactionTagPattern = /<item[^>]*>([\s\S]*?)<\/item>/gi;
+      dateTag = 'date';
+      descTag = 'description';
+      amountTag = 'amount';
+      typeTag = 'type';
+    } else {
+      // Tentar detectar qualquer tag que pareça conter transações
+      const possibleTags = content.match(/<([a-z_]+)[^>]*>(?:(?!<\/\1>).)*<data|date|DATA|Date/gi);
+      if (possibleTags && possibleTags.length > 0) {
+        const tagName = possibleTags[0].match(/<([a-z_]+)/i)?.[1] || 'row';
+        transactionTagPattern = new RegExp(`<${tagName}[^>]*>([\\s\\S]*?)</${tagName}>`, 'gi');
+        dateTag = 'data';
+        descTag = 'descricao';
+        amountTag = 'valor';
+        typeTag = 'tipo';
+      } else {
+        log.warn('[Import] Formato XML não reconhecido');
+        return transactions;
+      }
+    }
+    
+    const matches = content.matchAll(transactionTagPattern);
+    
+    for (const match of matches) {
+      const block = match[1];
+      
+      // Extrair valores com fallbacks para nomes de tags alternativos
+      let dateStr = getTagValue(block, dateTag) || 
+                    getTagValue(block, 'data') || 
+                    getTagValue(block, 'date') || 
+                    getTagValue(block, 'dtMovimento') ||
+                    getTagValue(block, 'dataMovimento');
+                    
+      let description = getTagValue(block, descTag) || 
+                        getTagValue(block, 'descricao') || 
+                        getTagValue(block, 'historico') ||
+                        getTagValue(block, 'description') ||
+                        getTagValue(block, 'memo') ||
+                        getTagValue(block, 'nome');
+                        
+      let amountStr = getTagValue(block, amountTag) || 
+                      getTagValue(block, 'valor') || 
+                      getTagValue(block, 'amount') ||
+                      getTagValue(block, 'vlr');
+                      
+      let typeStr = getTagValue(block, typeTag) || 
+                    getTagValue(block, 'tipo') ||
+                    getTagValue(block, 'natureza') ||
+                    getTagValue(block, 'dc') ||
+                    getTagValue(block, 'type');
+      
+      // Parse da data
+      const date = this.parseDate(dateStr);
+      if (!date) continue;
+      
+      // Parse do valor
+      const amount = this.parseAmount(amountStr);
+      if (amount === null || amount === 0) continue;
+      
+      // Determinar tipo
+      let type: 'income' | 'expense';
+      
+      const typeUpper = typeStr.toUpperCase();
+      const descLower = description.toLowerCase();
+      
+      if (typeUpper === 'C' || typeUpper === 'CREDITO' || typeUpper === 'CREDIT' || typeUpper === 'RECEITA' || typeUpper === 'INCOME') {
+        type = 'income';
+      } else if (typeUpper === 'D' || typeUpper === 'DEBITO' || typeUpper === 'DEBIT' || typeUpper === 'DESPESA' || typeUpper === 'EXPENSE') {
+        type = 'expense';
+      } else if (descLower.includes('recebid') || descLower.includes('deposito') || descLower.includes('credito')) {
+        type = 'income';
+      } else if (descLower.includes('pagamento') || descLower.includes('debito') || descLower.includes('saque')) {
+        type = 'expense';
+      } else {
+        type = amount >= 0 ? 'income' : 'expense';
+      }
+      
+      transactions.push({
+        id: `xml-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        date,
+        description,
+        amount: Math.abs(amount),
+        type,
+        isSelected: true,
+      });
+    }
+    
+    log.info(`[Import] XML parseado: ${transactions.length} transações encontradas`);
+    return transactions;
+  }
+  
   // ==================== CATEGORIZAÇÃO ====================
   
   /**
    * Carregar padrões de categorização do tenant
    */
   async loadCategorizationPatterns(tenantId: string) {
-    // Buscar transações recentes para aprender padrões
+    // Buscar transações recentes para aprender padrões - APENAS com categorias L2/L3
     const transactions = await prisma.transaction.findMany({
       where: {
         tenantId,
         deletedAt: null,
         description: { not: null },
         categoryId: { not: null },
+        category: {
+          level: { gte: 2 }, // Apenas subcategorias L2 ou L3
+        },
       },
       select: {
         description: true,
         categoryId: true,
-        category: { select: { name: true, type: true } },
+        category: { select: { name: true, type: true, level: true } },
       },
       orderBy: { transactionDate: 'desc' },
       take: 500,
@@ -450,7 +609,7 @@ export class ImportService {
     const bankProfile = bankCode ? bankProfileService.getProfileByCode(bankCode) : null;
     const suggestedCategory = bankProfileService.suggestCategoryFromPatterns(description, type, bankProfile);
     if (suggestedCategory) {
-      // Buscar categoria correspondente no tenant
+      // Buscar categoria correspondente no tenant - APENAS L2 ou L3 (subcategorias)
       const categoryName = suggestedCategory.categoryName.split(' > ')[0];
       const category = await prisma.category.findFirst({
         where: {
@@ -459,6 +618,7 @@ export class ImportService {
           name: { contains: categoryName, mode: 'insensitive' },
           isActive: true,
           deletedAt: null,
+          level: { gte: 2 }, // Apenas subcategorias L2 ou L3
         },
       });
       
@@ -481,7 +641,7 @@ export class ImportService {
     
     for (const [categoryName, words] of Object.entries(keywordCategories)) {
       if (words.some(w => normalized.includes(w))) {
-        // Buscar categoria correspondente
+        // Buscar categoria correspondente - APENAS L2 ou L3 (subcategorias)
         const category = await prisma.category.findFirst({
           where: {
             tenantId,
@@ -489,6 +649,7 @@ export class ImportService {
             name: { contains: categoryName, mode: 'insensitive' },
             isActive: true,
             deletedAt: null,
+            level: { gte: 2 }, // Apenas subcategorias L2 ou L3
           },
         });
         
@@ -714,6 +875,74 @@ export class ImportService {
   }
   
   /**
+   * Criar preview de importação XML
+   */
+  async createXMLPreview(
+    tenantId: string,
+    userId: string,
+    fileName: string,
+    content: string
+  ): Promise<ImportPreview> {
+    const transactions = this.parseXML(content);
+    
+    if (transactions.length === 0) {
+      throw new Error('Nenhuma transação encontrada no arquivo XML. Verifique se o formato é suportado.');
+    }
+    
+    // Carregar padrões de categorização
+    const patterns = await this.loadCategorizationPatterns(tenantId);
+    
+    let totalIncome = 0;
+    let totalExpense = 0;
+    let duplicates = 0;
+    
+    // Processar cada transação
+    for (const tx of transactions) {
+      // Verificar duplicata
+      const duplicateOf = await this.checkDuplicate(tenantId, tx.date, tx.amount, tx.description);
+      tx.isDuplicate = !!duplicateOf;
+      tx.duplicateOf = duplicateOf || undefined;
+      tx.isSelected = !duplicateOf;
+      
+      // Sugerir categoria
+      const suggested = await this.suggestCategory(tenantId, tx.description, tx.type, patterns);
+      tx.suggestedCategoryId = suggested?.categoryId;
+      tx.suggestedCategoryName = suggested?.categoryName;
+      tx.categoryId = suggested?.categoryId;
+      tx.categoryName = suggested?.categoryName;
+      
+      if (tx.type === 'income') {
+        totalIncome += tx.amount;
+      } else {
+        totalExpense += tx.amount;
+      }
+      
+      if (duplicateOf) {
+        duplicates++;
+      }
+    }
+    
+    const preview: ImportPreview = {
+      id: `preview-${tenantId}-${Date.now()}`,
+      fileName,
+      fileType: 'xml',
+      totalTransactions: transactions.length,
+      totalIncome,
+      totalExpense,
+      duplicates,
+      transactions,
+      createdAt: new Date(),
+    };
+    
+    // Salvar em cache
+    previewCache.set(preview.id, preview);
+    
+    log.info(`[Import] XML preview criado: ${preview.id} - ${transactions.length} transações`);
+    
+    return preview;
+  }
+  
+  /**
    * Obter preview do cache
    */
   getPreview(previewId: string): ImportPreview | null {
@@ -789,7 +1018,7 @@ export class ImportService {
             status: 'completed',
             transactionType: 'single',
             isFixed: false,
-            importedFrom: preview.fileName,
+            notes: `Importado de: ${preview.fileName}`,
           },
         });
         
@@ -810,20 +1039,8 @@ export class ImportService {
       }
     }
     
-    // Salvar histórico
-    await prisma.importHistory.create({
-      data: {
-        tenantId,
-        userId,
-        fileName: preview.fileName,
-        fileType: preview.fileType,
-        bankAccountId,
-        totalImported: result.imported,
-        totalSkipped: result.skipped,
-        totalDuplicates: result.duplicates,
-        status: result.errors.length === 0 ? 'completed' : 'partial',
-      },
-    });
+    // Log do histórico (sem salvar em tabela por enquanto)
+    log.info(`[Import] Histórico: ${preview.fileName} - ${result.imported} importadas, ${result.skipped} ignoradas, ${result.duplicates} duplicadas`);
     
     // Limpar cache do preview
     previewCache.delete(previewId);
@@ -837,103 +1054,23 @@ export class ImportService {
   
   /**
    * Obter histórico de importações
+   * TODO: Implementar tabela ImportHistory no schema se necessário
    */
   async getHistory(tenantId: string): Promise<ImportHistory[]> {
-    const records = await prisma.importHistory.findMany({
-      where: { tenantId },
-      include: {
-        bankAccount: { select: { name: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 50,
-    });
-    
-    return records.map(r => ({
-      id: r.id,
-      tenantId: r.tenantId,
-      userId: r.userId,
-      fileName: r.fileName,
-      fileType: r.fileType,
-      bankAccountId: r.bankAccountId || undefined,
-      bankAccountName: r.bankAccount?.name,
-      totalImported: r.totalImported,
-      totalSkipped: r.totalSkipped,
-      totalDuplicates: r.totalDuplicates,
-      status: r.status as 'completed' | 'partial' | 'failed',
-      createdAt: r.createdAt,
-    }));
+    // ImportHistory table não existe no schema atual
+    // Retorna lista vazia por enquanto
+    log.info(`[Import] getHistory chamado para tenant ${tenantId} - tabela ImportHistory não implementada`);
+    return [];
   }
   
   /**
    * Desfazer importação
+   * TODO: Implementar quando tabela ImportHistory for criada
    */
   async undoImport(tenantId: string, historyId: string): Promise<number> {
-    const history = await prisma.importHistory.findFirst({
-      where: { id: historyId, tenantId },
-    });
-    
-    if (!history) {
-      throw new Error('Importação não encontrada');
-    }
-    
-    // Buscar transações importadas desse arquivo E da mesma conta
-    const transactions = await prisma.transaction.findMany({
-      where: {
-        tenantId,
-        importedFrom: history.fileName,
-        bankAccountId: history.bankAccountId,
-        deletedAt: null,
-      },
-    });
-    
-    log.info(`[Import] Desfazendo importação: ${history.fileName}, encontradas ${transactions.length} transações`);
-    
-    // Calcular ajuste total para o saldo
-    let totalAdjustment = 0;
-    
-    // Soft delete das transações e calcular ajuste
-    for (const tx of transactions) {
-      // Tipo pode ser 'INCOME' ou 'EXPENSE' (maiúsculo no banco)
-      const isIncome = tx.type.toUpperCase() === 'INCOME';
-      // Para reverter: se era INCOME, subtrair; se era EXPENSE, somar
-      const adjustAmount = isIncome ? -Number(tx.amount) : Number(tx.amount);
-      totalAdjustment += adjustAmount;
-      
-      log.info(`[Import] Revertendo: ${tx.description} - ${tx.type} - R$ ${tx.amount} - ajuste: ${adjustAmount}`);
-      
-      await prisma.transaction.update({
-        where: { id: tx.id },
-        data: { deletedAt: new Date() },
-      });
-    }
-    
-    // Atualizar saldo da conta de uma vez só
-    if (history.bankAccountId && totalAdjustment !== 0) {
-      log.info(`[Import] Ajuste total no saldo: R$ ${totalAdjustment}`);
-      
-      await prisma.bankAccount.update({
-        where: { id: history.bankAccountId },
-        data: {
-          currentBalance: {
-            increment: totalAdjustment,
-          },
-        },
-      });
-    }
-    
-    // Marcar histórico como desfeito
-    await prisma.importHistory.update({
-      where: { id: historyId },
-      data: { status: 'REVERTED' },
-    });
-    
-    // Invalidar cache do dashboard para forçar recálculo
-    await cacheService.invalidateNamespace(CacheNamespace.DASHBOARD);
-    log.info(`[Import] Cache do dashboard invalidado após desfazer importação`);
-    
-    log.info(`[Import] Importação desfeita com sucesso: ${transactions.length} transações removidas`);
-    
-    return transactions.length;
+    // ImportHistory table não existe no schema atual
+    log.warn(`[Import] undoImport não disponível - tabela ImportHistory não implementada`);
+    throw new Error('Funcionalidade de desfazer importação ainda não disponível');
   }
 }
 

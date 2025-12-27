@@ -9,11 +9,10 @@ export const metadata: Metadata = {
   description: 'Organizar suas finanças pode ser simples, leve e previsível. UTOP é um ambiente de clareza onde o dinheiro deixa de ser caótico.',
   icons: {
     icon: [
-      { url: '/images/logo/favicon-16.png', sizes: '16x16', type: 'image/png' },
-      { url: '/images/logo/favicon-32.png', sizes: '32x32', type: 'image/png' },
-      { url: '/images/logo/favicon-64.png', sizes: '64x64', type: 'image/png' },
+      { url: '/favicon.svg', type: 'image/svg+xml' },
     ],
-    apple: '/images/logo/favicon-128.png',
+    shortcut: '/favicon.svg',
+    apple: '/favicon.svg',
   },
 }
 

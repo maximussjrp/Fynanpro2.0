@@ -213,14 +213,34 @@ export default function InstallmentCard({
                   <p className="text-lg font-bold text-gray-900">
                     {formatCurrency(Number(inst.amount))}
                   </p>
-                  {inst.status === 'pending' && (
-                    <button
-                      onClick={() => onPayInstallment(purchase.id, inst.id)}
-                      className="px-4 py-2 bg-gradient-to-r from-[#2ECC9A] to-[#22C55E] text-white rounded-lg hover:shadow-lg transition-all duration-200 text-sm font-semibold"
-                    >
-                      Pagar
-                    </button>
-                  )}
+                  {inst.status === 'pending' && (() => {
+                    const dueDate = new Date(inst.dueDate.split('T')[0] + 'T00:00:00');
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    const isOverdue = dueDate < today;
+                    
+                    return isOverdue ? (
+                      <div className="flex items-center gap-2">
+                        <span className="px-3 py-1.5 bg-red-100 text-red-700 rounded-lg text-xs font-semibold flex items-center gap-1">
+                          <XCircle className="w-3.5 h-3.5" />
+                          Atrasado
+                        </span>
+                        <button
+                          onClick={() => onPayInstallment(purchase.id, inst.id)}
+                          className="px-4 py-2 bg-gradient-to-r from-[#2ECC9A] to-[#22C55E] text-white rounded-lg hover:shadow-lg transition-all duration-200 text-sm font-semibold"
+                        >
+                          Pagar
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => onPayInstallment(purchase.id, inst.id)}
+                        className="px-4 py-2 bg-gradient-to-r from-[#2ECC9A] to-[#22C55E] text-white rounded-lg hover:shadow-lg transition-all duration-200 text-sm font-semibold"
+                      >
+                        Pagar
+                      </button>
+                    );
+                  })()}
                   {inst.status === 'paid' && (
                     <span className="px-4 py-2 bg-green-100 text-green-700 rounded-lg text-sm font-semibold">
                       ✓ Pago
