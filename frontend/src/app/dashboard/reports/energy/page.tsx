@@ -384,7 +384,12 @@ function OverviewView({ energyData, healthIndex, insights }: {
   insights: Insight[];
 }) {
   if (!energyData) {
-    return <div className="text-center py-12 text-gray-500">Carregando dados...</div>;
+    return (
+      <div className="text-center py-12">
+        <p className="text-gray-500 mb-2">Dados de energia não disponíveis</p>
+        <p className="text-sm text-gray-400">Registre transações para ver sua energia financeira</p>
+      </div>
+    );
   }
 
   // Dados para o gráfico de distribuição
@@ -504,7 +509,12 @@ function NarrativeView({ narrative }: { narrative: AnnualNarrative | null }) {
   const [showEmptyMonths, setShowEmptyMonths] = useState(false);
 
   if (!narrative) {
-    return <div className="text-center py-12 text-gray-500">Carregando narrativa...</div>;
+    return (
+      <div className="text-center py-12">
+        <p className="text-gray-500 mb-2">Narrativa não disponível</p>
+        <p className="text-sm text-gray-400">Sem dados suficientes para gerar a história</p>
+      </div>
+    );
   }
 
   const selectedMonthData = selectedMonth !== null ? narrative.monthlyStory[selectedMonth] : null;
@@ -668,7 +678,12 @@ function NarrativeView({ narrative }: { narrative: AnnualNarrative | null }) {
 // Comparison View
 function ComparisonView({ comparison }: { comparison: PeriodComparison | null }) {
   if (!comparison) {
-    return <div className="text-center py-12 text-gray-500">Carregando comparação...</div>;
+    return (
+      <div className="text-center py-12">
+        <p className="text-gray-500 mb-2">Dados de comparação não disponíveis</p>
+        <p className="text-sm text-gray-400">Aguarde carregar ou tente novamente</p>
+      </div>
+    );
   }
 
   const energyKeys: EnergyType[] = ['generated', 'survival', 'choice', 'future', 'loss'];
@@ -750,6 +765,7 @@ export default function EnergyReportsPage() {
   const router = useRouter();
   const { accessToken } = useAuth();
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<'overview' | 'narrative' | 'comparison' | 'insights'>('overview');
   
   // Estados de período
@@ -774,6 +790,7 @@ export default function EnergyReportsPage() {
     if (!accessToken) return;
     
     setLoading(true);
+    setError(null);
     try {
       // Carregar energia do período
       if (activeView === 'overview') {
@@ -806,8 +823,9 @@ export default function EnergyReportsPage() {
         if (insightsRes.data.success) setInsights(insightsRes.data.data);
       }
       
-    } catch (error) {
-      console.error('Erro ao carregar dados:', error);
+    } catch (err: any) {
+      console.error('Erro ao carregar dados:', err);
+      setError(err.response?.data?.error?.message || err.message || 'Erro ao carregar dados');
     } finally {
       setLoading(false);
     }
@@ -911,7 +929,17 @@ export default function EnergyReportsPage() {
 
       {/* Content */}
       <div className="max-w-7xl mx-auto px-4 py-6">
-        {loading ? (
+        {error ? (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
+            <p className="text-red-700 mb-4">{error}</p>
+            <button 
+              onClick={() => loadData()}
+              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition"
+            >
+              Tentar novamente
+            </button>
+          </div>
+        ) : loading ? (
           <div className="flex items-center justify-center py-20">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
           </div>
