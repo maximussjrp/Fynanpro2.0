@@ -2,9 +2,10 @@
 
 import { useAuth } from '@/stores/auth';
 import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import api from '@/lib/api';
-import { Tag, Plus, Edit2, Trash2, Eye, EyeOff, ChevronRight, ChevronDown, FolderTree } from 'lucide-react';
+import { Tag, Plus, Edit2, Trash2, Eye, EyeOff, ChevronRight, ChevronDown, FolderTree, Target, Zap } from 'lucide-react';
+import OnboardingValidationWizard from '@/components/OnboardingValidationWizard';
 
 interface Category {
   id: string;
@@ -30,8 +31,16 @@ interface CategoryForm {
   parentId: string | null;
 }
 
+interface CoverageData {
+  validatedPercent: number;
+  validatedAmount: number;
+  totalExpenseAmount: number;
+  pendingCount: number;
+}
+
 export default function CategoriesPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { accessToken } = useAuth();
   const [loading, setLoading] = useState(true);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -42,6 +51,10 @@ export default function CategoriesPage() {
   const [submitting, setSubmitting] = useState(false);
   const [filterType, setFilterType] = useState<'all' | 'income' | 'expense'>('all');
   const [allExpanded, setAllExpanded] = useState(false);
+  
+  // Wizard state
+  const [showWizard, setShowWizard] = useState(false);
+  const [coverage, setCoverage] = useState<CoverageData | null>(null);
 
   const [categoryForm, setCategoryForm] = useState<CategoryForm>({
     name: '',
@@ -51,6 +64,15 @@ export default function CategoriesPage() {
     parentId: null,
   });
 
+  // Verificar parâmetro wizard na URL
+  useEffect(() => {
+    if (searchParams.get('wizard') === '1') {
+      setShowWizard(true);
+      // Limpar parâmetro da URL
+      router.replace('/dashboard/categories', { scroll: false });
+    }
+  }, [searchParams, router]);
+
   useEffect(() => {
     const token = accessToken;
     if (!token) {
@@ -58,6 +80,7 @@ export default function CategoriesPage() {
       return;
     }
     loadCategories();
+    loadCoverage();
   }, []);
 
   // Expandir todas as categorias que têm filhos ao carregar
@@ -70,6 +93,17 @@ export default function CategoriesPage() {
       }
     }
   }, [categories]);
+
+  const loadCoverage = async () => {
+    try {
+      const response = await api.get('/reports/top-pending-categories?limit=1');
+      if (response.data.success) {
+        setCoverage(response.data.data.coverage);
+      }
+    } catch (error) {
+      console.error('Erro ao carregar coverage:', error);
+    }
+  };
 
   const loadCategories = async () => {
     try {
@@ -84,6 +118,11 @@ export default function CategoriesPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleWizardComplete = () => {
+    loadCoverage();
+    setShowWizard(false);
   };
 
   const handleCreateCategory = async (e: React.FormEvent) => {
@@ -342,6 +381,66 @@ export default function CategoriesPage() {
   return (
     <div className="min-h-screen bg-gray-50 p-4 sm:p-8">
       <div className="max-w-7xl mx-auto">
+        {/* Banner de Onboarding - quando coverage < 85% */}
+        {coverage && coverage.validatedPercent < 85 && (
+          <div className={`mb-6 rounded-xl p-4 sm:p-6 ${
+            coverage.validatedPercent < 50 
+              ? 'bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-300'
+              : 'bg-gradient-to-r from-purple-50 to-indigo-50 border-2 border-purple-200'
+          }`}>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+              <div className={`flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center ${
+                coverage.validatedPercent < 50 ? 'bg-amber-100' : 'bg-purple-100'
+              }`}>
+                <Target className={coverage.validatedPercent < 50 ? 'text-amber-600' : 'text-purple-600'} size={24} />
+              </div>
+              <div className="flex-1">
+                <h4 className={`font-semibold ${
+                  coverage.validatedPercent < 50 ? 'text-amber-800' : 'text-purple-800'
+                }`}>
+                  {coverage.validatedPercent < 50 ? 'Complete a classificação' : 'Quase lá!'}
+                </h4>
+                <p className={`text-sm mt-1 ${
+                  coverage.validatedPercent < 50 ? 'text-amber-700' : 'text-purple-700'
+                }`}>
+                  {coverage.validatedPercent.toFixed(0)}% dos seus gastos estão validados. 
+                  Valide {coverage.pendingCount} categoria{coverage.pendingCount !== 1 ? 's' : ''} pendente{coverage.pendingCount !== 1 ? 's' : ''} para liberar o diagnóstico completo.
+                </p>
+                <div className="mt-3 flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                  <div className="w-full sm:w-48">
+                    <div className={`h-2 rounded-full overflow-hidden ${
+                      coverage.validatedPercent < 50 ? 'bg-amber-200' : 'bg-purple-200'
+                    }`}>
+                      <div 
+                        className={`h-full rounded-full transition-all ${
+                          coverage.validatedPercent < 50 ? 'bg-amber-500' : 'bg-purple-600'
+                        }`}
+                        style={{ width: `${Math.min(coverage.validatedPercent, 100)}%` }}
+                      />
+                    </div>
+                    <p className={`text-xs mt-1 ${
+                      coverage.validatedPercent < 50 ? 'text-amber-500' : 'text-purple-500'
+                    }`}>
+                      Meta: 85%
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowWizard(true)}
+                    className={`px-4 py-2 rounded-lg font-medium text-sm flex items-center gap-2 transition ${
+                      coverage.validatedPercent < 50 
+                        ? 'bg-amber-600 text-white hover:bg-amber-700'
+                        : 'bg-purple-600 text-white hover:bg-purple-700'
+                    }`}
+                  >
+                    <Zap size={16} />
+                    Validar top 10
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Header - Responsivo */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 sm:mb-8">
           <div className="flex items-center gap-3 sm:gap-4">
@@ -627,6 +726,14 @@ export default function CategoriesPage() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Wizard de Onboarding */}
+      {showWizard && (
+        <OnboardingValidationWizard 
+          onClose={() => setShowWizard(false)} 
+          onComplete={handleWizardComplete}
+        />
       )}
     </div>
   );

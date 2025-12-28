@@ -440,7 +440,10 @@ function OverviewView({ energyData, healthIndex, insights }: {
 
   // Verificar cobertura semântica
   const coverage = energyData.semanticsCoverage;
-  const isPartialDiagnosis = coverage && !coverage.isComplete;
+  const diagnosticMode = coverage?.diagnosticMode || 'complete';
+  const isInsufficient = diagnosticMode === 'insufficient';
+  const isPartial = diagnosticMode === 'partial';
+  const isPartialDiagnosis = isInsufficient || isPartial;
 
   // Dados para o gráfico de distribuição
   const distributionData = [
@@ -452,8 +455,50 @@ function OverviewView({ energyData, healthIndex, insights }: {
 
   return (
     <div className="space-y-6">
-      {/* Banner de Diagnóstico Parcial */}
-      {isPartialDiagnosis && coverage && (
+      {/* Banner de Onboarding para insufficient */}
+      {isInsufficient && coverage && (
+        <div className="bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-300 rounded-xl p-6">
+          <div className="flex items-start gap-4">
+            <div className="flex-shrink-0 w-14 h-14 bg-amber-100 rounded-full flex items-center justify-center">
+              <AlertTriangle className="text-amber-600" size={28} />
+            </div>
+            <div className="flex-1">
+              <h4 className="font-bold text-amber-800 text-lg">Diagnóstico Indisponível</h4>
+              <p className="text-sm text-amber-700 mt-2">
+                Você ainda não validou suas categorias. Valide as <strong>10 mais usadas</strong> para liberar o diagnóstico completo.
+              </p>
+              <div className="mt-4 flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                {/* Progress bar */}
+                <div className="flex-1 w-full max-w-sm">
+                  <div className="flex justify-between text-xs text-amber-600 mb-1">
+                    <span>{coverage.percentage.toFixed(0)}% validado</span>
+                    <span>Meta: 85%</span>
+                  </div>
+                  <div className="h-3 bg-amber-200 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-amber-500 rounded-full transition-all"
+                      style={{ width: `${Math.min(coverage.percentage, 100)}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-amber-500 mt-1">
+                    {formatCurrency(coverage.pendingEnergy || coverage.unclassifiedAmount)} pendente de validação
+                  </p>
+                </div>
+                <a 
+                  href="/dashboard/categories?wizard=1"
+                  className="inline-flex items-center gap-2 px-5 py-3 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition text-sm font-semibold whitespace-nowrap shadow-md"
+                >
+                  <Target size={18} />
+                  Validar agora
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Banner de Diagnóstico Parcial (50-84%) */}
+      {isPartial && coverage && (
         <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border-2 border-purple-200 rounded-xl p-4">
           <div className="flex items-start gap-4">
             <div className="flex-shrink-0 w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
@@ -462,7 +507,7 @@ function OverviewView({ energyData, healthIndex, insights }: {
             <div className="flex-1">
               <h4 className="font-semibold text-purple-800">Diagnóstico Parcial</h4>
               <p className="text-sm text-purple-700 mt-1">
-                Apenas <strong>{coverage.percentage.toFixed(0)}%</strong> dos seus gastos foram <strong>validados</strong>.
+                <strong>{coverage.percentage.toFixed(0)}%</strong> dos seus gastos foram validados.
                 {coverage.pendingEnergy > 0 && (
                   <span className="block mt-1">
                     {formatCurrency(coverage.pendingEnergy)} em energia pendente de classificação.
@@ -470,7 +515,6 @@ function OverviewView({ energyData, healthIndex, insights }: {
                 )}
               </p>
               <div className="mt-3 flex items-center gap-3">
-                {/* Progress bar */}
                 <div className="flex-1 max-w-xs">
                   <div className="h-2 bg-purple-200 rounded-full overflow-hidden">
                     <div 
@@ -479,11 +523,11 @@ function OverviewView({ energyData, healthIndex, insights }: {
                     />
                   </div>
                   <p className="text-xs text-purple-500 mt-1">
-                    {formatCurrency(coverage.classifiedAmount)} validados de {formatCurrency(coverage.classifiedAmount + coverage.unclassifiedAmount)} total
+                    Faltam {(85 - coverage.percentage).toFixed(0)}% para diagnóstico completo
                   </p>
                 </div>
                 <a 
-                  href="/dashboard/categories"
+                  href="/dashboard/categories?wizard=1"
                   className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition text-sm font-medium whitespace-nowrap"
                 >
                   <Settings size={16} />
@@ -495,7 +539,7 @@ function OverviewView({ energyData, healthIndex, insights }: {
         </div>
       )}
 
-      {/* Cards de Energia */}
+      {/* Cards de Energia - sempre mostra */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <EnergyCard type="generated" value={energyData.generated} />
         <EnergyCard type="survival" value={energyData.survival} percentage={energyData.survivalRatio * 100} />
@@ -555,23 +599,44 @@ function OverviewView({ energyData, healthIndex, insights }: {
         </div>
       </div>
 
-      {/* Insights */}
-      {insights.length > 0 && (
-        <div className={`bg-white rounded-xl shadow-sm border p-6 ${isPartialDiagnosis ? 'relative' : ''}`}>
+      {/* Insights - NÃO mostrar em insufficient, mostrar com label em partial */}
+      {isInsufficient ? (
+        // insufficient: Não mostrar insights - apenas próximos passos
+        <div className="bg-gray-50 rounded-xl border-2 border-dashed border-gray-300 p-8 text-center">
+          <div className="max-w-md mx-auto">
+            <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Lightbulb className="text-gray-400" size={32} />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-600 mb-2">Insights indisponíveis</h3>
+            <p className="text-sm text-gray-500 mb-6">
+              Valide suas categorias para liberar análises personalizadas sobre sua saúde financeira.
+            </p>
+            <a 
+              href="/dashboard/categories?wizard=1"
+              className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition text-sm font-semibold"
+            >
+              <Target size={18} />
+              Começar validação
+            </a>
+          </div>
+        </div>
+      ) : insights.length > 0 && (
+        // partial ou complete: mostrar insights
+        <div className={`bg-white rounded-xl shadow-sm border p-6 ${isPartial ? 'relative' : ''}`}>
           {/* Overlay para diagnóstico parcial */}
-          {isPartialDiagnosis && (
+          {isPartial && (
             <div className="absolute top-2 right-2">
-              <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded-full">
+              <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded-full" title="Insights baseados em dados parciais">
                 <AlertTriangle size={12} />
-                Estimativas
+                Base parcial
               </span>
             </div>
           )}
           <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-            <Lightbulb className={isPartialDiagnosis ? 'text-gray-400' : 'text-amber-500'} size={20} />
-            Insights {isPartialDiagnosis && <span className="text-sm font-normal text-gray-400">(baseados em dados parciais)</span>}
+            <Lightbulb className={isPartial ? 'text-purple-400' : 'text-amber-500'} size={20} />
+            Insights {isPartial && <span className="text-sm font-normal text-gray-400">(baseados em {coverage?.percentage.toFixed(0)}% dos dados)</span>}
           </h3>
-          <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 ${isPartialDiagnosis ? 'opacity-70' : ''}`}>
+          <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 ${isPartial ? 'opacity-75' : ''}`}>
             {insights.slice(0, 6).map((insight) => (
               <InsightCard key={insight.id} insight={insight} />
             ))}

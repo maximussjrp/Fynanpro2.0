@@ -1213,6 +1213,231 @@ export async function updateCategorySemantics(
   return normalized;
 }
 
+// ==================== TOP PENDING CATEGORIES (ONBOARDING) ====================
+
+interface TopPendingCategory {
+  categoryId: string;
+  categoryName: string;
+  categoryIcon: string | null;
+  pendingAmount: number;
+  pendingCount: number;
+  currentStatus: 'not_validated' | 'inferred' | 'missing' | 'default';
+  suggestedPreset: 'survival' | 'choice' | 'future' | 'loss' | 'hybrid';
+  suggestedWeights: { survival: number; choice: number; future: number; loss: number };
+}
+
+interface TopPendingResult {
+  coverage: {
+    validatedPercent: number;
+    validatedAmount: number;
+    totalExpenseAmount: number;
+    validatedCount: number;
+    pendingCount: number;
+    totalCategoriesUsed: number;
+  };
+  topPendingCategories: TopPendingCategory[];
+}
+
+/**
+ * Heurística simples para sugerir preset baseado no nome da categoria
+ * NÃO É IA - é pattern matching determinístico
+ */
+function suggestPresetByName(name: string): { preset: TopPendingCategory['suggestedPreset']; weights: TopPendingCategory['suggestedWeights'] } {
+  const nameLower = name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  
+  // Padrões de SURVIVAL (essenciais)
+  const survivalPatterns = [
+    'aluguel', 'alugel', 'moradia', 'condominio', 'iptu', 'luz', 'energia', 'eletrica',
+    'agua', 'gas', 'internet', 'telefone', 'saude', 'plano de saude', 'remedio', 'medicamento',
+    'farmacia', 'supermercado', 'mercado', 'feira', 'hortifruti', 'transporte', 'combustivel',
+    'gasolina', 'onibus', 'metro', 'seguro', 'escola', 'faculdade', 'creche'
+  ];
+  
+  // Padrões de LOSS (perdas)
+  const lossPatterns = [
+    'juros', 'multa', 'taxa', 'tarifa', 'anuidade', 'cheque especial', 'iof',
+    'mora', 'atraso', 'encargo', 'servico bancario'
+  ];
+  
+  // Padrões de FUTURE (investimento)
+  const futurePatterns = [
+    'investimento', 'poupanca', 'tesouro', 'acao', 'acoes', 'fundo', 'cdb', 'lci', 'lca',
+    'previdencia', 'curso', 'capacitacao', 'treinamento', 'livro', 'educacao'
+  ];
+  
+  // Padrões de CHOICE (opcionais puros)
+  const choicePatterns = [
+    'lazer', 'entretenimento', 'netflix', 'spotify', 'streaming', 'cinema', 'teatro',
+    'restaurante', 'delivery', 'ifood', 'bar', 'balada', 'viagem', 'turismo', 'hotel',
+    'roupa', 'vestuario', 'shopping', 'beleza', 'estetica', 'salao', 'academia', 'esporte',
+    'hobby', 'presente', 'jogo', 'game', 'assinatura'
+  ];
+
+  // Verificar padrões
+  for (const pattern of survivalPatterns) {
+    if (nameLower.includes(pattern)) {
+      return { preset: 'survival', weights: { survival: 1, choice: 0, future: 0, loss: 0 } };
+    }
+  }
+  
+  for (const pattern of lossPatterns) {
+    if (nameLower.includes(pattern)) {
+      return { preset: 'loss', weights: { survival: 0, choice: 0, future: 0, loss: 1 } };
+    }
+  }
+  
+  for (const pattern of futurePatterns) {
+    if (nameLower.includes(pattern)) {
+      return { preset: 'future', weights: { survival: 0, choice: 0, future: 1, loss: 0 } };
+    }
+  }
+  
+  for (const pattern of choicePatterns) {
+    if (nameLower.includes(pattern)) {
+      return { preset: 'choice', weights: { survival: 0, choice: 1, future: 0, loss: 0 } };
+    }
+  }
+  
+  // Alimentação genérica = híbrido 60/40 (comida é parcialmente essencial)
+  if (nameLower.includes('alimenta') || nameLower.includes('comida') || nameLower.includes('refeic')) {
+    return { preset: 'hybrid', weights: { survival: 0.6, choice: 0.4, future: 0, loss: 0 } };
+  }
+  
+  // Default: híbrido 50/50 (mas status continua pendente)
+  return { preset: 'hybrid', weights: { survival: 0.5, choice: 0.5, future: 0, loss: 0 } };
+}
+
+/**
+ * Retorna top categorias pendentes para onboarding
+ * Ordenado por impacto (R$ gasto) e frequência
+ */
+export async function getTopPendingCategories(
+  tenantId: string,
+  limit: number = 10,
+  startDate?: Date,
+  endDate?: Date
+): Promise<TopPendingResult> {
+  // Período padrão: mês atual ou últimos 30 dias
+  const now = new Date();
+  const defaultStart = startDate || new Date(now.getFullYear(), now.getMonth(), 1);
+  const defaultEnd = endDate || new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+  // Buscar despesas do período agrupadas por categoria
+  const expensesByCategory = await prisma.$queryRaw<Array<{
+    categoryId: string;
+    categoryName: string;
+    categoryIcon: string | null;
+    totalAmount: Prisma.Decimal;
+    transactionCount: bigint;
+  }>>`
+    SELECT 
+      c.id as "categoryId",
+      c.name as "categoryName",
+      c.icon as "categoryIcon",
+      COALESCE(SUM(t.amount), 0) as "totalAmount",
+      COUNT(t.id) as "transactionCount"
+    FROM "Category" c
+    LEFT JOIN "Transaction" t ON c.id = t."categoryId" 
+      AND t.type = 'expense'
+      AND t."tenantId" = ${tenantId}
+      AND t."deletedAt" IS NULL
+      AND t.date >= ${defaultStart}
+      AND t.date <= ${defaultEnd}
+    WHERE c."tenantId" = ${tenantId}
+      AND c."deletedAt" IS NULL
+      AND c.type = 'expense'
+    GROUP BY c.id, c.name, c.icon
+    HAVING COALESCE(SUM(t.amount), 0) > 0
+    ORDER BY "totalAmount" DESC
+  `;
+
+  // Buscar status de validação das categorias
+  const semantics = await prisma.$queryRaw<Array<{
+    categoryId: string;
+    validationStatus: string;
+    survivalWeight: Prisma.Decimal;
+    choiceWeight: Prisma.Decimal;
+    futureWeight: Prisma.Decimal;
+    lossWeight: Prisma.Decimal;
+  }>>`
+    SELECT 
+      "categoryId",
+      "validationStatus",
+      "survivalWeight",
+      "choiceWeight",
+      "futureWeight",
+      "lossWeight"
+    FROM "CategorySemantics"
+    WHERE "tenantId" = ${tenantId}
+  `;
+
+  const semanticsMap = new Map(semantics.map(s => [s.categoryId, {
+    validationStatus: s.validationStatus,
+    weights: {
+      survival: Number(s.survivalWeight),
+      choice: Number(s.choiceWeight),
+      future: Number(s.futureWeight),
+      loss: Number(s.lossWeight)
+    }
+  }]));
+
+  // Separar categorias validadas e pendentes
+  let validatedAmount = 0;
+  let pendingAmount = 0;
+  let validatedCount = 0;
+  let pendingCount = 0;
+  const pendingCategories: TopPendingCategory[] = [];
+
+  for (const cat of expensesByCategory) {
+    const amount = Number(cat.totalAmount);
+    const count = Number(cat.transactionCount);
+    const sem = semanticsMap.get(cat.categoryId);
+    
+    if (sem?.validationStatus === 'validated') {
+      validatedAmount += amount;
+      validatedCount++;
+    } else {
+      pendingAmount += amount;
+      pendingCount++;
+      
+      // Determinar status e sugestão
+      let currentStatus: TopPendingCategory['currentStatus'] = 'missing';
+      if (sem) {
+        currentStatus = sem.validationStatus as any || 'not_validated';
+      }
+      
+      const suggestion = suggestPresetByName(cat.categoryName);
+      
+      pendingCategories.push({
+        categoryId: cat.categoryId,
+        categoryName: cat.categoryName,
+        categoryIcon: cat.categoryIcon,
+        pendingAmount: amount,
+        pendingCount: count,
+        currentStatus,
+        suggestedPreset: suggestion.preset,
+        suggestedWeights: suggestion.weights
+      });
+    }
+  }
+
+  // Calcular coverage
+  const totalExpenseAmount = validatedAmount + pendingAmount;
+  const validatedPercent = totalExpenseAmount > 0 ? (validatedAmount / totalExpenseAmount) * 100 : 100;
+
+  return {
+    coverage: {
+      validatedPercent,
+      validatedAmount,
+      totalExpenseAmount,
+      validatedCount,
+      pendingCount,
+      totalCategoriesUsed: expensesByCategory.length
+    },
+    topPendingCategories: pendingCategories.slice(0, limit)
+  };
+}
+
 export default {
   getEnergyDistribution,
   getEnergyTimeline,
@@ -1221,5 +1446,6 @@ export default {
   generateAnnualNarrative,
   comparePeriods,
   getCategorySemantics,
-  updateCategorySemantics
+  updateCategorySemantics,
+  getTopPendingCategories
 };

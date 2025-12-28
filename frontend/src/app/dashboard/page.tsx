@@ -23,6 +23,9 @@ import {
   Wallet,
   CreditCard,
   PiggyBank,
+  Target,
+  Zap,
+  AlertTriangle,
 } from 'lucide-react';
 
 interface DashboardData {
@@ -72,6 +75,13 @@ interface PaymentMethodForm {
   expirationDate: string;
 }
 
+interface CoverageData {
+  validatedPercent: number;
+  validatedAmount: number;
+  totalExpenseAmount: number;
+  pendingCount: number;
+}
+
 export default function Dashboard() {
   const router = useRouter();
   const user = useUser();
@@ -83,6 +93,7 @@ export default function Dashboard() {
   const [showPeriodModal, setShowPeriodModal] = useState(false);
   const [showTransactionModal, setShowTransactionModal] = useState(false);
   const [showBankAccountModal, setShowBankAccountModal] = useState(false);
+  const [energyCoverage, setEnergyCoverage] = useState<CoverageData | null>(null);
   const [showPaymentMethodModal, setShowPaymentMethodModal] = useState(false);
   const [showOnboardingRecurring, setShowOnboardingRecurring] = useState(false);
   const [transactionType, setTransactionType] = useState<'income' | 'expense'>('expense');
@@ -136,6 +147,7 @@ export default function Dashboard() {
     loadDashboardData();
     loadFormData();
     loadTodaySummary();
+    loadEnergyCoverage();
     
     // Verificar se é primeiro acesso para mostrar wizard de contas recorrentes
     const hasSeenWizard = localStorage.getItem('hasSeenRecurringBillsWizard');
@@ -147,6 +159,18 @@ export default function Dashboard() {
       return () => clearTimeout(timer);
     }
   }, [startDate, endDate, isAuthenticated]);
+
+  const loadEnergyCoverage = async () => {
+    try {
+      const response = await api.get('/reports/top-pending-categories?limit=1');
+      if (response.data.success) {
+        setEnergyCoverage(response.data.data.coverage);
+      }
+    } catch (error) {
+      // Silenciar erro - feature opcional
+      console.error('Erro ao carregar coverage:', error);
+    }
+  };
 
   const loadTodaySummary = async () => {
     try {
@@ -361,6 +385,53 @@ export default function Dashboard() {
           onAddTransaction={() => setShowTransactionModal(true)}
           onOpenCalendar={() => router.push('/dashboard/calendar')}
         />
+
+        {/* Banner de Onboarding de Energia - quando coverage < 85% */}
+        {energyCoverage && energyCoverage.validatedPercent < 85 && (
+          <div className={`mb-6 rounded-xl p-4 ${
+            energyCoverage.validatedPercent < 50 
+              ? 'bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200'
+              : 'bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200'
+          }`}>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+              <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
+                energyCoverage.validatedPercent < 50 ? 'bg-amber-100' : 'bg-purple-100'
+              }`}>
+                {energyCoverage.validatedPercent < 50 
+                  ? <AlertTriangle className="text-amber-600" size={20} />
+                  : <Target className="text-purple-600" size={20} />
+                }
+              </div>
+              <div className="flex-1 min-w-0">
+                <h4 className={`font-semibold text-sm ${
+                  energyCoverage.validatedPercent < 50 ? 'text-amber-800' : 'text-purple-800'
+                }`}>
+                  {energyCoverage.validatedPercent < 50 
+                    ? 'Diagnóstico financeiro indisponível' 
+                    : 'Complete a validação para diagnóstico completo'
+                  }
+                </h4>
+                <p className={`text-xs mt-0.5 ${
+                  energyCoverage.validatedPercent < 50 ? 'text-amber-700' : 'text-purple-700'
+                }`}>
+                  {energyCoverage.validatedPercent.toFixed(0)}% dos gastos validados • 
+                  Faltam {(85 - energyCoverage.validatedPercent).toFixed(0)}% para diagnóstico completo
+                </p>
+              </div>
+              <button
+                onClick={() => router.push('/dashboard/categories?wizard=1')}
+                className={`flex-shrink-0 px-4 py-2 rounded-lg font-medium text-sm flex items-center gap-2 transition ${
+                  energyCoverage.validatedPercent < 50 
+                    ? 'bg-amber-600 text-white hover:bg-amber-700'
+                    : 'bg-purple-600 text-white hover:bg-purple-700'
+                }`}
+              >
+                <Zap size={16} />
+                Validar agora
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Cards do Dia - Resumo HOJE */}
         {todaySummary && (

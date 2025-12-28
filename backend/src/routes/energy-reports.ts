@@ -381,4 +381,45 @@ router.put('/category-semantics/:categoryId', authenticateToken, async (req: Aut
   }
 });
 
+// ==================== TOP PENDING CATEGORIES (ONBOARDING) ====================
+
+/**
+ * GET /api/v1/reports/top-pending-categories
+ * Retorna top categorias pendentes de validação para onboarding
+ * Ordenado por impacto em R$ (soma de despesas no período)
+ */
+router.get('/top-pending-categories', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId;
+    const { startDate, endDate, limit } = req.query;
+
+    if (!tenantId) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'TenantId não encontrado' }
+      });
+    }
+
+    // Período padrão: mês atual
+    const now = new Date();
+    const start = startDate ? new Date(startDate as string) : new Date(now.getFullYear(), now.getMonth(), 1);
+    const end = endDate ? new Date(endDate as string) : new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+    const result = await energyReportsService.getTopPendingCategories(
+      tenantId,
+      limit ? parseInt(limit as string) : 10,
+      start,
+      end
+    );
+
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    log.error('Error in top-pending-categories:', error);
+    return res.status(500).json({
+      success: false,
+      error: { message: 'Erro ao buscar categorias pendentes' }
+    });
+  }
+});
+
 export default router;
