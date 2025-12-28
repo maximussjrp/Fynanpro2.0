@@ -225,12 +225,14 @@ export async function getEnergyDistribution(
   endDate: Date
 ): Promise<PeriodEnergy> {
   // Buscar transações do período
+  // FASE 2.4: Exclui transações marcadas como excludedFromEnergy (transfers, invoice_payments, etc.)
   const transactions = await prisma.transaction.findMany({
     where: {
       tenantId,
       transactionDate: { gte: startDate, lte: endDate },
       status: 'completed',
-      deletedAt: null
+      deletedAt: null,
+      excludedFromEnergy: false // FASE 2.4: Ignora transfers e invoice_payments
     },
     select: {
       id: true,

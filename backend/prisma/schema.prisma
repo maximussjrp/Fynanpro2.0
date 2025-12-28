@@ -286,6 +286,35 @@ model Transaction {
   energyLoss        Decimal?  @db.Decimal(5, 4) // Peso Energia Perdida
   energyJustification String? // Justificativa do override
   
+  // ══════════════════════════════════════════════════════════════════
+  // FASE 2.4: OFX Import, Transfers & Anti-duplicação
+  // ══════════════════════════════════════════════════════════════════
+  
+  // Import tracking
+  importBatchId         String?   // UUID do lote de importação
+  importSource          String?   // 'ofx', 'csv', 'xml', 'manual'
+  externalFitId         String?   // FITID do OFX para dedupe
+  rawDescription        String?   // Descrição original do extrato
+  normalizedDescription String?   // Descrição normalizada para matching
+  
+  // Transfer detection
+  isTransfer            Boolean   @default(false) // É transferência interna?
+  transferGroupId       String?   // UUID para vincular pares (out/in)
+  linkedTransactionId   String?   // Link direto para transação pareada
+  
+  // Transaction classification
+  transactionKind       String    @default("bank") // bank, card, invoice_payment, transfer, fee, unknown
+  
+  // Energy exclusion
+  excludedFromEnergy    Boolean   @default(false) // Exclui de cálculos de energia
+  excludedReason        String?   // 'transfer', 'invoice_payment', 'user_excluded', 'duplicate'
+  
+  // Review status for imports
+  needsReview           Boolean   @default(false) // Precisa revisão humana?
+  reviewSuggestion      String?   // JSON: { action, confidence, reason }
+  reviewedAt            DateTime? // Quando foi revisado
+  reviewedBy            String?   // User ID que revisou
+  
   tags            String?   // JSON array
   notes           String?
   createdAt       DateTime  @default(now())
@@ -315,6 +344,14 @@ model Transaction {
   @@index([parentId])
   @@index([transactionType])
   @@index([tenantId, transactionType, status])
+  
+  // FASE 2.4: OFX Import indexes
+  @@index([tenantId, externalFitId])
+  @@index([tenantId, importBatchId])
+  @@index([tenantId, isTransfer])
+  @@index([tenantId, excludedFromEnergy])
+  @@index([tenantId, needsReview])
+  @@index([transferGroupId])
 }
 
 // ==================== CONTAS FIXAS (RECORRENTES) ====================
@@ -512,17 +549,28 @@ model Import {
   userId          String?
   fileName        String
   fileType        String    // csv, ofx, pdf
-  status          String    @default("pending") // pending, processing, completed, failed
+  bankAccountId   String?   // Conta de destino
+  status          String    @default("pending") // pending, processing, completed, failed, needs_review
   totalRows       Int?
   processedRows   Int       @default(0)
   errorRows       Int       @default(0)
   errorLog        String?   // JSON
+  
+  // FASE 2.4: Estatísticas de import
+  createdCount    Int       @default(0)  // Transações criadas
+  dedupedCount    Int       @default(0)  // Duplicadas ignoradas
+  transferPairs   Int       @default(0)  // Pares de transferência detectados
+  invoicePayments Int       @default(0)  // Pagamentos de fatura detectados
+  needsReviewCount Int      @default(0)  // Itens que precisam revisão
+  excludedFromEnergyCount Int @default(0) // Itens excluídos de energia
+  
   createdAt       DateTime  @default(now())
   completedAt     DateTime?
 
   tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, status])
+  @@index([tenantId, createdAt])
 }
 
 // ==================== FILTROS SALVOS ====================
