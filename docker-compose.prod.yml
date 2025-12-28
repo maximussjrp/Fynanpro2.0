@@ -79,11 +79,13 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: https://api.utopsistema.com.br
     container_name: utop-frontend
     restart: always
     environment:
       NODE_ENV: production
-      NEXT_PUBLIC_API_URL: ${API_URL:-https://api.utopsistema.com.br}
+      NEXT_PUBLIC_API_URL: https://api.utopsistema.com.br
     depends_on:
       - backend
     networks:
