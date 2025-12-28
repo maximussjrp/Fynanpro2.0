@@ -167,11 +167,21 @@ export interface EnergyDistribution {
   available: number;
 }
 
+export interface SemanticsCoverage {
+  percentage: number;          // % do gasto total com semântica VALIDATED
+  classifiedAmount: number;    // Valor em R$ com semântica validated
+  unclassifiedAmount: number;  // Valor em R$ sem validação (pendente)
+  pendingEnergy: number;       // Energia "em suspenso" - não entra no cálculo
+  isComplete: boolean;         // >= 85% = completo
+  diagnosticMode: 'complete' | 'partial' | 'insufficient'; // Estado do diagnóstico
+}
+
 export interface PeriodEnergy extends EnergyDistribution {
   period: string;
   periodLabel: string;
   transactionCount: number;
   categoryBreakdown: CategoryEnergy[];
+  semanticsCoverage?: SemanticsCoverage; // FASE 2: Modo Diagnóstico Parcial
 }
 
 export interface CategoryEnergy {
@@ -230,6 +240,8 @@ export interface FinancialHealthIndex {
   grade: string;
   label: string;
   color: string;
+  adjustmentReason?: string | null; // Indica limitação por regra do contrato
+  semanticsCoverage?: SemanticsCoverage; // FASE 2: Modo Diagnóstico Parcial
   components: {
     survivalEfficiency: HealthComponent;
     savingsRate: HealthComponent;

@@ -23,7 +23,8 @@ import {
   METRIC_POLARITY, getVariationBadgeColor, shouldShowNoData,
   formatCurrency, formatPercentage, getSentimentColor, getSentimentLabel,
   type EnergyType, type PeriodEnergy, type FinancialHealthIndex,
-  type Insight, type AnnualNarrative, type PeriodComparison
+  type Insight, type AnnualNarrative, type PeriodComparison,
+  type SemanticsCoverage
 } from '@/lib/energyColors';
 
 // ==================== COMPONENTES ====================
@@ -72,10 +73,27 @@ function EnergyCard({
 // Gauge do Health Index
 function HealthGauge({ healthIndex }: { healthIndex: FinancialHealthIndex }) {
   const circumference = 2 * Math.PI * 80;
-  const progress = (healthIndex.score / 100) * circumference;
+  const isPartialDiagnosis = healthIndex.grade === '?' || healthIndex.semanticsCoverage?.diagnosticMode === 'partial' || healthIndex.semanticsCoverage?.diagnosticMode === 'insufficient';
+  const progress = isPartialDiagnosis ? 0 : (healthIndex.score / 100) * circumference;
 
   return (
     <div className="flex flex-col items-center">
+      {/* Banner de diagnóstico parcial */}
+      {isPartialDiagnosis && healthIndex.semanticsCoverage && (
+        <div className="w-full mb-4 bg-purple-50 border border-purple-200 rounded-lg p-3 text-center">
+          <div className="flex items-center justify-center gap-2 text-purple-700 font-medium">
+            <AlertTriangle size={18} />
+            <span>Diagnóstico Parcial</span>
+          </div>
+          <p className="text-sm text-purple-600 mt-1">
+            Apenas {healthIndex.semanticsCoverage.percentage.toFixed(0)}% dos gastos validados
+          </p>
+          <p className="text-xs text-purple-500 mt-1">
+            {formatCurrency(healthIndex.semanticsCoverage.pendingEnergy || healthIndex.semanticsCoverage.unclassifiedAmount)} pendente de validação
+          </p>
+        </div>
+      )}
+
       <div className="relative w-48 h-48">
         <svg className="w-full h-full -rotate-90" viewBox="0 0 200 200">
           {/* Background circle */}
@@ -84,53 +102,81 @@ function HealthGauge({ healthIndex }: { healthIndex: FinancialHealthIndex }) {
             cy="100"
             r="80"
             fill="none"
-            stroke="#E5E7EB"
+            stroke={isPartialDiagnosis ? '#E9D5FF' : '#E5E7EB'}
             strokeWidth="16"
+            strokeDasharray={isPartialDiagnosis ? '8 8' : 'none'}
           />
-          {/* Progress circle */}
-          <circle
-            cx="100"
-            cy="100"
-            r="80"
-            fill="none"
-            stroke={healthIndex.color}
-            strokeWidth="16"
-            strokeLinecap="round"
-            strokeDasharray={circumference}
-            strokeDashoffset={circumference - progress}
-            style={{ transition: 'stroke-dashoffset 1s ease-in-out' }}
-          />
+          {/* Progress circle - não mostra quando diagnóstico parcial */}
+          {!isPartialDiagnosis && (
+            <circle
+              cx="100"
+              cy="100"
+              r="80"
+              fill="none"
+              stroke={healthIndex.color}
+              strokeWidth="16"
+              strokeLinecap="round"
+              strokeDasharray={circumference}
+              strokeDashoffset={circumference - progress}
+              style={{ transition: 'stroke-dashoffset 1s ease-in-out' }}
+            />
+          )}
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-4xl font-bold" style={{ color: healthIndex.color }}>
-            {healthIndex.score}
-          </span>
-          <span className="text-xl font-semibold text-gray-600">{healthIndex.grade}</span>
-          <span className="text-sm text-gray-500">{healthIndex.label}</span>
+          {isPartialDiagnosis ? (
+            <>
+              <span className="text-4xl font-bold text-purple-500">?</span>
+              <span className="text-xl font-semibold text-purple-600">Incompleto</span>
+              <span className="text-xs text-purple-400 mt-1">Classifique categorias</span>
+            </>
+          ) : (
+            <>
+              <span className="text-4xl font-bold" style={{ color: healthIndex.color }}>
+                {healthIndex.score}
+              </span>
+              <span className="text-xl font-semibold text-gray-600">{healthIndex.grade}</span>
+              <span className="text-sm text-gray-500">{healthIndex.label}</span>
+            </>
+          )}
         </div>
       </div>
       
-      {/* Trend indicator */}
-      <div className="mt-4 flex items-center gap-2">
-        {healthIndex.trend.direction === 'improving' && (
-          <>
-            <TrendingUp className="text-green-500" size={20} />
-            <span className="text-sm text-green-600">Melhorando</span>
-          </>
-        )}
-        {healthIndex.trend.direction === 'declining' && (
-          <>
-            <TrendingDown className="text-red-500" size={20} />
-            <span className="text-sm text-red-600">Piorando</span>
-          </>
-        )}
-        {healthIndex.trend.direction === 'stable' && (
-          <>
-            <Minus className="text-gray-400" size={20} />
-            <span className="text-sm text-gray-500">Estável</span>
-          </>
-        )}
-      </div>
+      {/* Trend indicator - só mostra se diagnóstico completo */}
+      {!isPartialDiagnosis && (
+        <div className="mt-4 flex items-center gap-2">
+          {healthIndex.trend.direction === 'improving' && (
+            <>
+              <TrendingUp className="text-green-500" size={20} />
+              <span className="text-sm text-green-600">Melhorando</span>
+            </>
+          )}
+          {healthIndex.trend.direction === 'declining' && (
+            <>
+              <TrendingDown className="text-red-500" size={20} />
+              <span className="text-sm text-red-600">Piorando</span>
+            </>
+          )}
+          {healthIndex.trend.direction === 'stable' && (
+            <>
+              <Minus className="text-gray-400" size={20} />
+              <span className="text-sm text-gray-500">Estável</span>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* CTA para classificar quando parcial */}
+      {isPartialDiagnosis && (
+        <div className="mt-4">
+          <a 
+            href="/dashboard/categories"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition text-sm font-medium"
+          >
+            <Settings size={16} />
+            Classificar agora
+          </a>
+        </div>
+      )}
     </div>
   );
 }
@@ -392,6 +438,10 @@ function OverviewView({ energyData, healthIndex, insights }: {
     );
   }
 
+  // Verificar cobertura semântica
+  const coverage = energyData.semanticsCoverage;
+  const isPartialDiagnosis = coverage && !coverage.isComplete;
+
   // Dados para o gráfico de distribuição
   const distributionData = [
     { name: 'Sobrevivência', value: energyData.survival, color: ENERGY_COLORS.survival.primary },
@@ -402,6 +452,49 @@ function OverviewView({ energyData, healthIndex, insights }: {
 
   return (
     <div className="space-y-6">
+      {/* Banner de Diagnóstico Parcial */}
+      {isPartialDiagnosis && coverage && (
+        <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border-2 border-purple-200 rounded-xl p-4">
+          <div className="flex items-start gap-4">
+            <div className="flex-shrink-0 w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
+              <AlertTriangle className="text-purple-600" size={24} />
+            </div>
+            <div className="flex-1">
+              <h4 className="font-semibold text-purple-800">Diagnóstico Parcial</h4>
+              <p className="text-sm text-purple-700 mt-1">
+                Apenas <strong>{coverage.percentage.toFixed(0)}%</strong> dos seus gastos foram <strong>validados</strong>.
+                {coverage.pendingEnergy > 0 && (
+                  <span className="block mt-1">
+                    {formatCurrency(coverage.pendingEnergy)} em energia pendente de classificação.
+                  </span>
+                )}
+              </p>
+              <div className="mt-3 flex items-center gap-3">
+                {/* Progress bar */}
+                <div className="flex-1 max-w-xs">
+                  <div className="h-2 bg-purple-200 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-purple-600 rounded-full transition-all"
+                      style={{ width: `${Math.min(coverage.percentage, 100)}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-purple-500 mt-1">
+                    {formatCurrency(coverage.classifiedAmount)} validados de {formatCurrency(coverage.classifiedAmount + coverage.unclassifiedAmount)} total
+                  </p>
+                </div>
+                <a 
+                  href="/dashboard/categories"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition text-sm font-medium whitespace-nowrap"
+                >
+                  <Settings size={16} />
+                  Validar categorias
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Cards de Energia */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <EnergyCard type="generated" value={energyData.generated} />
@@ -464,12 +557,21 @@ function OverviewView({ energyData, healthIndex, insights }: {
 
       {/* Insights */}
       {insights.length > 0 && (
-        <div className="bg-white rounded-xl shadow-sm border p-6">
+        <div className={`bg-white rounded-xl shadow-sm border p-6 ${isPartialDiagnosis ? 'relative' : ''}`}>
+          {/* Overlay para diagnóstico parcial */}
+          {isPartialDiagnosis && (
+            <div className="absolute top-2 right-2">
+              <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded-full">
+                <AlertTriangle size={12} />
+                Estimativas
+              </span>
+            </div>
+          )}
           <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-            <Lightbulb className="text-amber-500" size={20} />
-            Insights
+            <Lightbulb className={isPartialDiagnosis ? 'text-gray-400' : 'text-amber-500'} size={20} />
+            Insights {isPartialDiagnosis && <span className="text-sm font-normal text-gray-400">(baseados em dados parciais)</span>}
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 ${isPartialDiagnosis ? 'opacity-70' : ''}`}>
             {insights.slice(0, 6).map((insight) => (
               <InsightCard key={insight.id} insight={insight} />
             ))}

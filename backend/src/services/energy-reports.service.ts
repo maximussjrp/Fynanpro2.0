@@ -33,6 +33,17 @@ export interface PeriodEnergy extends EnergyDistribution {
   periodLabel: string;         // "Janeiro 2025" ou "2025"
   transactionCount: number;
   categoryBreakdown: CategoryEnergy[];
+  
+  // Cobertura semântica (FASE 2: Modo Diagnóstico Parcial)
+  // REGRA: Apenas validationStatus='validated' conta como classificado
+  semanticsCoverage: {
+    percentage: number;          // % do gasto total com semântica VALIDATED
+    classifiedAmount: number;    // Valor em R$ com semântica validated
+    unclassifiedAmount: number;  // Valor em R$ sem validação (pendente)
+    pendingEnergy: number;       // Energia "em suspenso" - não entra no cálculo
+    isComplete: boolean;         // >= 85% = completo
+    diagnosticMode: 'complete' | 'partial' | 'insufficient'; // Estado do diagnóstico
+  };
 }
 
 export interface CategoryEnergy {
@@ -92,6 +103,17 @@ export interface FinancialHealthIndex {
   label: string;
   color: string;
   adjustmentReason?: string | null; // Indica limitação por regra do contrato
+  
+  // FASE 2: Cobertura semântica (SOMENTE validated conta)
+  semanticsCoverage: {
+    percentage: number;
+    classifiedAmount: number;
+    unclassifiedAmount: number;
+    pendingEnergy: number;
+    isComplete: boolean;
+    diagnosticMode: 'complete' | 'partial' | 'insufficient';
+  };
+  
   components: {
     survivalEfficiency: HealthComponent;
     savingsRate: HealthComponent;
@@ -226,7 +248,7 @@ export async function getEnergyDistribution(
     }
   });
 
-  // Buscar semânticas das categorias
+  // Buscar semânticas das categorias COM status de validação
   const categoryIds = [...new Set(transactions.map(t => t.categoryId).filter(Boolean))] as string[];
   
   const semantics = await prisma.$queryRaw<Array<{
@@ -236,18 +258,21 @@ export async function getEnergyDistribution(
     choiceWeight: Prisma.Decimal;
     futureWeight: Prisma.Decimal;
     lossWeight: Prisma.Decimal;
+    validationStatus: string;
   }>>`
-    SELECT "categoryId", "generatedWeight", "survivalWeight", "choiceWeight", "futureWeight", "lossWeight"
+    SELECT "categoryId", "generatedWeight", "survivalWeight", "choiceWeight", "futureWeight", "lossWeight", "validationStatus"
     FROM "CategorySemantics"
     WHERE "categoryId" = ANY(${categoryIds})
   `;
 
+  // Mapa com pesos E status de validação
   const semanticsMap = new Map(semantics.map(s => [s.categoryId, {
     generated: Number(s.generatedWeight),
     survival: Number(s.survivalWeight),
     choice: Number(s.choiceWeight),
     future: Number(s.futureWeight),
-    loss: Number(s.lossWeight)
+    loss: Number(s.lossWeight),
+    isValidated: s.validationStatus === 'validated' // SOMENTE validated conta como "classificado"
   }]));
 
   // Calcular distribuição
@@ -256,6 +281,13 @@ export async function getEnergyDistribution(
   let choice = 0;
   let future = 0;
   let loss = 0;
+  
+  // FASE 2: Rastrear cobertura semântica
+  // IMPORTANTE: Apenas despesas com validationStatus='validated' contam como classificadas
+  // Despesas sem semântica validada NÃO entram no cálculo de energia (ficam pendentes)
+  let classifiedAmount = 0;   // Despesas com semântica VALIDATED (não inferred/default)
+  let unclassifiedAmount = 0; // Despesas sem validação (pendentes de classificação)
+  let pendingEnergy = 0;      // Energia "em suspenso" de despesas não classificadas
 
   const categoryTotals = new Map<string, { amount: number; weights: any; name: string; icon: string | null }>();
 
@@ -275,28 +307,42 @@ export async function getEnergyDistribution(
       current.amount += amount;
       categoryTotals.set(key, current);
     } else if (t.type === 'expense') {
-      const weights = t.categoryId ? semanticsMap.get(t.categoryId) : null;
+      const semanticData = t.categoryId ? semanticsMap.get(t.categoryId) : null;
       
-      if (weights) {
-        survival += amount * weights.survival;
-        choice += amount * weights.choice;
-        future += amount * weights.future;
-        loss += amount * weights.loss;
+      if (semanticData && semanticData.isValidated) {
+        // ✅ VALIDATED: Entra no cálculo de energia com confiança
+        survival += amount * semanticData.survival;
+        choice += amount * semanticData.choice;
+        future += amount * semanticData.future;
+        loss += amount * semanticData.loss;
+        classifiedAmount += amount;
         
         // Track category
         const key = t.categoryId!;
         const current = categoryTotals.get(key) || { 
           amount: 0, 
-          weights,
+          weights: semanticData,
           name: t.category?.name || 'Sem Categoria',
           icon: t.category?.icon || null
         };
         current.amount += amount;
         categoryTotals.set(key, current);
       } else {
-        // Default: 50% survival, 50% choice
-        survival += amount * 0.5;
-        choice += amount * 0.5;
+        // ⚠️ NÃO VALIDATED (inferred, default, ou sem semântica)
+        // NÃO entra no cálculo de energia - fica como "pendente"
+        unclassifiedAmount += amount;
+        pendingEnergy += amount; // Contabilizar energia pendente de classificação
+        
+        // Track category mesmo assim para mostrar na UI
+        const key = t.categoryId || 'sem-categoria';
+        const current = categoryTotals.get(key) || { 
+          amount: 0, 
+          weights: { generated: 0, survival: 0, choice: 0, future: 0, loss: 0 },
+          name: t.category?.name || 'Sem Categoria',
+          icon: t.category?.icon || null
+        };
+        current.amount += amount;
+        categoryTotals.set(key, current);
       }
     }
   }
@@ -342,12 +388,30 @@ export async function getEnergyDistribution(
     };
   }).sort((a, b) => b.amount - a.amount);
 
+  // FASE 2: Calcular cobertura semântica
+  const totalExpenses = classifiedAmount + unclassifiedAmount;
+  const coveragePercentage = totalExpenses > 0 ? (classifiedAmount / totalExpenses) * 100 : 100;
+  const isComplete = coveragePercentage >= 85;
+  const diagnosticMode: 'complete' | 'partial' | 'insufficient' = 
+    coveragePercentage >= 85 ? 'complete' : 
+    coveragePercentage >= 50 ? 'partial' : 'insufficient';
+
   return {
     ...distribution,
     period: `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}`,
     periodLabel: `${MONTH_NAMES[startDate.getMonth()]} ${startDate.getFullYear()}`,
     transactionCount: transactions.length,
-    categoryBreakdown
+    categoryBreakdown,
+    
+    // FASE 2: Cobertura semântica (SOMENTE validated conta)
+    semanticsCoverage: {
+      percentage: Math.round(coveragePercentage * 10) / 10,
+      classifiedAmount,
+      unclassifiedAmount,
+      pendingEnergy,
+      isComplete,
+      diagnosticMode
+    }
   };
 }
 
@@ -518,7 +582,26 @@ export async function getHealthIndex(
     }
   }
 
+  // ══════════════════════════════════════════════════════════════════════════════
+  // FASE 2: MODO DIAGNÓSTICO PARCIAL
+  // ══════════════════════════════════════════════════════════════════════════════
+  // Se cobertura semântica < 85%, o diagnóstico é PARCIAL e deve indicar isso
+  // ══════════════════════════════════════════════════════════════════════════════
+  
+  const coverageInfo = energy.semanticsCoverage;
+  let diagnosticLimited = false;
+  
+  if (!coverageInfo.isComplete && hasIncomeData) {
+    diagnosticLimited = true;
+    if (!adjustmentReason) {
+      adjustmentReason = `Diagnóstico parcial: apenas ${coverageInfo.percentage.toFixed(0)}% dos gastos classificados`;
+    } else {
+      adjustmentReason += ` | Diagnóstico parcial: ${coverageInfo.percentage.toFixed(0)}% classificados`;
+    }
+  }
+
   const grade = !hasIncomeData ? 'N/A' :
+               diagnosticLimited ? '?' :  // FASE 2: Grade indeterminada se cobertura baixa
                scoreAdjusted >= 95 ? 'A+' :
                scoreAdjusted >= 90 ? 'A' :
                scoreAdjusted >= 85 ? 'B+' :
@@ -528,6 +611,7 @@ export async function getHealthIndex(
                scoreAdjusted >= 50 ? 'D' : 'F';
 
   const label = !hasIncomeData ? 'Sem dados' :
+               diagnosticLimited ? 'Incompleto' :  // FASE 2: Label para diagnóstico parcial
                scoreAdjusted >= 90 ? 'Excelente' :
                scoreAdjusted >= 80 ? 'Muito Bom' :
                scoreAdjusted >= 70 ? 'Bom' :
@@ -535,6 +619,7 @@ export async function getHealthIndex(
                scoreAdjusted >= 50 ? 'Atenção' : 'Crítico';
 
   const color = !hasIncomeData ? '#6B7280' :
+               diagnosticLimited ? '#8B5CF6' :  // FASE 2: Roxo para diagnóstico parcial
                scoreAdjusted >= 80 ? '#10B981' :
                scoreAdjusted >= 60 ? '#F59E0B' : '#EF4444';
 
@@ -577,6 +662,10 @@ export async function getHealthIndex(
     label,
     color,
     adjustmentReason, // Indica se houve limitação por regra do contrato
+    
+    // FASE 2: Cobertura semântica
+    semanticsCoverage: coverageInfo,
+    
     components: {
       survivalEfficiency: {
         name: 'Eficiência em Sobrevivência',
