@@ -40,8 +40,12 @@ RUN npx prisma generate
 # Copy built files from builder
 COPY --from=builder /app/dist ./dist
 
+# Copy entrypoint script
+COPY docker-entrypoint.sh ./
+RUN chmod +x docker-entrypoint.sh
+
 # Expose port
 EXPOSE 3000
 
-# Start command
-CMD ["node", "dist/main.js"]
+# Start command with entrypoint
+ENTRYPOINT ["./docker-entrypoint.sh"]
