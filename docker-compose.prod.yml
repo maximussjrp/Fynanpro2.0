@@ -89,7 +89,7 @@ services:
     networks:
       - utop_net
     expose:
-      - "3000"
+      - "3001"
 
   nginx:
     image: nginx:alpine
