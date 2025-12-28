@@ -620,6 +620,93 @@ router.get('/transfer-pairs', authMiddleware, async (req: AuthRequest, res: Resp
   }
 });
 
+// ==================== FASE 2.4.1: REVIEW QUEUE ENHANCEMENTS ====================
+
+/**
+ * POST /import/review/:batchId/apply-suggestions
+ * Apply suggestions in bulk by criteria
+ */
+router.post('/review/:batchId/apply-suggestions', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId!;
+    const { batchId } = req.params;
+    const { criteria, minConfidence } = req.body;
+    
+    const validCriteria = ['high_confidence', 'all_fees', 'all_transfers', 'all_invoice_payments', 'apply_all'];
+    if (!criteria || !validCriteria.includes(criteria)) {
+      return res.status(400).json({ 
+        error: `criteria inválido. Valores: ${validCriteria.join(', ')}` 
+      });
+    }
+    
+    const result = await ofxPipelineService.applySuggestionsBulk(
+      tenantId,
+      batchId,
+      criteria,
+      minConfidence || 0.85
+    );
+    
+    log.info(`[Import] Bulk suggestions applied: ${result.updated} updated, ${result.skipped} skipped`);
+    
+    res.json({
+      success: true,
+      ...result,
+      message: `${result.updated} transações atualizadas. ${result.skipped} ignoradas.`
+    });
+  } catch (error: any) {
+    log.error('[Import] Apply suggestions error:', error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /import/review/:batchId/apply-single
+ * Apply suggestion for a single transaction (1-click)
+ */
+router.post('/review/:batchId/apply-single', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId!;
+    const { transactionId } = req.body;
+    
+    if (!transactionId) {
+      return res.status(400).json({ error: 'transactionId é obrigatório' });
+    }
+    
+    const result = await ofxPipelineService.applySingleSuggestion(tenantId, transactionId);
+    
+    res.json(result);
+  } catch (error: any) {
+    log.error('[Import] Apply single suggestion error:', error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /import/review/:batchId/dismiss
+ * Dismiss review items without applying action
+ */
+router.post('/review/:batchId/dismiss', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId!;
+    const { transactionIds } = req.body;
+    
+    if (!transactionIds || !Array.isArray(transactionIds) || transactionIds.length === 0) {
+      return res.status(400).json({ error: 'transactionIds é obrigatório (array)' });
+    }
+    
+    const result = await ofxPipelineService.dismissReview(tenantId, transactionIds);
+    
+    res.json({
+      success: true,
+      ...result,
+      message: `${result.updated} itens ignorados da revisão.`
+    });
+  } catch (error: any) {
+    log.error('[Import] Dismiss review error:', error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
 /**
  * POST /import/validate-dedupe
  * Check if re-importing a file would create duplicates

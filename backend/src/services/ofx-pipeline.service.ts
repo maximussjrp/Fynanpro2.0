@@ -89,11 +89,13 @@ export interface ReviewItem {
   transactionId: string;
   date: string;
   amount: number;
+  absAmount: number;
   rawDescription: string;
   normalizedDescription: string;
   accountId: string;
   categoryId?: string;
   categoryName?: string;
+  needsReview: boolean;
   flags: {
     isTransfer: boolean;
     transactionKind: string;
@@ -103,7 +105,47 @@ export interface ReviewItem {
     suggestedAction: string;
     confidence: number;
     reason: string;
+    reasonHumanized: string;
   };
+}
+
+// Mapeamento de reason técnico para PT-BR
+const REASON_MAP: Record<string, string> = {
+  'TRANSFER_TOKENS_MATCH': 'Parece transferência (PIX/TED)',
+  'INVOICE_PAYMENT_DETECTED': 'Parece pagamento de fatura',
+  'FEE_TOKENS': 'Parece taxa/juros',
+  'POSSIBLE_TRANSFER': 'Possível transferência entre contas',
+  'PIX_TRANSFER': 'Transferência PIX detectada',
+  'TED_TRANSFER': 'Transferência TED detectada',
+  'LOW_CONFIDENCE': 'Descrição ambígua - verificar',
+  'NO_CARD_PURCHASES': 'Pagamento de fatura sem compras no cartão',
+  'MARK_AS_LOSS': 'Considere marcar como PREJUÍZO',
+};
+
+function humanizeReason(reason: string): string {
+  // Check for exact match
+  for (const [key, value] of Object.entries(REASON_MAP)) {
+    if (reason.toUpperCase().includes(key.replace(/_/g, ' ')) || reason.includes(key)) {
+      return value;
+    }
+  }
+  
+  // Check for common patterns in the reason text
+  if (reason.toLowerCase().includes('transfer') || reason.toLowerCase().includes('pix') || reason.toLowerCase().includes('ted')) {
+    return 'Parece transferência (PIX/TED)';
+  }
+  if (reason.toLowerCase().includes('invoice') || reason.toLowerCase().includes('fatura')) {
+    return 'Parece pagamento de fatura';
+  }
+  if (reason.toLowerCase().includes('fee') || reason.toLowerCase().includes('taxa') || reason.toLowerCase().includes('tarifa')) {
+    return 'Parece taxa/juros';
+  }
+  if (reason.toLowerCase().includes('loss') || reason.toLowerCase().includes('prejuízo')) {
+    return 'Considere marcar como PREJUÍZO';
+  }
+  
+  // Default: return first 60 chars translated or original
+  return reason.length > 60 ? reason.substring(0, 60) + '...' : reason;
 }
 
 export interface ReviewSummary {
@@ -596,12 +638,13 @@ export class OFXPipelineService {
   
   /**
    * Get transactions for review by batch
+   * FASE 2.4.1: Ordenação por impacto (abs(amount) DESC) e confidence ASC
    */
   async getReviewItems(
     tenantId: string,
     batchId: string,
     filter?: 'all' | 'suspects' | 'transfers' | 'invoice_payments' | 'needs_review' | 'fees'
-  ): Promise<{ summary: ReviewSummary; items: ReviewItem[] }> {
+  ): Promise<{ summary: ReviewSummary & { pendingAmount: number; resolvedAmount: number }; items: ReviewItem[] }> {
     
     // Build where clause
     const where: any = {
@@ -628,60 +671,98 @@ export class OFXPipelineService {
       },
       orderBy: [
         { needsReview: 'desc' },
-        { amount: 'desc' }
+        { amount: 'desc' }  // Prisma orders by raw value, we'll re-sort in memory
       ],
-      take: 200
+      take: 500  // Increased limit for full review
     });
     
-    // Get summary
-    const summary = await prisma.transaction.aggregate({
-      where: { tenantId, importBatchId: batchId, deletedAt: null },
-      _count: true
-    });
+    // Get summary counts
+    const [totalCount, needsReviewCount, transfersCount, invoiceCount, excludedCount] = await Promise.all([
+      prisma.transaction.count({
+        where: { tenantId, importBatchId: batchId, deletedAt: null }
+      }),
+      prisma.transaction.count({
+        where: { tenantId, importBatchId: batchId, needsReview: true, deletedAt: null }
+      }),
+      prisma.transaction.count({
+        where: { tenantId, importBatchId: batchId, isTransfer: true, deletedAt: null }
+      }),
+      prisma.transaction.count({
+        where: { tenantId, importBatchId: batchId, transactionKind: 'invoice_payment', deletedAt: null }
+      }),
+      prisma.transaction.count({
+        where: { tenantId, importBatchId: batchId, excludedFromEnergy: true, deletedAt: null }
+      })
+    ]);
     
-    const needsReviewCount = await prisma.transaction.count({
-      where: { tenantId, importBatchId: batchId, needsReview: true, deletedAt: null }
+    // Calculate pending vs resolved amounts
+    const pendingTxs = await prisma.transaction.findMany({
+      where: { tenantId, importBatchId: batchId, needsReview: true, deletedAt: null },
+      select: { amount: true }
     });
+    const pendingAmount = pendingTxs.reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
     
-    const transfersCount = await prisma.transaction.count({
-      where: { tenantId, importBatchId: batchId, isTransfer: true, deletedAt: null }
+    const resolvedTxs = await prisma.transaction.findMany({
+      where: { tenantId, importBatchId: batchId, needsReview: false, deletedAt: null },
+      select: { amount: true }
     });
+    const resolvedAmount = resolvedTxs.reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
     
-    const invoiceCount = await prisma.transaction.count({
-      where: { tenantId, importBatchId: batchId, transactionKind: 'invoice_payment', deletedAt: null }
-    });
-    
-    const excludedCount = await prisma.transaction.count({
-      where: { tenantId, importBatchId: batchId, excludedFromEnergy: true, deletedAt: null }
-    });
-    
-    const items: ReviewItem[] = transactions.map(t => ({
-      transactionId: t.id,
-      date: t.transactionDate.toISOString().split('T')[0],
-      amount: Number(t.amount) * (t.type === 'expense' ? -1 : 1),
-      rawDescription: t.rawDescription || t.description || '',
-      normalizedDescription: t.normalizedDescription || '',
-      accountId: t.bankAccountId || '',
-      categoryId: t.categoryId || undefined,
-      categoryName: t.category?.name || undefined,
-      flags: {
-        isTransfer: t.isTransfer,
-        transactionKind: t.transactionKind,
-        excludedFromEnergy: t.excludedFromEnergy
-      },
-      suggestions: t.reviewSuggestion 
+    // Map and sort: abs(amount) DESC, confidence ASC (lower confidence = review first)
+    const items: ReviewItem[] = transactions.map(t => {
+      const suggestion = t.reviewSuggestion 
         ? JSON.parse(t.reviewSuggestion as string) 
-        : { suggestedAction: 'none', confidence: 0, reason: '' }
-    }));
+        : { action: 'none', confidence: 0, reason: '' };
+      
+      return {
+        transactionId: t.id,
+        date: t.transactionDate.toISOString().split('T')[0],
+        amount: Number(t.amount) * (t.type === 'expense' ? -1 : 1),
+        absAmount: Math.abs(Number(t.amount)),
+        rawDescription: t.rawDescription || t.description || '',
+        normalizedDescription: t.normalizedDescription || '',
+        accountId: t.bankAccountId || '',
+        categoryId: t.categoryId || undefined,
+        categoryName: t.category?.name || undefined,
+        needsReview: t.needsReview,
+        flags: {
+          isTransfer: t.isTransfer,
+          transactionKind: t.transactionKind,
+          excludedFromEnergy: t.excludedFromEnergy
+        },
+        suggestions: {
+          suggestedAction: suggestion.action || 'none',
+          confidence: suggestion.confidence || 0,
+          reason: suggestion.reason || '',
+          reasonHumanized: humanizeReason(suggestion.reason || '')
+        }
+      };
+    });
+    
+    // Sort by: needsReview first, then abs(amount) DESC, then confidence ASC
+    items.sort((a, b) => {
+      // needsReview first
+      if (a.needsReview !== b.needsReview) {
+        return a.needsReview ? -1 : 1;
+      }
+      // Then by absAmount DESC (higher value = more impact)
+      if (a.absAmount !== b.absAmount) {
+        return b.absAmount - a.absAmount;
+      }
+      // Then by confidence ASC (lower confidence = needs more attention)
+      return a.suggestions.confidence - b.suggestions.confidence;
+    });
     
     return {
       summary: {
-        created: summary._count,
+        created: totalCount,
         deduped: 0, // Not tracked per-query
         transferPairs: Math.floor(transfersCount / 2),
         invoicePayments: invoiceCount,
         excludedFromEnergy: excludedCount,
-        needsReview: needsReviewCount
+        needsReview: needsReviewCount,
+        pendingAmount,
+        resolvedAmount
       },
       items
     };
@@ -828,6 +909,243 @@ export class OFXPipelineService {
     }
     
     return { updated, transferPairsCreated, transferPairsRemoved };
+  }
+  
+  /**
+   * FASE 2.4.1: Apply suggestions in bulk by criteria
+   * Allows one-click resolution of needsReview items
+   */
+  async applySuggestionsBulk(
+    tenantId: string,
+    batchId: string,
+    criteria: 'high_confidence' | 'all_fees' | 'all_transfers' | 'all_invoice_payments' | 'apply_all',
+    minConfidence: number = 0.85
+  ): Promise<{ updated: number; skipped: number; details: { action: string; count: number }[] }> {
+    let updated = 0;
+    let skipped = 0;
+    const details: { action: string; count: number }[] = [];
+    
+    // Get all needsReview transactions with their suggestions
+    const transactions = await prisma.transaction.findMany({
+      where: {
+        tenantId,
+        importBatchId: batchId,
+        needsReview: true,
+        deletedAt: null
+      },
+      select: {
+        id: true,
+        reviewSuggestion: true,
+        transactionKind: true,
+        amount: true
+      }
+    });
+    
+    const toMarkTransfer: string[] = [];
+    const toMarkInvoice: string[] = [];
+    const toMarkFee: string[] = [];
+    const toExclude: string[] = [];
+    
+    for (const tx of transactions) {
+      if (!tx.reviewSuggestion) {
+        skipped++;
+        continue;
+      }
+      
+      const suggestion = JSON.parse(tx.reviewSuggestion as string);
+      const confidence = suggestion.confidence || 0;
+      const action = suggestion.action || 'none';
+      
+      // Filter based on criteria
+      if (criteria === 'high_confidence' && confidence < minConfidence) {
+        skipped++;
+        continue;
+      }
+      
+      if (criteria === 'all_fees' && action !== 'mark_loss') {
+        skipped++;
+        continue;
+      }
+      
+      if (criteria === 'all_transfers' && action !== 'mark_transfer') {
+        skipped++;
+        continue;
+      }
+      
+      if (criteria === 'all_invoice_payments' && action !== 'mark_invoice_payment') {
+        skipped++;
+        continue;
+      }
+      
+      // Apply based on suggested action
+      if (action === 'mark_transfer') {
+        toMarkTransfer.push(tx.id);
+      } else if (action === 'mark_invoice_payment') {
+        toMarkInvoice.push(tx.id);
+      } else if (action === 'mark_loss') {
+        toMarkFee.push(tx.id);
+      } else if (action === 'exclude') {
+        toExclude.push(tx.id);
+      } else {
+        skipped++;
+      }
+    }
+    
+    // Apply mark_transfer (without pairing - just mark and exclude from energy)
+    if (toMarkTransfer.length > 0) {
+      await prisma.transaction.updateMany({
+        where: { id: { in: toMarkTransfer }, tenantId },
+        data: {
+          isTransfer: true,
+          transactionKind: 'transfer',
+          excludedFromEnergy: true,
+          excludedReason: 'transfer',
+          needsReview: false,
+          reviewedAt: new Date()
+        }
+      });
+      updated += toMarkTransfer.length;
+      details.push({ action: 'mark_transfer', count: toMarkTransfer.length });
+    }
+    
+    // Apply mark_invoice_payment
+    if (toMarkInvoice.length > 0) {
+      await prisma.transaction.updateMany({
+        where: { id: { in: toMarkInvoice }, tenantId },
+        data: {
+          transactionKind: 'invoice_payment',
+          excludedFromEnergy: true,
+          excludedReason: 'invoice_payment',
+          needsReview: false,
+          reviewedAt: new Date()
+        }
+      });
+      updated += toMarkInvoice.length;
+      details.push({ action: 'mark_invoice_payment', count: toMarkInvoice.length });
+    }
+    
+    // Apply mark_loss (fee)
+    if (toMarkFee.length > 0) {
+      await prisma.transaction.updateMany({
+        where: { id: { in: toMarkFee }, tenantId },
+        data: {
+          transactionKind: 'fee',
+          // Fees are NOT excluded from energy - they're real losses
+          excludedFromEnergy: false,
+          needsReview: false,
+          reviewedAt: new Date()
+        }
+      });
+      updated += toMarkFee.length;
+      details.push({ action: 'mark_fee', count: toMarkFee.length });
+    }
+    
+    // Apply exclude
+    if (toExclude.length > 0) {
+      await prisma.transaction.updateMany({
+        where: { id: { in: toExclude }, tenantId },
+        data: {
+          excludedFromEnergy: true,
+          excludedReason: 'user_excluded',
+          needsReview: false,
+          reviewedAt: new Date()
+        }
+      });
+      updated += toExclude.length;
+      details.push({ action: 'exclude', count: toExclude.length });
+    }
+    
+    log.info(`[OFXPipeline] Bulk suggestions applied: ${updated} updated, ${skipped} skipped`, { criteria, details });
+    
+    return { updated, skipped, details };
+  }
+  
+  /**
+   * FASE 2.4.1: Apply single suggestion for one transaction
+   */
+  async applySingleSuggestion(
+    tenantId: string,
+    transactionId: string
+  ): Promise<{ success: boolean; action: string; message: string }> {
+    const tx = await prisma.transaction.findFirst({
+      where: { id: transactionId, tenantId, deletedAt: null }
+    });
+    
+    if (!tx) {
+      return { success: false, action: 'none', message: 'Transação não encontrada' };
+    }
+    
+    if (!tx.reviewSuggestion) {
+      return { success: false, action: 'none', message: 'Nenhuma sugestão disponível' };
+    }
+    
+    const suggestion = JSON.parse(tx.reviewSuggestion as string);
+    const action = suggestion.action || 'none';
+    
+    if (action === 'none') {
+      return { success: false, action: 'none', message: 'Nenhuma ação sugerida' };
+    }
+    
+    if (action === 'mark_transfer') {
+      await prisma.transaction.update({
+        where: { id: transactionId },
+        data: {
+          isTransfer: true,
+          transactionKind: 'transfer',
+          excludedFromEnergy: true,
+          excludedReason: 'transfer',
+          needsReview: false,
+          reviewedAt: new Date()
+        }
+      });
+      return { success: true, action, message: 'Marcado como transferência' };
+    }
+    
+    if (action === 'mark_invoice_payment') {
+      await prisma.transaction.update({
+        where: { id: transactionId },
+        data: {
+          transactionKind: 'invoice_payment',
+          excludedFromEnergy: true,
+          excludedReason: 'invoice_payment',
+          needsReview: false,
+          reviewedAt: new Date()
+        }
+      });
+      return { success: true, action, message: 'Marcado como pagamento de fatura' };
+    }
+    
+    if (action === 'mark_loss') {
+      await prisma.transaction.update({
+        where: { id: transactionId },
+        data: {
+          transactionKind: 'fee',
+          needsReview: false,
+          reviewedAt: new Date()
+        }
+      });
+      return { success: true, action, message: 'Marcado como taxa/prejuízo' };
+    }
+    
+    return { success: false, action, message: 'Ação desconhecida' };
+  }
+  
+  /**
+   * FASE 2.4.1: Dismiss review (mark as resolved without action)
+   */
+  async dismissReview(
+    tenantId: string,
+    transactionIds: string[]
+  ): Promise<{ updated: number }> {
+    const result = await prisma.transaction.updateMany({
+      where: { id: { in: transactionIds }, tenantId },
+      data: {
+        needsReview: false,
+        reviewedAt: new Date()
+      }
+    });
+    
+    return { updated: result.count };
   }
   
   /**
