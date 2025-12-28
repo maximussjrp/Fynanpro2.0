@@ -276,7 +276,7 @@ function EditModal({
 }: {
   category: CategoryWithSemantics;
   onClose: () => void;
-  onSave: (categoryId: string, data: Partial<CategorySemantics> & { justification?: string }) => Promise<void>;
+  onSave: (categoryId: string, data: Partial<CategorySemantics> & { justification?: string }) => Promise<{ warnings?: string[] } | void>;
 }) {
   const [survival, setSurvival] = useState(category.semantics.survivalWeight * 100);
   const [choice, setChoice] = useState(category.semantics.choiceWeight * 100);
@@ -288,6 +288,7 @@ function EditModal({
   const [justification, setJustification] = useState(category.semantics.justification || '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   
   const total = survival + choice + future + loss;
   const isValid = Math.abs(total - 100) < 0.1;
@@ -306,9 +307,10 @@ function EditModal({
     
     setSaving(true);
     setError(null);
+    setWarning(null);
     
     try {
-      await onSave(category.id, {
+      const response = await onSave(category.id, {
         survivalWeight: survival / 100,
         choiceWeight: choice / 100,
         futureWeight: future / 100,
@@ -318,9 +320,26 @@ function EditModal({
         isInvestment,
         justification: justification.trim() || undefined
       });
+      
+      // Verificar se há warnings na resposta
+      if (response && response.warnings && response.warnings.length > 0) {
+        setWarning(response.warnings.join('; '));
+        // Não fecha automaticamente para usuário ver o warning
+        setSaving(false);
+        return;
+      }
+      
       onClose();
     } catch (err: any) {
-      setError(err.message || 'Erro ao salvar');
+      // Extrair mensagem de erro do axios
+      const errorMsg = err.response?.data?.error || err.response?.data?.message || err.message || 'Erro ao salvar';
+      const details = err.response?.data?.details;
+      
+      if (details && Array.isArray(details)) {
+        setError(`${errorMsg}: ${details.join(', ')}`);
+      } else {
+        setError(errorMsg);
+      }
     } finally {
       setSaving(false);
     }
@@ -527,7 +546,20 @@ function EditModal({
           
           {error && (
             <div className="p-3 bg-red-50 text-red-700 rounded-lg text-sm">
-              {error}
+              ❌ {error}
+            </div>
+          )}
+          
+          {warning && (
+            <div className="p-3 bg-amber-50 text-amber-700 rounded-lg text-sm border border-amber-200">
+              <div className="flex items-start gap-2">
+                <span className="text-lg">⚠️</span>
+                <div>
+                  <p className="font-medium">Aviso de consistência</p>
+                  <p>{warning}</p>
+                  <p className="mt-2 text-xs text-amber-600">A classificação foi salva, mas revise se faz sentido para seu contexto.</p>
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -537,15 +569,17 @@ function EditModal({
             onClick={onClose}
             className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
           >
-            Cancelar
+            {warning ? 'Fechar' : 'Cancelar'}
           </button>
-          <button
-            onClick={handleSave}
-            disabled={!isValid || saving}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {saving ? 'Salvando...' : 'Salvar Classificação'}
-          </button>
+          {!warning && (
+            <button
+              onClick={handleSave}
+              disabled={!isValid || saving}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {saving ? 'Salvando...' : 'Salvar Classificação'}
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -599,8 +633,9 @@ export default function EnergyGovernancePage() {
   }, [fetchCategories]);
   
   const handleSave = async (categoryId: string, data: any) => {
-    await api.put(`/energy-governance/categories/${categoryId}`, data);
+    const response = await api.put(`/energy-governance/categories/${categoryId}`, data);
     await fetchCategories();
+    return response.data; // Retorna para o modal verificar warnings
   };
   
   const filteredCategories = categories.filter(cat => {

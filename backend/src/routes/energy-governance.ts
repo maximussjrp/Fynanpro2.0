@@ -13,6 +13,7 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient, Prisma } from '@prisma/client';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
+import { validateEnergyWithFlags } from '../contracts/energy.contract';
 import { z } from 'zod';
 
 const router = Router();
@@ -170,19 +171,42 @@ router.get('/categories', authMiddleware, async (req: AuthRequest, res: Response
 router.put('/categories/:categoryId', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId!;
-    const userId = req.user!.id;
+    const userId = req.userId!;
     const { categoryId } = req.params;
     
-    // Validar corpo da requisição
+    // Validar corpo da requisição (schema Zod)
     const validation = UpdateSemanticsSchema.safeParse(req.body);
     if (!validation.success) {
       return res.status(400).json({ 
         error: 'Dados inválidos',
-        details: validation.error.errors
+        details: validation.error.issues
       });
     }
     
     const data = validation.data;
+    
+    // 🔒 VALIDAÇÃO DO CONTRATO DE ENERGIA
+    const contractValidation = validateEnergyWithFlags(
+      {
+        survival: data.survivalWeight,
+        choice: data.choiceWeight,
+        future: data.futureWeight,
+        loss: data.lossWeight
+      },
+      {
+        isInvestment: data.isInvestment,
+        isEssential: data.isEssential,
+        isFixed: data.isFixed
+      }
+    );
+    
+    if (!contractValidation.valid) {
+      return res.status(400).json({
+        error: 'Classificação viola regras do contrato de energia',
+        details: contractValidation.errors,
+        warnings: contractValidation.warnings
+      });
+    }
     
     // Verificar se a categoria existe e pertence ao tenant
     const category = await prisma.category.findFirst({
@@ -250,7 +274,8 @@ router.put('/categories/:categoryId', authMiddleware, async (req: AuthRequest, r
       message: 'Classificação energética atualizada',
       categoryId,
       validationStatus: 'validated',
-      validatedAt: now
+      validatedAt: now,
+      warnings: contractValidation.warnings.length > 0 ? contractValidation.warnings : undefined
     });
   } catch (error) {
     console.error('Erro ao atualizar semântica:', error);

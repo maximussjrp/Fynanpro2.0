@@ -115,6 +115,46 @@ Receita ≠ survival/choice/future/loss
 ✅ Categoria desconhecida = NOT_VALIDATED + aviso ao usuário
 ```
 
+---
+
+## 🔒 REGRAS DE CONSISTÊNCIA (v1.1)
+
+### ⛔ LOSS e FUTURE são mutuamente exclusivos
+
+```
+❌ future > 0 && loss > 0 → ERRO
+```
+
+**Justificativa:** Um gasto não pode simultaneamente:
+- Aumentar liberdade financeira futura (FUTURE)
+- Destruir valor sem retorno (LOSS)
+
+Isso é contradição lógica. O sistema DEVE bloquear.
+
+### 🏷️ Flags impõem coerência mínima
+
+| Flag | Regra | Tipo |
+|------|-------|------|
+| `isInvestment = true` | `future > 0` obrigatório | ❌ ERRO |
+| `isEssential = true` | `survival > 0` obrigatório | ❌ ERRO |
+| `isFixed = true` | `survival > 0` esperado | ⚠️ WARNING |
+
+**Justificativa:**
+- Flags são declarações semânticas do usuário
+- Pesos são a implementação numérica
+- Ambos devem ser coerentes
+
+```
+❌ isInvestment = true + future = 0 → ERRO
+   "Você disse que é investimento, mas não alocou energia FUTURE"
+
+❌ isEssential = true + survival = 0 → ERRO
+   "Você disse que é essencial, mas não alocou energia SURVIVAL"
+
+⚠️ isFixed = true + survival = 0 → WARNING
+   "Gastos fixos geralmente são sobrevivência. Confirme sua escolha."
+```
+
 ### 5️⃣ Usuário SEMPRE pode corrigir
 
 ```

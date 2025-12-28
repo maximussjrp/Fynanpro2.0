@@ -116,6 +116,66 @@ export function validateEnergyDistribution(dist: EnergyDistribution): boolean {
 }
 
 /**
+ * Resultado de validação completa de energia.
+ */
+export interface EnergyValidationResult {
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+}
+
+/**
+ * Validação completa de distribuição de energia com flags.
+ * Aplica todas as regras do contrato.
+ * 
+ * REGRAS:
+ * 1. Soma dos pesos deve ser 1.0
+ * 2. LOSS e FUTURE são mutuamente exclusivos
+ * 3. isInvestment = true → future > 0
+ * 4. isEssential = true → survival > 0
+ * 5. isFixed = true → survival > 0 (warning)
+ */
+export function validateEnergyWithFlags(
+  dist: EnergyDistribution,
+  flags: { isInvestment?: boolean; isEssential?: boolean; isFixed?: boolean }
+): EnergyValidationResult {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  // REGRA 1: Soma deve ser 1.0
+  const sum = dist.survival + dist.choice + dist.future + dist.loss;
+  if (Math.abs(sum - 1.0) >= 0.001) {
+    errors.push(`A soma dos pesos deve ser 100%. Atual: ${Math.round(sum * 100)}%`);
+  }
+
+  // REGRA 2: LOSS e FUTURE são mutuamente exclusivos
+  if (dist.future > 0 && dist.loss > 0) {
+    errors.push('LOSS e FUTURE não podem coexistir. Um gasto não pode ser investimento e perda ao mesmo tempo.');
+  }
+
+  // REGRA 3: isInvestment → future > 0
+  if (flags.isInvestment && dist.future === 0) {
+    errors.push('Itens marcados como investimento devem possuir energia FUTURE > 0.');
+  }
+
+  // REGRA 4: isEssential → survival > 0
+  if (flags.isEssential && dist.survival === 0) {
+    errors.push('Itens essenciais devem possuir energia SURVIVAL > 0.');
+  }
+
+  // REGRA 5: isFixed → survival > 0 (warning, não erro)
+  if (flags.isFixed && dist.survival === 0) {
+    warnings.push('Gastos fixos normalmente possuem energia SURVIVAL. Verifique se a classificação está correta.');
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    warnings
+  };
+}
+
+/**
  * Normaliza distribuição de energia para que a soma seja exatamente 1.0.
  */
 export function normalizeEnergyDistribution(dist: EnergyDistribution): EnergyDistribution {
