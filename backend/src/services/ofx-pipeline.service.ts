@@ -829,6 +829,275 @@ export class OFXPipelineService {
     
     return { updated, transferPairsCreated, transferPairsRemoved };
   }
+  
+  /**
+   * Get transfer pairs for audit - shows both sides of each transfer
+   */
+  async getTransferPairs(
+    tenantId: string,
+    batchId?: string,
+    limit: number = 50
+  ): Promise<TransferPairAudit[]> {
+    const where: any = {
+      tenantId,
+      isTransfer: true,
+      transferGroupId: { not: null },
+      deletedAt: null
+    };
+    
+    if (batchId) {
+      where.importBatchId = batchId;
+    }
+    
+    const transfers = await prisma.transaction.findMany({
+      where,
+      include: {
+        bankAccount: { select: { id: true, name: true } }
+      },
+      orderBy: { transactionDate: 'desc' },
+      take: limit * 2 // Get enough to form pairs
+    });
+    
+    // Group by transferGroupId
+    const groups = new Map<string, typeof transfers>();
+    for (const t of transfers) {
+      if (t.transferGroupId) {
+        const arr = groups.get(t.transferGroupId) || [];
+        arr.push(t);
+        groups.set(t.transferGroupId, arr);
+      }
+    }
+    
+    // Build pairs
+    const pairs: TransferPairAudit[] = [];
+    for (const [groupId, txs] of groups.entries()) {
+      const outbound = txs.find(t => t.type === 'expense') || txs[0];
+      const inbound = txs.find(t => t.type === 'income') || txs[1];
+      
+      pairs.push({
+        transferGroupId: groupId,
+        outbound: outbound ? {
+          transactionId: outbound.id,
+          date: outbound.transactionDate.toISOString().split('T')[0],
+          amount: Number(outbound.amount),
+          description: (outbound as any).rawDescription || outbound.description || '',
+          accountName: outbound.bankAccount?.name || 'N/A'
+        } : null,
+        inbound: inbound && inbound.id !== outbound?.id ? {
+          transactionId: inbound.id,
+          date: inbound.transactionDate.toISOString().split('T')[0],
+          amount: Number(inbound.amount),
+          description: (inbound as any).rawDescription || inbound.description || '',
+          accountName: inbound.bankAccount?.name || 'N/A'
+        } : null,
+        matchScore: (outbound as any)?.reviewSuggestion 
+          ? JSON.parse((outbound as any).reviewSuggestion as string)?.confidence 
+          : null,
+        isValidPair: !!(outbound && inbound && outbound.id !== inbound.id)
+      });
+      
+      if (pairs.length >= limit) break;
+    }
+    
+    return pairs;
+  }
+  
+  /**
+   * Get batch statistics from Import record (more accurate)
+   */
+  async getBatchStatistics(tenantId: string, batchId: string): Promise<BatchStatistics | null> {
+    const importRecord = await prisma.import.findFirst({
+      where: { id: batchId, tenantId }
+    });
+    
+    if (!importRecord) return null;
+    
+    // Also get live counts for validation
+    const liveStats = await prisma.$transaction([
+      prisma.transaction.count({ 
+        where: { tenantId, importBatchId: batchId, deletedAt: null } 
+      }),
+      prisma.transaction.count({ 
+        where: { tenantId, importBatchId: batchId, isTransfer: true, deletedAt: null } 
+      }),
+      prisma.transaction.count({ 
+        where: { tenantId, importBatchId: batchId, transactionKind: 'invoice_payment', deletedAt: null } 
+      }),
+      prisma.transaction.count({ 
+        where: { tenantId, importBatchId: batchId, excludedFromEnergy: true, deletedAt: null } 
+      }),
+      prisma.transaction.count({ 
+        where: { tenantId, importBatchId: batchId, needsReview: true, deletedAt: null } 
+      }),
+      prisma.transaction.count({ 
+        where: { tenantId, importBatchId: batchId, transactionKind: 'fee', deletedAt: null } 
+      })
+    ]);
+    
+    return {
+      batchId,
+      fileName: importRecord.fileName,
+      importedAt: importRecord.createdAt,
+      status: importRecord.status,
+      
+      // From Import record (original import stats)
+      fromImport: {
+        totalRows: importRecord.totalRows || 0,
+        created: importRecord.createdCount || 0,
+        deduped: importRecord.dedupedCount || 0,
+        transferPairs: importRecord.transferPairs || 0,
+        invoicePayments: importRecord.invoicePayments || 0,
+        needsReview: importRecord.needsReviewCount || 0,
+        excludedFromEnergy: importRecord.excludedFromEnergyCount || 0
+      },
+      
+      // Live counts (may differ after user edits)
+      live: {
+        total: liveStats[0],
+        transfers: liveStats[1],
+        transferPairs: Math.floor(liveStats[1] / 2),
+        invoicePayments: liveStats[2],
+        excludedFromEnergy: liveStats[3],
+        needsReview: liveStats[4],
+        fees: liveStats[5]
+      }
+    };
+  }
+  
+  /**
+   * Validate dedupe: check if re-importing same file would create duplicates
+   */
+  async validateDedupe(
+    tenantId: string,
+    accountId: string,
+    content: string
+  ): Promise<DedupeValidation> {
+    const rawTransactions = this.parseOFX(content);
+    
+    let wouldDedupe = 0;
+    let wouldCreate = 0;
+    const samples: { fitId: string; description: string; status: 'duplicate' | 'new' }[] = [];
+    
+    for (const raw of rawTransactions.slice(0, 50)) { // Check first 50
+      const fitId = raw.fitId || null;
+      const normalizedDesc = normalizeDescription(raw.description);
+      const hash = generateDedupeHash(raw.date, raw.amount, normalizedDesc, accountId);
+      
+      let isDuplicate = false;
+      
+      // Check by FITID first
+      if (fitId) {
+        const existing = await prisma.transaction.findFirst({
+          where: { tenantId, externalFitId: fitId, deletedAt: null }
+        });
+        isDuplicate = !!existing;
+      }
+      
+      // If no match, check by date+amount+description combo
+      if (!isDuplicate) {
+        const dateStart = new Date(raw.date);
+        dateStart.setHours(0, 0, 0, 0);
+        const dateEnd = new Date(raw.date);
+        dateEnd.setHours(23, 59, 59, 999);
+        
+        const existingByCombo = await prisma.transaction.findFirst({
+          where: { 
+            tenantId, 
+            bankAccountId: accountId,
+            amount: Math.abs(raw.amount),
+            transactionDate: { gte: dateStart, lte: dateEnd },
+            normalizedDescription: normalizedDesc,
+            deletedAt: null 
+          }
+        });
+        isDuplicate = !!existingByCombo;
+      }
+      
+      if (isDuplicate) {
+        wouldDedupe++;
+        if (samples.length < 5) {
+          samples.push({ 
+            fitId: fitId || hash.slice(0, 12), 
+            description: normalizedDesc.slice(0, 40),
+            status: 'duplicate'
+          });
+        }
+      } else {
+        wouldCreate++;
+        if (samples.length < 10 && samples.filter(s => s.status === 'new').length < 3) {
+          samples.push({ 
+            fitId: fitId || hash.slice(0, 12), 
+            description: normalizedDesc.slice(0, 40),
+            status: 'new'
+          });
+        }
+      }
+    }
+    
+    return {
+      totalChecked: Math.min(rawTransactions.length, 50),
+      wouldDedupe,
+      wouldCreate,
+      dedupeRate: rawTransactions.length > 0 
+        ? Math.round((wouldDedupe / Math.min(rawTransactions.length, 50)) * 100) 
+        : 0,
+      samples
+    };
+  }
+}
+
+// Types for new methods
+interface TransferPairAudit {
+  transferGroupId: string;
+  outbound: {
+    transactionId: string;
+    date: string;
+    amount: number;
+    description: string;
+    accountName: string;
+  } | null;
+  inbound: {
+    transactionId: string;
+    date: string;
+    amount: number;
+    description: string;
+    accountName: string;
+  } | null;
+  matchScore: number | null;
+  isValidPair: boolean;
+}
+
+interface BatchStatistics {
+  batchId: string;
+  fileName: string;
+  importedAt: Date;
+  status: string;
+  fromImport: {
+    totalRows: number;
+    created: number;
+    deduped: number;
+    transferPairs: number;
+    invoicePayments: number;
+    needsReview: number;
+    excludedFromEnergy: number;
+  };
+  live: {
+    total: number;
+    transfers: number;
+    transferPairs: number;
+    invoicePayments: number;
+    excludedFromEnergy: number;
+    needsReview: number;
+    fees: number;
+  };
+}
+
+interface DedupeValidation {
+  totalChecked: number;
+  wouldDedupe: number;
+  wouldCreate: number;
+  dedupeRate: number;
+  samples: { fitId: string; description: string; status: 'duplicate' | 'new' }[];
 }
 
 // Singleton

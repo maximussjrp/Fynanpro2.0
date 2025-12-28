@@ -571,4 +571,88 @@ router.get('/batches', authMiddleware, async (req: AuthRequest, res: Response) =
   }
 });
 
+/**
+ * GET /import/batch-stats/:batchId
+ * Get detailed statistics for a batch (for validation)
+ */
+router.get('/batch-stats/:batchId', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId!;
+    const { batchId } = req.params;
+    
+    const stats = await ofxPipelineService.getBatchStatistics(tenantId, batchId);
+    
+    if (!stats) {
+      return res.status(404).json({ error: 'Batch não encontrado' });
+    }
+    
+    res.json(stats);
+  } catch (error: any) {
+    log.error('[Import] Batch stats error:', error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /import/transfer-pairs
+ * Get transfer pairs for audit (shows both sides of each transfer)
+ */
+router.get('/transfer-pairs', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId!;
+    const { batchId, limit } = req.query;
+    
+    const pairs = await ofxPipelineService.getTransferPairs(
+      tenantId,
+      batchId as string | undefined,
+      limit ? parseInt(limit as string) : 50
+    );
+    
+    res.json({
+      count: pairs.length,
+      validPairs: pairs.filter(p => p.isValidPair).length,
+      invalidPairs: pairs.filter(p => !p.isValidPair).length,
+      pairs
+    });
+  } catch (error: any) {
+    log.error('[Import] Transfer pairs error:', error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /import/validate-dedupe
+ * Check if re-importing a file would create duplicates
+ */
+router.post('/validate-dedupe', authMiddleware, upload.single('file'), async (req: MulterRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId!;
+    const { accountId } = req.body;
+    
+    if (!req.file) {
+      return res.status(400).json({ error: 'Nenhum arquivo enviado' });
+    }
+    
+    if (!accountId) {
+      return res.status(400).json({ error: 'accountId é obrigatório' });
+    }
+    
+    const content = req.file.buffer.toString('utf-8');
+    
+    const validation = await ofxPipelineService.validateDedupe(tenantId, accountId, content);
+    
+    res.json({
+      ...validation,
+      message: validation.dedupeRate >= 90 
+        ? 'Este arquivo já foi importado (90%+ duplicados)' 
+        : validation.dedupeRate >= 50
+          ? 'Este arquivo foi parcialmente importado'
+          : 'Arquivo novo, pronto para import'
+    });
+  } catch (error: any) {
+    log.error('[Import] Validate dedupe error:', error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
 export default router;
