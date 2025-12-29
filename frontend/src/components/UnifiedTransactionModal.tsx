@@ -307,16 +307,16 @@ export default function UnifiedTransactionModal({
       const response = await api.post(endpoint, payload);
 
       if (transactionType === 'recurring') {
-        toast.success('Transação recorrente criada com sucesso!');
+        toast.success('Transação recorrente criada! Continue lançando...');
       } else if (transactionType === 'installment') {
-        toast.success(`Transação parcelada em ${installmentData.totalInstallments}x criada!`);
+        toast.success(`Transação parcelada em ${installmentData.totalInstallments}x criada! Continue lançando...`);
       } else {
-        toast.success('Transação criada com sucesso!');
+        toast.success('Transação criada com sucesso! Continue lançando...');
       }
 
       onSuccess();
-      onClose();
       resetForm();
+      // Modal permanece aberto para continuar lançando
     } catch (error: any) {
       console.error('Erro ao salvar transação:', error);
       toast.error(error.response?.data?.error?.message || 'Erro ao salvar transação');

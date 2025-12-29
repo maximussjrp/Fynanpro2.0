@@ -144,15 +144,76 @@ export default function useInstallments() {
     try {
       setLoading(true);
       // Buscar tanto do modelo antigo quanto do novo (transações unificadas)
-      const [purchasesRes, transactionsRes, categoriesRes, accountsRes, methodsRes] = await Promise.all([
+      // Também buscar RecurringBills que podem ser parcelamentos mal classificados
+      const [purchasesRes, transactionsRes, recurringBillsRes, categoriesRes, accountsRes, methodsRes] = await Promise.all([
         apiClient.get('/installments'),
         apiClient.get('/transactions?transactionType=installment&limit=1000'), // Buscar parcelamentos
+        apiClient.get('/recurring-bills'), // Buscar recorrentes que podem ser parcelamentos
         apiClient.get('/categories'),
         apiClient.get('/bank-accounts'),
         apiClient.get('/payment-methods'),
       ]);
 
       const oldPurchases = purchasesRes.data.installments || [];
+      
+      // NOVO: Extrair RecurringBills que parecem parcelamentos
+      // Padrão: "Nome - Parcela X/Y" ou nomes que terminam com "X/Y"
+      const installmentPattern = /parcela\s*(\d+)\s*\/\s*(\d+)|(\d+)\s*\/\s*(\d+)\s*$/i;
+      const recurringBills = recurringBillsRes.data?.data?.recurringBills || [];
+      
+      // Agrupar RecurringBills de parcelamentos pelo nome base
+      const recurringInstallmentsMap: Record<string, any[]> = {};
+      recurringBills.forEach((bill: any) => {
+        const match = (bill.name || '').match(installmentPattern);
+        if (match) {
+          // Extrair nome base (sem "Parcela X/Y")
+          const baseName = (bill.name || '').replace(installmentPattern, '').replace(/\s*-\s*$/, '').trim();
+          if (!recurringInstallmentsMap[baseName]) {
+            recurringInstallmentsMap[baseName] = [];
+          }
+          recurringInstallmentsMap[baseName].push({
+            ...bill,
+            currentInstallment: parseInt(match[1] || match[3]) || 1,
+            totalInstallments: parseInt(match[2] || match[4]) || 1,
+          });
+        }
+      });
+      
+      // Converter grupos de RecurringBills em InstallmentPurchases
+      const purchasesFromRecurring = Object.entries(recurringInstallmentsMap).map(([baseName, bills]) => {
+        // Ordenar por número da parcela
+        const sortedBills = bills.sort((a, b) => a.currentInstallment - b.currentInstallment);
+        const firstBill = sortedBills[0];
+        const totalInstallments = firstBill.totalInstallments;
+        const installmentAmount = Number(firstBill.amount) || 0;
+        const totalAmount = installmentAmount * totalInstallments;
+        
+        // Contar parcelas pagas (status !== 'active' ou já passaram)
+        const paidInstallments = sortedBills.filter((b: any) => b.status !== 'active').length;
+        const remainingBalance = installmentAmount * (totalInstallments - paidInstallments);
+        
+        return {
+          id: `recurring-group-${firstBill.id}`,
+          name: baseName || firstBill.name,
+          description: firstBill.description || '',
+          totalAmount: totalAmount.toString(),
+          numberOfInstallments: totalInstallments,
+          installmentAmount: installmentAmount.toString(),
+          remainingBalance: remainingBalance.toString(),
+          paidInstallments,
+          firstDueDate: firstBill.firstDueDate,
+          status: paidInstallments >= totalInstallments ? 'completed' : 'active',
+          category: firstBill.category || { id: '', name: 'Sem categoria', icon: '📋', color: '#gray' },
+          installments: sortedBills.map((b: any) => ({
+            id: b.id,
+            installmentNumber: b.currentInstallment,
+            amount: b.amount?.toString() || '0',
+            dueDate: b.firstDueDate,
+            status: b.status === 'active' ? 'pending' : 'paid',
+          })),
+          isFromRecurringBill: true,
+        };
+      });
       
       // Converter transações parceladas para o formato de InstallmentPurchase
       const transactions = transactionsRes.data.data?.transactions || [];
@@ -256,14 +317,21 @@ export default function useInstallments() {
         };
       });
 
-      // Combinar todos
-      const allPurchases = [...oldPurchases, ...convertedFromParents, ...convertedFromOrphans];
+      // Combinar todos (inclui parcelamentos de RecurringBills)
+      const allPurchases = [...oldPurchases, ...convertedFromParents, ...convertedFromOrphans, ...purchasesFromRecurring];
       
-      // Remover duplicatas por ID
+      // Remover duplicatas por ID e por nome base (evitar duplicação se existir em ambos modelos)
       const uniquePurchases = allPurchases.reduce((acc: any[], purchase: any) => {
-        if (!acc.find(p => p.id === purchase.id)) {
-          acc.push(purchase);
+        // Verificar se já existe por ID
+        if (acc.find(p => p.id === purchase.id)) {
+          return acc;
         }
+        // Verificar se já existe por nome similar (para evitar duplicatas entre modelos)
+        const normalizedName = (purchase.name || '').toLowerCase().trim();
+        if (acc.find(p => (p.name || '').toLowerCase().trim() === normalizedName)) {
+          return acc;
+        }
+        acc.push(purchase);
         return acc;
       }, []);
 

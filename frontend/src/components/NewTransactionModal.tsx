@@ -287,14 +287,18 @@ export default function TransactionModal({
         }
       } else {
         await api.post('/transactions', payload);
-        toast.success('Transação criada com sucesso!');
+        toast.success('Transação criada com sucesso! Continue lançando...');
       }
 
       onSuccess();
-      onClose();
       resetForm();
       setShowInstallmentScopePopup(false);
       setPendingFormData(null);
+      
+      // Só fecha o modal se for edição, não fecha se for criação
+      if (transaction) {
+        onClose();
+      }
     } catch (error: any) {
       console.error('Erro ao salvar transação:', error);
       toast.error(error.response?.data?.error?.message || 'Erro ao salvar transação');

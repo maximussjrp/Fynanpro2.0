@@ -201,7 +201,16 @@ export function useRecurringBills() {
         return acc;
       }, []);
 
-      setRecurringBills(uniqueBills);
+      // FILTRO: Remover itens que parecem ser parcelamentos
+      // Padrão: "Nome - Parcela X/Y" ou nomes que terminam com "X/Y"
+      const installmentPattern = /parcela\s*\d+\s*\/\s*\d+|\d+\s*\/\s*\d+\s*$/i;
+      const filteredBills = uniqueBills.filter((bill: any) => {
+        const name = bill.name || '';
+        // Se o nome parece ser um parcelamento, não mostrar nas recorrentes
+        return !installmentPattern.test(name);
+      });
+
+      setRecurringBills(filteredBills);
       setCategories((categoriesRes.data.data.categories || []).filter((c: Category) => c.isActive));
       setBankAccounts(accountsRes.data.data.accounts || []);
       setPaymentMethods(methodsRes.data.data.paymentMethods || []);
@@ -272,41 +281,64 @@ export function useRecurringBills() {
     setSubmitting(true);
 
     try {
-      // Extrair dueDay da startDate para frequência mensal (EDIT)
-      const startDateObj = new Date(recurringBillForm.startDate + 'T00:00:00');
-      let dueDay: number;
+      // Verificar se é uma transação ou RecurringBill real
+      const isFromTransaction = (editingBill as any).isFromTransaction;
       
-      if (recurringBillForm.frequency === 'monthly') {
-        dueDay = startDateObj.getDate(); // Dia do mês extraído da data de início
-      } else if (recurringBillForm.frequency === 'weekly') {
-        dueDay = parseInt(recurringBillForm.dayOfWeek);
+      if (isFromTransaction) {
+        // Se veio de Transaction, usar a API de transactions
+        const payload: any = {
+          description: recurringBillForm.name,
+          type: recurringBillForm.type,
+          amount: parseFloat(recurringBillForm.amount),
+          categoryId: recurringBillForm.categoryId,
+          bankAccountId: recurringBillForm.bankAccountId,
+          notes: recurringBillForm.notes || undefined,
+        };
+
+        if (recurringBillForm.paymentMethodId) {
+          payload.paymentMethodId = recurringBillForm.paymentMethodId;
+        }
+
+        await api.put(`/transactions/${editingBill.id}`, payload);
+        toast.success('Conta recorrente atualizada com sucesso!');
       } else {
-        dueDay = 1; // Default para outras frequências
+        // Se é RecurringBill real, usar a API de recurring-bills
+        // Extrair dueDay da startDate para frequência mensal (EDIT)
+        const startDateObj = new Date(recurringBillForm.startDate + 'T00:00:00');
+        let dueDay: number;
+        
+        if (recurringBillForm.frequency === 'monthly') {
+          dueDay = startDateObj.getDate(); // Dia do mês extraído da data de início
+        } else if (recurringBillForm.frequency === 'weekly') {
+          dueDay = parseInt(recurringBillForm.dayOfWeek);
+        } else {
+          dueDay = 1; // Default para outras frequências
+        }
+
+        const payload: any = {
+          name: recurringBillForm.name,
+          description: recurringBillForm.description || undefined,
+          type: recurringBillForm.type,
+          amount: parseFloat(recurringBillForm.amount),
+          frequency: recurringBillForm.frequency,
+          dueDay,
+          categoryId: recurringBillForm.categoryId,
+          bankAccountId: recurringBillForm.bankAccountId,
+          notes: recurringBillForm.notes || undefined,
+        };
+
+        if (recurringBillForm.paymentMethodId) {
+          payload.paymentMethodId = recurringBillForm.paymentMethodId;
+        }
+
+        if (recurringBillForm.endDate) {
+          payload.endDate = new Date(recurringBillForm.endDate).toISOString();
+        }
+
+        await api.put(`/recurring-bills/${editingBill.id}`, payload);
+        toast.success('Conta recorrente atualizada com sucesso!');
       }
-
-      const payload: any = {
-        name: recurringBillForm.name,
-        description: recurringBillForm.description || undefined,
-        type: recurringBillForm.type,
-        amount: parseFloat(recurringBillForm.amount),
-        frequency: recurringBillForm.frequency,
-        dueDay,
-        categoryId: recurringBillForm.categoryId,
-        bankAccountId: recurringBillForm.bankAccountId,
-        notes: recurringBillForm.notes || undefined,
-      };
-
-      if (recurringBillForm.paymentMethodId) {
-        payload.paymentMethodId = recurringBillForm.paymentMethodId;
-      }
-
-      if (recurringBillForm.endDate) {
-        payload.endDate = new Date(recurringBillForm.endDate).toISOString();
-      }
-
-      await api.put(`/recurring-bills/${editingBill.id}`, payload);
       
-      toast.success('Conta recorrente atualizada com sucesso!');
       setEditingBill(null);
       resetForm();
       await loadData();
@@ -322,15 +354,31 @@ export function useRecurringBills() {
 
   const toggleBillStatus = async (bill: RecurringBill) => {
     try {
-      await api.put(`/recurring-bills/${bill.id}`, {
-        status: bill.status === 'active' ? 'paused' : 'active',
-      });
+      // Verificar se é uma transação ou RecurringBill real
+      const isFromTransaction = (bill as any).isFromTransaction;
       
-      toast.success(
-        bill.status === 'active' 
-          ? 'Conta recorrente pausada com sucesso!' 
-          : 'Conta recorrente ativada com sucesso!'
-      );
+      if (isFromTransaction) {
+        // Para transações, alternar entre 'completed' e 'pending'
+        const newStatus = bill.status === 'active' ? 'pending' : 'completed';
+        await api.put(`/transactions/${bill.id}`, {
+          status: newStatus,
+        });
+        toast.success(
+          newStatus === 'pending' 
+            ? 'Conta recorrente marcada como pendente!' 
+            : 'Conta recorrente marcada como paga!'
+        );
+      } else {
+        // Para RecurringBill real
+        await api.put(`/recurring-bills/${bill.id}`, {
+          status: bill.status === 'active' ? 'paused' : 'active',
+        });
+        toast.success(
+          bill.status === 'active' 
+            ? 'Conta recorrente pausada com sucesso!' 
+            : 'Conta recorrente ativada com sucesso!'
+        );
+      }
       await loadData();
     } catch (error: any) {
       console.error('Erro ao alterar status:', error.response?.data || error.message);
@@ -340,8 +388,20 @@ export function useRecurringBills() {
 
   const handleDeleteBill = async (id: string) => {
     try {
-      await api.delete(`/recurring-bills/${id}`);
-      toast.success('Conta recorrente excluída com sucesso!');
+      // Verificar se é uma transação ou RecurringBill real
+      const bill = recurringBills.find(b => b.id === id);
+      
+      if (bill && (bill as any).isFromTransaction) {
+        // Se veio de Transaction, deletar como transação com cascade
+        // Isso vai deletar a transação pai e todas as filhas (lançamentos)
+        await api.delete(`/transactions/${id}?cascade=true`);
+        toast.success('Conta recorrente e seus lançamentos excluídos com sucesso!');
+      } else {
+        // Se é RecurringBill real, usar a API de recurring-bills
+        await api.delete(`/recurring-bills/${id}`);
+        toast.success('Conta recorrente excluída com sucesso!');
+      }
+      
       await loadData();
     } catch (error: any) {
       console.error('Erro ao excluir conta recorrente:', error.response?.data || error.message);
@@ -351,6 +411,15 @@ export function useRecurringBills() {
 
   const handleGenerateOccurrences = async (id: string) => {
     try {
+      // Verificar se é uma transação ou RecurringBill real
+      const bill = recurringBills.find(b => b.id === id);
+      
+      if (bill && (bill as any).isFromTransaction) {
+        // Transações recorrentes já têm suas ocorrências geradas
+        toast.info('Esta conta já possui todas as ocorrências geradas.');
+        return;
+      }
+      
       const response = await api.post(`/recurring-bills/${id}/generate-occurrences`, {});
       toast.success(`${response.data.data.count} ocorrências geradas com sucesso!`);
       await loadData();

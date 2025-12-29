@@ -336,6 +336,96 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// ==================== CASH ADJUSTMENT ====================
+// POST /api/v1/bank-accounts/adjustment
+// Ajuste de caixa - movimentação não operacional (não afeta DRE)
+router.post('/adjustment', async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId!;
+    const userId = req.userId!;
+    const {
+      bankAccountId,
+      amount,
+      description,
+    } = req.body;
+
+    // Validations
+    if (!bankAccountId) {
+      return errorResponse(res, 'VALIDATION_ERROR', 'Conta bancária é obrigatória', 400);
+    }
+
+    if (amount === undefined || amount === null || amount === 0) {
+      return errorResponse(res, 'VALIDATION_ERROR', 'Valor do ajuste é obrigatório e deve ser diferente de zero', 400);
+    }
+
+    // Validate account exists
+    const account = await prisma.bankAccount.findFirst({
+      where: { id: bankAccountId, tenantId, deletedAt: null },
+    });
+
+    if (!account) {
+      return errorResponse(res, 'NOT_FOUND', 'Conta bancária não encontrada', 404);
+    }
+
+    const adjustmentDate = new Date();
+    const adjustmentAmount = Number(amount);
+    const adjustmentDescription = description || `Ajuste de caixa: ${adjustmentAmount > 0 ? '+' : ''}${adjustmentAmount.toFixed(2)}`;
+
+    // ========== TRANSAÇÃO ATÔMICA ==========
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Criar transação de AJUSTE - tipo 'adjustment' (não operacional)
+      const adjustmentTransaction = await tx.transaction.create({
+        data: {
+          tenantId,
+          userId,
+          type: 'adjustment', // Tipo especial - não entra no DRE
+          bankAccountId,
+          amount: adjustmentAmount,
+          description: adjustmentDescription,
+          transactionDate: adjustmentDate,
+          status: 'completed',
+          notes: 'Ajuste de caixa - movimentação não operacional',
+        },
+      });
+
+      // 2. Atualizar saldo da conta
+      const updatedAccount = await tx.bankAccount.update({
+        where: { id: bankAccountId },
+        data: {
+          currentBalance: adjustmentAmount > 0
+            ? { increment: Math.abs(adjustmentAmount) }
+            : { decrement: Math.abs(adjustmentAmount) },
+        },
+      });
+
+      return {
+        adjustmentTransaction,
+        updatedAccount,
+      };
+    });
+
+    log.info('Cash adjustment completed successfully', {
+      bankAccountId,
+      amount: adjustmentAmount,
+      transactionId: result.adjustmentTransaction.id,
+      newBalance: result.updatedAccount.currentBalance,
+    });
+
+    return successResponse(res, {
+      adjustment: {
+        account: result.updatedAccount,
+        transaction: result.adjustmentTransaction,
+        amount: adjustmentAmount,
+        description: adjustmentDescription,
+        date: adjustmentDate,
+      },
+    }, 201);
+  } catch (error: any) {
+    log.error('Cash adjustment error:', { error: error.message, stack: error.stack, tenantId: req.tenantId });
+    return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao realizar ajuste de caixa', 500);
+  }
+});
+
 // ==================== TRANSFER BETWEEN ACCOUNTS ====================
 // POST /api/v1/bank-accounts/transfer/execute
 // CORRIGIDO: Agora usa transação atômica do Prisma

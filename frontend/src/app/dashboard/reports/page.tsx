@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/stores/auth';
 import api from '@/lib/api';
 
@@ -193,6 +193,9 @@ export default function ReportsPage() {
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [expandedDRERows, setExpandedDRERows] = useState<Set<string>>(new Set());
   const [categoryViewType, setCategoryViewType] = useState<'income' | 'expense' | 'both'>('both');
+  
+  // Ref para scroll automático do DRE para o mês vigente
+  const dreTableRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     loadAllReports();
@@ -201,6 +204,19 @@ export default function ReportsPage() {
   useEffect(() => {
     loadDREReport();
   }, [dreYear]);
+
+  // Scroll automático para o mês vigente quando o DRE carregar
+  useEffect(() => {
+    if (dreData && dreTableRef.current && activeTab === 'dre' && dreViewMode === 'year') {
+      const currentMonth = new Date().getMonth(); // 0-11
+      // Cada coluna de mês tem aproximadamente 4 sub-colunas (esperado, realizado, av%, ah%)
+      // A primeira coluna (nome) tem ~250px, cada grupo de mês tem ~280px
+      const scrollPosition = 250 + (currentMonth * 280) - 300; // -300 para mostrar um pouco antes
+      setTimeout(() => {
+        dreTableRef.current?.scrollTo({ left: Math.max(0, scrollPosition), behavior: 'smooth' });
+      }, 100);
+    }
+  }, [dreData, activeTab, dreViewMode]);
 
   const loadAllReports = async () => {
     setLoading(true);
@@ -1125,7 +1141,7 @@ export default function ReportsPage() {
                 const showYearTotal = dreViewMode === 'year'; // Só mostrar total do ano quando em modo ano
                 
                 return (
-                <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                <div ref={dreTableRef} className="overflow-x-auto border border-gray-200 rounded-lg">
                   <table className={`w-full ${dreViewMode === 'year' ? 'min-w-[1800px]' : 'min-w-[500px]'} text-sm`}>
                     <thead>
                       {/* Header com meses */}

@@ -516,13 +516,15 @@ router.put('/:id/batch', async (req: AuthRequest, res: Response) => {
  */
 // ==================== DELETE TRANSACTION ====================
 // DELETE /api/v1/transactions/:id
+// Query param: ?cascade=true para deletar também transações filhas (para contas recorrentes)
 router.delete('/:id', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const tenantId = req.tenantId!;
+    const cascade = req.query.cascade === 'true';
 
-    // Chama service
-    await transactionService.delete(id, tenantId);
+    // Chama service com opção de cascade
+    await transactionService.delete(id, tenantId, cascade);
 
     return successResponse(res, { message: 'Transação excluída com sucesso' });
   } catch (error: any) {

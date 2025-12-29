@@ -760,10 +760,11 @@ export class TransactionService {
 
   /**
    * Deleta uma transação (soft delete) com reversão de saldo
+   * @param cascade Se true, deleta também as transações filhas (para contas recorrentes)
    */
-  async delete(id: string, tenantId: string): Promise<void> {
+  async delete(id: string, tenantId: string, cascade: boolean = false): Promise<void> {
     try {
-      log.info('TransactionService.delete', { id, tenantId });
+      log.info('TransactionService.delete', { id, tenantId, cascade });
 
       // Find transaction
       const transaction = await prisma.transaction.findFirst({
@@ -778,43 +779,65 @@ export class TransactionService {
         throw new Error('Transação não encontrada');
       }
 
-      // Delete with atomic balance revert
-      await prisma.$transaction(async (tx) => {
-        // Revert balance change if completed
-        if (transaction.status === 'completed' && transaction.bankAccountId) {
-          const amount = parseFloat(transaction.amount.toString());
-
-          if (transaction.type === 'income') {
-            await tx.bankAccount.update({
-              where: { id: transaction.bankAccountId },
-              data: {
-                currentBalance: {
-                  decrement: amount,
-                },
-              },
-            });
-          } else if (transaction.type === 'expense') {
-            await tx.bankAccount.update({
-              where: { id: transaction.bankAccountId },
-              data: {
-                currentBalance: {
-                  increment: amount,
-                },
-              },
-            });
-          }
-        }
-
-        // Soft delete
-        await tx.transaction.update({
-          where: { id },
-          data: {
-            deletedAt: new Date(),
+      // Se cascade, buscar transações filhas também
+      let childTransactions: any[] = [];
+      if (cascade) {
+        childTransactions = await prisma.transaction.findMany({
+          where: {
+            parentTransactionId: id,
+            tenantId,
+            deletedAt: null,
           },
         });
+        log.info('Found child transactions to delete', { count: childTransactions.length });
+      }
+
+      // Delete with atomic balance revert
+      await prisma.$transaction(async (tx) => {
+        // Lista de transações para processar (pai + filhas)
+        const allTransactions = [transaction, ...childTransactions];
+        
+        for (const txn of allTransactions) {
+          // Revert balance change if completed
+          if (txn.status === 'completed' && txn.bankAccountId) {
+            const amount = parseFloat(txn.amount.toString());
+
+            if (txn.type === 'income') {
+              await tx.bankAccount.update({
+                where: { id: txn.bankAccountId },
+                data: {
+                  currentBalance: {
+                    decrement: amount,
+                  },
+                },
+              });
+            } else if (txn.type === 'expense') {
+              await tx.bankAccount.update({
+                where: { id: txn.bankAccountId },
+                data: {
+                  currentBalance: {
+                    increment: amount,
+                  },
+                },
+              });
+            }
+          }
+
+          // Soft delete
+          await tx.transaction.update({
+            where: { id: txn.id },
+            data: {
+              deletedAt: new Date(),
+            },
+          });
+        }
       });
 
-      log.info('TransactionService.delete success', { id, tenantId });
+      log.info('TransactionService.delete success', { 
+        id, 
+        tenantId, 
+        deletedCount: 1 + childTransactions.length 
+      });
 
       // Invalidar caches relacionados
       await cacheService.invalidateMultiple([

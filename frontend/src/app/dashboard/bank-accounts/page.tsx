@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/api';
-import { Wallet, Plus, Edit2, Trash2, ArrowLeftRight, Building2, X, DollarSign } from 'lucide-react';
+import { Wallet, Plus, Edit2, Trash2, ArrowLeftRight, Building2, X, DollarSign, AlertTriangle } from 'lucide-react';
 
 
 
@@ -33,6 +33,12 @@ interface TransferForm {
   description: string;
 }
 
+interface AdjustmentForm {
+  bankAccountId: string;
+  amount: string;
+  description: string;
+}
+
 export default function BankAccountsPage() {
   const router = useRouter();
   const { accessToken } = useAuth();
@@ -41,6 +47,7 @@ export default function BankAccountsPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
+  const [showAdjustmentModal, setShowAdjustmentModal] = useState(false);
   const [editingAccount, setEditingAccount] = useState<BankAccount | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -54,6 +61,12 @@ export default function BankAccountsPage() {
   const [transferForm, setTransferForm] = useState<TransferForm>({
     fromAccountId: '',
     toAccountId: '',
+    amount: '',
+    description: '',
+  });
+
+  const [adjustmentForm, setAdjustmentForm] = useState<AdjustmentForm>({
+    bankAccountId: '',
     amount: '',
     description: '',
   });
@@ -170,6 +183,36 @@ export default function BankAccountsPage() {
     }
   };
 
+  const handleAdjustment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+
+    try {
+      const amount = parseFloat(adjustmentForm.amount);
+      if (isNaN(amount) || amount === 0) {
+        toast.error('Valor do ajuste deve ser diferente de zero');
+        setSubmitting(false);
+        return;
+      }
+
+      await api.post('/bank-accounts/adjustment', {
+        bankAccountId: adjustmentForm.bankAccountId,
+        amount: amount,
+        description: adjustmentForm.description,
+      });
+      
+      toast.success('Ajuste de caixa realizado com sucesso!');
+      setShowAdjustmentModal(false);
+      setAdjustmentForm({ bankAccountId: '', amount: '', description: '' });
+      loadAccounts();
+    } catch (error: any) {
+      console.error('Erro ao ajustar:', error.response?.data || error.message);
+      toast.error(error.response?.data?.message || 'Erro ao realizar ajuste de caixa');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const openEditModal = (account: BankAccount) => {
     setEditingAccount(account);
     setAccountForm({
@@ -228,6 +271,13 @@ export default function BankAccountsPage() {
             </div>
           </div>
           <div className="flex gap-3">
+            <button
+              onClick={() => setShowAdjustmentModal(true)}
+              className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors flex items-center gap-2"
+            >
+              <DollarSign className="w-5 h-5" />
+              Ajuste de Caixa
+            </button>
             <button
               onClick={() => setShowTransferModal(true)}
               className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2"
@@ -558,6 +608,99 @@ export default function BankAccountsPage() {
                   className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50"
                 >
                   {submitting ? 'Transferindo...' : 'Transferir'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Ajuste de Caixa */}
+      {showAdjustmentModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h2 className="text-xl font-bold text-gray-800">Ajuste de Caixa</h2>
+              <button onClick={() => setShowAdjustmentModal(false)} title="Fechar" aria-label="Fechar modal" className="text-gray-500 hover:text-gray-700">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            {/* Alerta de Orientação */}
+            <div className="mx-6 mt-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm text-amber-800 font-medium">Atenção</p>
+                  <p className="text-sm text-amber-700 mt-1">
+                    O Ajuste de Caixa deve ser utilizado preferencialmente ao iniciar seus lançamentos, 
+                    para garantir que o saldo inicial esteja correto. Ajustes frequentes podem indicar 
+                    inconsistências nos registros financeiros.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <form onSubmit={handleAdjustment} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Conta Bancária *</label>
+                <select
+                  required
+                  value={adjustmentForm.bankAccountId}
+                  onChange={(e) => setAdjustmentForm({ ...adjustmentForm, bankAccountId: e.target.value })}
+                  aria-label="Conta Bancária"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
+                >
+                  <option value="">Selecione a conta</option>
+                  {Array.isArray(accounts) && accounts.map((account) => (
+                    <option key={account.id} value={account.id}>
+                      {account.name} - {formatCurrency(Number(account.currentBalance))}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Valor do Ajuste *</label>
+                <p className="text-xs text-gray-500 mb-2">
+                  Use valor positivo para adicionar ou negativo para subtrair do saldo
+                </p>
+                <input
+                  type="number"
+                  required
+                  step="0.01"
+                  value={adjustmentForm.amount}
+                  onChange={(e) => setAdjustmentForm({ ...adjustmentForm, amount: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
+                  placeholder="Ex: 200.00 ou -150.00"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Descrição (opcional)</label>
+                <input
+                  type="text"
+                  value={adjustmentForm.description}
+                  onChange={(e) => setAdjustmentForm({ ...adjustmentForm, description: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
+                  placeholder="Ex: Ajuste de saldo inicial"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowAdjustmentModal(false)}
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="flex-1 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors disabled:opacity-50"
+                >
+                  {submitting ? 'Ajustando...' : 'Confirmar Ajuste'}
                 </button>
               </div>
             </form>
