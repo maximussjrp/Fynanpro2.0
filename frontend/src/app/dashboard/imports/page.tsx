@@ -121,6 +121,8 @@ export default function ImportsPage() {
   // Resultado
   const [result, setResult] = useState<{
     imported: number;
+    batchId?: string;
+    needsReviewCount?: number;
     skipped: number;
     duplicates: number;
     errors: string[];
@@ -336,28 +338,52 @@ export default function ImportsPage() {
     setStep('processing');
 
     try {
-      const response = await fetch(`${API_URL}/import/confirm`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({
-          previewId: preview.id,
-          bankAccountId: selectedAccountId,
-          paymentMethodId: selectedPaymentMethodId || undefined,
-          transactions: transactions,
-        }),
-      });
+      // FASE 2.4.1: Usar endpoint OFX pipeline para arquivos OFX
+      const isOFX = preview.fileType === 'ofx' || fileName.toLowerCase().endsWith('.ofx');
+      
+      let response;
+      
+      if (isOFX) {
+        // Usar novo pipeline OFX com detecção de transferências e review
+        const formData = new FormData();
+        const blob = new Blob([fileContent], { type: 'text/plain' });
+        formData.append('file', blob, fileName);
+        formData.append('accountId', selectedAccountId);
+        
+        response = await fetch(`${API_URL}/import/ofx`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+          },
+          body: formData,
+        });
+      } else {
+        // Usar fluxo tradicional para CSV/XML
+        response = await fetch(`${API_URL}/import/confirm`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({
+            previewId: preview.id,
+            bankAccountId: selectedAccountId,
+            paymentMethodId: selectedPaymentMethodId || undefined,
+            transactions: transactions,
+          }),
+        });
+      }
 
       const data = await response.json();
       
       if (data.success) {
         setResult({
-          imported: data.imported,
-          skipped: data.skipped,
-          duplicates: data.duplicates,
+          imported: isOFX ? data.created : data.imported,
+          skipped: isOFX ? (data.deduped || 0) : data.skipped,
+          duplicates: isOFX ? (data.deduped || 0) : data.duplicates,
           errors: data.errors || [],
+          batchId: data.batchId,
+          needsReviewCount: data.needsReviewCount || 0,
         });
         setStep('result');
       } else {
@@ -936,6 +962,21 @@ export default function ImportsPage() {
               </div>
             )}
 
+            {/* FASE 2.4.1: Mostrar info de itens para revisar */}
+            {result.needsReviewCount && result.needsReviewCount > 0 && (
+              <div className="bg-amber-900/30 border border-amber-500/50 rounded-lg p-4 max-w-lg mx-auto">
+                <div className="flex items-center gap-2 text-amber-400">
+                  <AlertCircle size={20} />
+                  <span className="font-medium">
+                    {result.needsReviewCount} transações precisam de revisão
+                  </span>
+                </div>
+                <p className="text-sm text-gray-400 mt-1">
+                  Taxas, transferências e pagamentos detectados automaticamente
+                </p>
+              </div>
+            )}
+
             <div className="flex gap-4 justify-center pt-4">
               <button
                 onClick={handleReset}
@@ -944,6 +985,18 @@ export default function ImportsPage() {
                 <RefreshCw size={20} />
                 Nova Importação
               </button>
+              
+              {/* FASE 2.4.1: Botão Revisar Transações */}
+              {result.batchId && result.needsReviewCount && result.needsReviewCount > 0 && (
+                <button
+                  onClick={() => router.push(`/dashboard/imports/review?batchId=${result.batchId}`)}
+                  className="px-6 py-3 bg-amber-600 hover:bg-amber-500 rounded-lg font-medium transition flex items-center gap-2"
+                >
+                  <AlertCircle size={20} />
+                  Revisar Transações ({result.needsReviewCount})
+                </button>
+              )}
+              
               <button
                 onClick={() => router.push('/dashboard/transactions')}
                 className="px-6 py-3 bg-emerald-600 hover:bg-emerald-500 rounded-lg font-medium transition"
