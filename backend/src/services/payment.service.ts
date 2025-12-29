@@ -541,10 +541,24 @@ export const paymentService = {
       where: { id: tenantId }
     });
 
+    // Calcular dias restantes do trial
+    let daysRemaining = 0;
+    let trialEndsAt = tenant?.trialEndsAt;
+    
+    if (tenant?.subscriptionPlan === 'trial' && tenant.trialEndsAt) {
+      const now = new Date();
+      const trialEnd = new Date(tenant.trialEndsAt);
+      const diffTime = trialEnd.getTime() - now.getTime();
+      daysRemaining = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+    }
+
     return {
       subscription,
       currentPlan: tenant?.subscriptionPlan || 'trial',
       status: tenant?.subscriptionStatus || 'active',
+      trialEndsAt: trialEndsAt?.toISOString(),
+      daysRemaining,
+      isActive: tenant?.subscriptionStatus === 'active',
       plans: PLANS,
     };
   },

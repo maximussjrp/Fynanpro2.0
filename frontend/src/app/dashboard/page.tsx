@@ -14,6 +14,7 @@ import {
   ChartSkeleton, 
   RankingCardSkeleton 
 } from '@/components/Skeletons';
+import TrialBanner from '@/components/TrialBanner';
 import { 
   Calendar,
   Filter,
@@ -385,6 +386,9 @@ export default function Dashboard() {
           onAddTransaction={() => setShowTransactionModal(true)}
           onOpenCalendar={() => router.push('/dashboard/calendar')}
         />
+
+        {/* Banner de Trial/Planos */}
+        <TrialBanner tenantId={tenant?.id} />
 
         {/* Banner de Onboarding de Energia - quando coverage < 85% */}
         {energyCoverage && energyCoverage.validatedPercent < 85 && (
