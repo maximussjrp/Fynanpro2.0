@@ -178,6 +178,65 @@ router.get('/pending-alerts', async (req: AuthRequest, res: Response) => {
  *       404:
  *         description: Transação não encontrada ou não pertence ao tenant
  */
+
+// ==================== CHECK PAID CHILDREN ====================
+// GET /api/v1/transactions/:id/check-paid
+// IMPORTANTE: Esta rota DEVE vir ANTES de GET /:id para não ser capturada pelo parâmetro genérico
+router.get('/:id/check-paid', async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const tenantId = req.tenantId!;
+
+    // Verificar se a transação existe
+    const transaction = await prisma.transaction.findFirst({
+      where: {
+        id,
+        tenantId,
+        deletedAt: null,
+      },
+    });
+
+    if (!transaction) {
+      return errorResponse(res, 'NOT_FOUND', 'Transação não encontrada', 404);
+    }
+
+    // Contar transações filhas pagas e pendentes
+    const [paidCount, pendingCount] = await Promise.all([
+      prisma.transaction.count({
+        where: {
+          parentId: id,
+          tenantId,
+          deletedAt: null,
+          status: 'completed',
+        },
+      }),
+      prisma.transaction.count({
+        where: {
+          parentId: id,
+          tenantId,
+          deletedAt: null,
+          status: { not: 'completed' },
+        },
+      }),
+    ]);
+
+    return successResponse(res, {
+      hasPaidTransactions: paidCount > 0,
+      paidCount,
+      pendingCount,
+      totalCount: paidCount + pendingCount,
+    });
+  } catch (error: any) {
+    log.error('Check paid children error', { 
+      error: error.message || error, 
+      stack: error.stack,
+      id: req.params.id, 
+      tenantId: req.tenantId 
+    });
+    return errorResponse(res, 'INTERNAL_ERROR', error.message || 'Erro ao verificar transações pagas', 500);
+  }
+});
+
 // ==================== GET TRANSACTION BY ID ====================
 // GET /api/v1/transactions/:id
 router.get('/:id', async (req: AuthRequest, res: Response) => {
@@ -515,63 +574,6 @@ router.put('/:id/batch', async (req: AuthRequest, res: Response) => {
  *       404:
  *         description: Transação não encontrada ou não pertence ao tenant
  */
-
-// ==================== CHECK PAID CHILDREN ====================
-// GET /api/v1/transactions/:id/check-paid
-router.get('/:id/check-paid', async (req: AuthRequest, res: Response) => {
-  try {
-    const { id } = req.params;
-    const tenantId = req.tenantId!;
-
-    // Verificar se a transação existe
-    const transaction = await prisma.transaction.findFirst({
-      where: {
-        id,
-        tenantId,
-        deletedAt: null,
-      },
-    });
-
-    if (!transaction) {
-      return errorResponse(res, 'NOT_FOUND', 'Transação não encontrada', 404);
-    }
-
-    // Contar transações filhas pagas e pendentes
-    const [paidCount, pendingCount] = await Promise.all([
-      prisma.transaction.count({
-        where: {
-          parentId: id,
-          tenantId,
-          deletedAt: null,
-          status: 'completed',
-        },
-      }),
-      prisma.transaction.count({
-        where: {
-          parentId: id,
-          tenantId,
-          deletedAt: null,
-          status: { not: 'completed' },
-        },
-      }),
-    ]);
-
-    return successResponse(res, {
-      hasPaidTransactions: paidCount > 0,
-      paidCount,
-      pendingCount,
-      totalCount: paidCount + pendingCount,
-    });
-  } catch (error: any) {
-    log.error('Check paid children error', { 
-      error: error.message || error, 
-      stack: error.stack,
-      id: req.params.id, 
-      tenantId: req.tenantId 
-    });
-    return errorResponse(res, 'INTERNAL_ERROR', error.message || 'Erro ao verificar transações pagas', 500);
-  }
-});
 
 // ==================== DELETE TRANSACTION ====================
 // DELETE /api/v1/transactions/:id

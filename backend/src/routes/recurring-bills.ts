@@ -255,6 +255,63 @@ router.get('/occurrences', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// ==================== CHECK PAID OCCURRENCES ====================
+// GET /api/v1/recurring-bills/:id/check-paid
+// IMPORTANTE: Esta rota DEVE vir ANTES de GET /:id para não ser capturada pelo parâmetro genérico
+router.get('/:id/check-paid', async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const tenantId = req.tenantId!;
+
+    // Verificar se existe a recurring bill
+    const recurringBill = await prisma.recurringBill.findFirst({
+      where: {
+        id,
+        tenantId,
+        deletedAt: null,
+      },
+    });
+
+    if (!recurringBill) {
+      return errorResponse(res, 'NOT_FOUND', 'Conta recorrente não encontrada', 404);
+    }
+
+    // Contar ocorrências pagas e pendentes
+    const [paidCount, pendingCount] = await Promise.all([
+      prisma.recurringBillOccurrence.count({
+        where: {
+          recurringBillId: id,
+          tenantId,
+          status: 'paid',
+        },
+      }),
+      prisma.recurringBillOccurrence.count({
+        where: {
+          recurringBillId: id,
+          tenantId,
+          status: { not: 'paid' },
+        },
+      }),
+    ]);
+
+    return successResponse(res, {
+      hasPaidOccurrences: paidCount > 0,
+      paidCount,
+      pendingCount,
+      totalCount: paidCount + pendingCount,
+    });
+  } catch (error: any) {
+    console.error('Check paid occurrences error:', error);
+    log.error('Check paid occurrences error', {
+      error: error.message || error,
+      stack: error.stack,
+      id: req.params.id,
+      tenantId: req.tenantId
+    });
+    return errorResponse(res, 'INTERNAL_ERROR', error.message || 'Erro ao verificar ocorrências pagas', 500);
+  }
+});
+
 // ==================== GET RECURRING BILL BY ID ====================
 // GET /api/v1/recurring-bills/:id
 router.get('/:id', async (req: AuthRequest, res: Response) => {
@@ -546,62 +603,6 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('Update recurring bill error:', error);
     return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao atualizar conta fixa', 500);
-  }
-});
-
-// ==================== CHECK PAID OCCURRENCES ====================
-// GET /api/v1/recurring-bills/:id/check-paid
-router.get('/:id/check-paid', async (req: AuthRequest, res: Response) => {
-  try {
-    const { id } = req.params;
-    const tenantId = req.tenantId!;
-
-    // Verificar se existe a recurring bill
-    const recurringBill = await prisma.recurringBill.findFirst({
-      where: {
-        id,
-        tenantId,
-        deletedAt: null,
-      },
-    });
-
-    if (!recurringBill) {
-      return errorResponse(res, 'NOT_FOUND', 'Conta recorrente não encontrada', 404);
-    }
-
-    // Contar ocorrências pagas e pendentes
-    const [paidCount, pendingCount] = await Promise.all([
-      prisma.recurringBillOccurrence.count({
-        where: {
-          recurringBillId: id,
-          tenantId,
-          status: 'paid',
-        },
-      }),
-      prisma.recurringBillOccurrence.count({
-        where: {
-          recurringBillId: id,
-          tenantId,
-          status: { not: 'paid' },
-        },
-      }),
-    ]);
-
-    return successResponse(res, {
-      hasPaidOccurrences: paidCount > 0,
-      paidCount,
-      pendingCount,
-      totalCount: paidCount + pendingCount,
-    });
-  } catch (error: any) {
-    console.error('Check paid occurrences error:', error);
-    log.error('Check paid occurrences error', {
-      error: error.message || error,
-      stack: error.stack,
-      id: req.params.id,
-      tenantId: req.tenantId
-    });
-    return errorResponse(res, 'INTERNAL_ERROR', error.message || 'Erro ao verificar ocorrências pagas', 500);
   }
 });
 
