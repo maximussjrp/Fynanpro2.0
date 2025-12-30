@@ -22,6 +22,17 @@ export const CreateTransactionSchema = z.object({
   tags: z.string().optional(),
   dueDate: z.string().or(z.date()).optional(),
   isFixed: z.boolean().optional(),
+  
+  // Campos para transações recorrentes
+  transactionType: z.enum(['single', 'recurring', 'installment']).optional(),
+  frequency: z.enum(['daily', 'weekly', 'monthly', 'yearly']).optional(),
+  frequencyInterval: z.number().int().positive().optional(),
+  totalOccurrences: z.number().int().positive().optional(),
+  
+  // Campos para transações parceladas
+  totalInstallments: z.number().int().positive().optional(),
+  hasDownPayment: z.boolean().optional(),
+  downPaymentAmount: z.number().positive().optional(),
 }).refine(
   (data) => {
     // Transfer não pode ter categoria
