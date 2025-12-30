@@ -1,0 +1,1 @@
+const{PrismaClient}=require('@prisma/client');const p=new PrismaClient();p.tenant.findMany({take:3,select:{id:true,name:true,subscriptionPlan:true,trialEndsAt:true}}).then(r=>console.log(JSON.stringify(r,null,2))).finally(()=>p.$disconnect())

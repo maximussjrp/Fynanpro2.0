@@ -526,17 +526,6 @@ export const paymentService = {
    * Obter assinatura atual do tenant
    */
   async getSubscription(tenantId: string) {
-    const subscription = await prisma.subscription.findFirst({
-      where: { tenantId },
-      orderBy: { createdAt: 'desc' },
-      include: {
-        payments: {
-          orderBy: { createdAt: 'desc' },
-          take: 10,
-        }
-      }
-    });
-
     const tenant = await prisma.tenant.findUnique({
       where: { id: tenantId }
     });
@@ -553,10 +542,10 @@ export const paymentService = {
     }
 
     return {
-      subscription,
+      subscription: null,
       currentPlan: tenant?.subscriptionPlan || 'trial',
       status: tenant?.subscriptionStatus || 'active',
-      trialEndsAt: trialEndsAt?.toISOString(),
+      trialEndsAt: trialEndsAt ? trialEndsAt.toISOString() : null,
       daysRemaining,
       isActive: tenant?.subscriptionStatus === 'active',
       plans: PLANS,
