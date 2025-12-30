@@ -2,10 +2,14 @@ import { Router, Response } from 'express';
 import { prisma } from '../main';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { successResponse, errorResponse } from '../utils/response';
+import { z } from 'zod';
 
 const router = Router();
 
 router.use(authenticateToken);
+
+// Schema de validação para deleteMode
+const DeleteModeSchema = z.enum(['all', 'pending']).catch('pending');
 
 // ==================== GET TEMPLATES (Onboarding) ====================
 // GET /api/v1/recurring-bills/templates
@@ -612,7 +616,18 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const tenantId = req.tenantId!;
-    const deleteMode = req.query.deleteMode as string || 'pending'; // 'all' ou 'pending'
+    const userId = req.userId!; // Para auditoria
+    
+    // Validação com Zod
+    const deleteMode = DeleteModeSchema.parse(req.query.deleteMode);
+
+    log.info('RecurringBill.delete request', { 
+      id, 
+      tenantId, 
+      userId, 
+      deleteMode,
+      ip: req.ip,
+    });
 
     const recurringBill = await prisma.recurringBill.findFirst({
       where: {
@@ -632,6 +647,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
         recurringBillId: id,
         tenantId,
         status: 'paid',
+        deletedAt: null,
       },
     });
 
@@ -639,22 +655,29 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
 
     // Se deleteMode = 'all', excluir tudo (recorrência + todas as ocorrências)
     // Se deleteMode = 'pending', excluir apenas recorrência e ocorrências não pagas
+    // CORREÇÃO BUG #2: Mudado para SOFT DELETE para manter histórico e auditoria
     await prisma.$transaction(async (tx) => {
       if (deleteMode === 'all') {
-        // Excluir TODAS as ocorrências (inclusive as pagas)
-        await tx.recurringBillOccurrence.deleteMany({
+        // Soft delete TODAS as ocorrências (inclusive as pagas)
+        await tx.recurringBillOccurrence.updateMany({
           where: {
             recurringBillId: id,
             tenantId,
           },
+          data: {
+            deletedAt: new Date(),
+          },
         });
       } else {
-        // Excluir apenas ocorrências NÃO PAGAS
-        await tx.recurringBillOccurrence.deleteMany({
+        // Soft delete apenas ocorrências NÃO PAGAS
+        await tx.recurringBillOccurrence.updateMany({
           where: {
             recurringBillId: id,
             tenantId,
             status: { not: 'paid' },
+          },
+          data: {
+            deletedAt: new Date(),
           },
         });
       }

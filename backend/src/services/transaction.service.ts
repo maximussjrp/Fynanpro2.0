@@ -813,33 +813,77 @@ export class TransactionService {
       // Delete with atomic balance revert
       await prisma.$transaction(async (tx) => {
         // Lista de transações para processar
-        // Se deleteMode = 'pending' e a transação pai está paga, NÃO deletar a pai
+        // CORREÇÃO BUG #3: Se deleteMode = 'pending', verificar se ainda há filhos após exclusão
         const shouldDeleteParent = deleteMode === 'all' || transaction.status !== 'completed';
-        const allTransactions = shouldDeleteParent ? [transaction, ...childTransactions] : childTransactions;
+        
+        // Se não vai deletar o pai, verificar se ainda terá filhos após a exclusão
+        let finalShouldDeleteParent = shouldDeleteParent;
+        if (!shouldDeleteParent && childTransactions.length > 0) {
+          // Contar quantos filhos vão sobrar (apenas os paid)
+          const remainingChildren = await tx.transaction.count({
+            where: {
+              parentId: id,
+              tenantId,
+              deletedAt: null,
+              status: 'completed', // Apenas os que serão mantidos
+            },
+          });
+          
+          // Se não vai sobrar nenhum filho, deletar o pai também
+          if (remainingChildren === 0 || remainingChildren === childTransactions.filter(c => c.status === 'completed').length) {
+            finalShouldDeleteParent = true;
+            log.warn('Parent would become orphan, deleting it too', { id, tenantId });
+          }
+        }
+        
+        const allTransactions = finalShouldDeleteParent ? [transaction, ...childTransactions] : childTransactions;
         
         for (const txn of allTransactions) {
           // Revert balance change if completed
+          // CORREÇÃO BUG #4: Try-catch para tratar erro se conta não existe
           if (txn.status === 'completed' && txn.bankAccountId) {
-            const amount = parseFloat(txn.amount.toString());
+            try {
+              const amount = parseFloat(txn.amount.toString());
 
-            if (txn.type === 'income') {
-              await tx.bankAccount.update({
+              // Verificar se conta ainda existe
+              const accountExists = await tx.bankAccount.findUnique({
                 where: { id: txn.bankAccountId },
-                data: {
-                  currentBalance: {
-                    decrement: amount,
-                  },
-                },
+                select: { id: true },
               });
-            } else if (txn.type === 'expense') {
-              await tx.bankAccount.update({
-                where: { id: txn.bankAccountId },
-                data: {
-                  currentBalance: {
-                    increment: amount,
-                  },
-                },
+
+              if (accountExists) {
+                if (txn.type === 'income') {
+                  await tx.bankAccount.update({
+                    where: { id: txn.bankAccountId },
+                    data: {
+                      currentBalance: {
+                        decrement: amount,
+                      },
+                    },
+                  });
+                } else if (txn.type === 'expense') {
+                  await tx.bankAccount.update({
+                    where: { id: txn.bankAccountId },
+                    data: {
+                      currentBalance: {
+                        increment: amount,
+                      },
+                    },
+                  });
+                }
+              } else {
+                log.warn('Bank account not found for balance revert', { 
+                  transactionId: txn.id, 
+                  bankAccountId: txn.bankAccountId 
+                });
+              }
+            } catch (error) {
+              log.error('Error reverting balance', { 
+                error, 
+                transactionId: txn.id, 
+                bankAccountId: txn.bankAccountId 
               });
+              // Continua mesmo com erro no revert
             }
           }
 

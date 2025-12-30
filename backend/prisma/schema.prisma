@@ -408,6 +408,7 @@ model RecurringBillOccurrence {
   notes           String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime? // ADICIONADO: Soft delete para auditoria
 
   tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   recurringBill   RecurringBill @relation(fields: [recurringBillId], references: [id], onDelete: Cascade)
@@ -415,6 +416,7 @@ model RecurringBillOccurrence {
   @@index([tenantId, dueDate, status])
   @@index([recurringBillId])
   @@index([tenantId, status, dueDate])
+  @@index([tenantId, deletedAt]) // ADICIONADO: Index para queries com soft delete
 }
 
 // ==================== PARCELADAS ====================

@@ -5,6 +5,10 @@ import { transactionService } from '../services/transaction.service';
 import { CreateTransactionSchema, UpdateTransactionSchema, TransactionFiltersSchema } from '../dtos/transaction.dto';
 import { log } from '../utils/logger';
 import { prisma } from '../utils/prisma-client';
+import { z } from 'zod';
+
+// Schema de validação para deleteMode
+const DeleteModeSchema = z.enum(['all', 'pending']).catch('pending');
 
 const router = Router();
 
@@ -584,11 +588,31 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const tenantId = req.tenantId!;
+    const userId = req.userId!; // Para auditoria
     const cascade = req.query.cascade === 'true';
-    const deleteMode = (req.query.deleteMode as 'all' | 'pending') || 'pending';
+    
+    // Validação com Zod
+    const deleteMode = DeleteModeSchema.parse(req.query.deleteMode);
+
+    log.info('TransactionService.delete request', { 
+      id, 
+      tenantId, 
+      userId, 
+      cascade, 
+      deleteMode,
+      ip: req.ip,
+      userAgent: req.get('user-agent'),
+    });
 
     // Chama service com opção de cascade e deleteMode
     const result = await transactionService.delete(id, tenantId, cascade, deleteMode);
+
+    log.info('TransactionService.delete success', { 
+      id, 
+      tenantId, 
+      userId, 
+      deletedCount: result.deletedCount,
+    });
 
     return successResponse(res, { 
       message: result.deletedCount > 1 
@@ -598,7 +622,13 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
       hasPaidTransactions: result.hasPaidTransactions,
     });
   } catch (error: any) {
-    log.error('Delete transaction error', { error, id: req.params.id, tenantId: req.tenantId });
+    log.error('Delete transaction error', { 
+      error: error.message, 
+      stack: error.stack,
+      id: req.params.id, 
+      tenantId: req.tenantId,
+      userId: req.userId,
+    });
 
     if (error.message === 'Transação não encontrada') {
       return errorResponse(res, 'NOT_FOUND', error.message, 404);
