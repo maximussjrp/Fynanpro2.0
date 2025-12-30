@@ -64,10 +64,6 @@ export class TransactionService {
       const where: any = {
         tenantId,
         deletedAt: null,
-        // Excluir transações "template" (pais de recorrentes) que não devem aparecer na listagem
-        status: {
-          not: 'scheduled', // scheduled = transação pai/template de recorrentes
-        },
       };
 
       if (filters.startDate && filters.endDate) {
@@ -101,6 +97,11 @@ export class TransactionService {
 
       if (filters.status) {
         where.status = filters.status;
+      } else {
+        // Se não há filtro de status específico, excluir transações "scheduled" (templates de recorrentes)
+        where.status = {
+          not: 'scheduled',
+        };
       }
 
       // Pagination
