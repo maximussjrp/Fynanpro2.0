@@ -4,6 +4,7 @@ import { successResponse, errorResponse } from '../utils/response';
 import { transactionService } from '../services/transaction.service';
 import { CreateTransactionSchema, UpdateTransactionSchema, TransactionFiltersSchema } from '../dtos/transaction.dto';
 import { log } from '../utils/logger';
+import { prisma } from '../utils/prisma-client';
 
 const router = Router();
 
@@ -561,9 +562,14 @@ router.get('/:id/check-paid', async (req: AuthRequest, res: Response) => {
       pendingCount,
       totalCount: paidCount + pendingCount,
     });
-  } catch (error) {
-    log.error('Check paid children error', { error, id: req.params.id, tenantId: req.tenantId });
-    return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao verificar transações pagas', 500);
+  } catch (error: any) {
+    log.error('Check paid children error', { 
+      error: error.message || error, 
+      stack: error.stack,
+      id: req.params.id, 
+      tenantId: req.tenantId 
+    });
+    return errorResponse(res, 'INTERNAL_ERROR', error.message || 'Erro ao verificar transações pagas', 500);
   }
 });
 

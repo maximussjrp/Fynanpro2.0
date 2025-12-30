@@ -593,9 +593,15 @@ router.get('/:id/check-paid', async (req: AuthRequest, res: Response) => {
       pendingCount,
       totalCount: paidCount + pendingCount,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Check paid occurrences error:', error);
-    return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao verificar ocorrências pagas', 500);
+    log.error('Check paid occurrences error', {
+      error: error.message || error,
+      stack: error.stack,
+      id: req.params.id,
+      tenantId: req.tenantId
+    });
+    return errorResponse(res, 'INTERNAL_ERROR', error.message || 'Erro ao verificar ocorrências pagas', 500);
   }
 });
 
