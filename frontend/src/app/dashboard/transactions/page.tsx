@@ -165,8 +165,34 @@ export default function TransactionsPage() {
           createdAt: occ.createdAt,
       }));
 
-      // Combinar e ordenar por data
-      const allTransactions = [...transactionsList, ...mappedOccurrences].sort((a, b) => {
+      // Combinar listas
+      const combined = [...transactionsList, ...mappedOccurrences];
+      
+      // Remover duplicatas: se uma transação tem parentId, ela é filha de recorrente
+      // e NÃO deve aparecer como occurrence também
+      const uniqueTransactions = combined.reduce((acc: Transaction[], curr) => {
+        // Se for occurrence, verificar se já existe uma transaction com mesmo ID ou mesma data+descrição
+        if (curr.isRecurringOccurrence) {
+          const isDuplicate = acc.some(t => 
+            // Mesmo ID
+            t.id === curr.id ||
+            // Ou mesma data + descrição (transação filha já existe)
+            (t.description === curr.description && 
+             new Date(t.transactionDate).toDateString() === new Date(curr.transactionDate).toDateString())
+          );
+          
+          if (!isDuplicate) {
+            acc.push(curr);
+          }
+        } else {
+          // Transações normais sempre adicionar
+          acc.push(curr);
+        }
+        return acc;
+      }, []);
+      
+      // Ordenar por data
+      const allTransactions = uniqueTransactions.sort((a, b) => {
         const dateA = new Date(a.dueDate || a.transactionDate).getTime();
         const dateB = new Date(b.dueDate || b.transactionDate).getTime();
         return dateB - dateA;
