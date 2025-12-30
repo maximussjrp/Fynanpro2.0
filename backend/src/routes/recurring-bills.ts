@@ -549,12 +549,63 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// ==================== CHECK PAID OCCURRENCES ====================
+// GET /api/v1/recurring-bills/:id/check-paid
+router.get('/:id/check-paid', async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const tenantId = req.tenantId!;
+
+    // Verificar se existe a recurring bill
+    const recurringBill = await prisma.recurringBill.findFirst({
+      where: {
+        id,
+        tenantId,
+        deletedAt: null,
+      },
+    });
+
+    if (!recurringBill) {
+      return errorResponse(res, 'NOT_FOUND', 'Conta recorrente não encontrada', 404);
+    }
+
+    // Contar ocorrências pagas e pendentes
+    const [paidCount, pendingCount] = await Promise.all([
+      prisma.recurringBillOccurrence.count({
+        where: {
+          recurringBillId: id,
+          tenantId,
+          status: 'paid',
+        },
+      }),
+      prisma.recurringBillOccurrence.count({
+        where: {
+          recurringBillId: id,
+          tenantId,
+          status: { not: 'paid' },
+        },
+      }),
+    ]);
+
+    return successResponse(res, {
+      hasPaidOccurrences: paidCount > 0,
+      paidCount,
+      pendingCount,
+      totalCount: paidCount + pendingCount,
+    });
+  } catch (error) {
+    console.error('Check paid occurrences error:', error);
+    return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao verificar ocorrências pagas', 500);
+  }
+});
+
 // ==================== DELETE RECURRING BILL ====================
-// DELETE /api/v1/recurring-bills/:id
+// DELETE /api/v1/recurring-bills/:id?deleteMode=all|pending
 router.delete('/:id', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const tenantId = req.tenantId!;
+    const deleteMode = req.query.deleteMode as string || 'pending'; // 'all' ou 'pending'
 
     const recurringBill = await prisma.recurringBill.findFirst({
       where: {
@@ -568,16 +619,56 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
       return errorResponse(res, 'NOT_FOUND', 'Conta fixa não encontrada', 404);
     }
 
-    // Soft delete
-    await prisma.recurringBill.update({
-      where: { id },
-      data: {
-        deletedAt: new Date(),
-        status: 'cancelled',
+    // Verificar se existem ocorrências pagas
+    const paidOccurrences = await prisma.recurringBillOccurrence.findMany({
+      where: {
+        recurringBillId: id,
+        tenantId,
+        status: 'paid',
       },
     });
 
-    return successResponse(res, { message: 'Conta fixa excluída com sucesso' });
+    const hasPaidOccurrences = paidOccurrences.length > 0;
+
+    // Se deleteMode = 'all', excluir tudo (recorrência + todas as ocorrências)
+    // Se deleteMode = 'pending', excluir apenas recorrência e ocorrências não pagas
+    await prisma.$transaction(async (tx) => {
+      if (deleteMode === 'all') {
+        // Excluir TODAS as ocorrências (inclusive as pagas)
+        await tx.recurringBillOccurrence.deleteMany({
+          where: {
+            recurringBillId: id,
+            tenantId,
+          },
+        });
+      } else {
+        // Excluir apenas ocorrências NÃO PAGAS
+        await tx.recurringBillOccurrence.deleteMany({
+          where: {
+            recurringBillId: id,
+            tenantId,
+            status: { not: 'paid' },
+          },
+        });
+      }
+
+      // Soft delete da recorrência
+      await tx.recurringBill.update({
+        where: { id },
+        data: {
+          deletedAt: new Date(),
+          status: 'cancelled',
+        },
+      });
+    });
+
+    return successResponse(res, { 
+      message: deleteMode === 'all' 
+        ? 'Conta recorrente e todas as ocorrências excluídas com sucesso' 
+        : 'Conta recorrente excluída. Ocorrências pagas foram mantidas',
+      hasPaidOccurrences,
+      deleteMode,
+    });
   } catch (error) {
     console.error('Delete recurring bill error:', error);
     return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao excluir conta fixa', 500);

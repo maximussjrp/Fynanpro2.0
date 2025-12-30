@@ -761,10 +761,11 @@ export class TransactionService {
   /**
    * Deleta uma transação (soft delete) com reversão de saldo
    * @param cascade Se true, deleta também as transações filhas (para contas recorrentes)
+   * @param deleteMode 'all' = deleta todas (inclusive pagas), 'pending' = só deleta pendentes
    */
-  async delete(id: string, tenantId: string, cascade: boolean = false): Promise<void> {
+  async delete(id: string, tenantId: string, cascade: boolean = false, deleteMode: 'all' | 'pending' = 'pending'): Promise<{ deletedCount: number, hasPaidTransactions: boolean }> {
     try {
-      log.info('TransactionService.delete', { id, tenantId, cascade });
+      log.info('TransactionService.delete', { id, tenantId, cascade, deleteMode });
 
       // Find transaction
       const transaction = await prisma.transaction.findFirst({
@@ -781,21 +782,40 @@ export class TransactionService {
 
       // Se cascade, buscar transações filhas também
       let childTransactions: any[] = [];
+      let hasPaidTransactions = false;
+      
       if (cascade) {
         childTransactions = await prisma.transaction.findMany({
           where: {
-            parentTransactionId: id,
+            parentId: id,
             tenantId,
             deletedAt: null,
           },
         });
-        log.info('Found child transactions to delete', { count: childTransactions.length });
+        
+        // Verificar se há transações filhas pagas
+        hasPaidTransactions = childTransactions.some(t => t.status === 'completed');
+        
+        log.info('Found child transactions to delete', { 
+          count: childTransactions.length,
+          hasPaidTransactions,
+        });
+
+        // Se deleteMode = 'pending', filtrar apenas as não pagas
+        if (deleteMode === 'pending') {
+          childTransactions = childTransactions.filter(t => t.status !== 'completed');
+          log.info('Filtered to pending transactions only', { count: childTransactions.length });
+        }
       }
+
+      let deletedCount = 0;
 
       // Delete with atomic balance revert
       await prisma.$transaction(async (tx) => {
-        // Lista de transações para processar (pai + filhas)
-        const allTransactions = [transaction, ...childTransactions];
+        // Lista de transações para processar
+        // Se deleteMode = 'pending' e a transação pai está paga, NÃO deletar a pai
+        const shouldDeleteParent = deleteMode === 'all' || transaction.status !== 'completed';
+        const allTransactions = shouldDeleteParent ? [transaction, ...childTransactions] : childTransactions;
         
         for (const txn of allTransactions) {
           // Revert balance change if completed
@@ -830,13 +850,16 @@ export class TransactionService {
               deletedAt: new Date(),
             },
           });
+          
+          deletedCount++;
         }
       });
 
       log.info('TransactionService.delete success', { 
         id, 
         tenantId, 
-        deletedCount: 1 + childTransactions.length 
+        deletedCount,
+        hasPaidTransactions,
       });
 
       // Invalidar caches relacionados
@@ -846,6 +869,8 @@ export class TransactionService {
         CacheNamespace.TRANSACTIONS,
         CacheNamespace.ACCOUNTS,
       ]);
+
+      return { deletedCount, hasPaidTransactions };
     } catch (error) {
       log.error('TransactionService.delete error', { error, id, tenantId });
       throw error;

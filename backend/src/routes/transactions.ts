@@ -514,19 +514,81 @@ router.put('/:id/batch', async (req: AuthRequest, res: Response) => {
  *       404:
  *         description: Transação não encontrada ou não pertence ao tenant
  */
+
+// ==================== CHECK PAID CHILDREN ====================
+// GET /api/v1/transactions/:id/check-paid
+router.get('/:id/check-paid', async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const tenantId = req.tenantId!;
+
+    // Verificar se a transação existe
+    const transaction = await prisma.transaction.findFirst({
+      where: {
+        id,
+        tenantId,
+        deletedAt: null,
+      },
+    });
+
+    if (!transaction) {
+      return errorResponse(res, 'NOT_FOUND', 'Transação não encontrada', 404);
+    }
+
+    // Contar transações filhas pagas e pendentes
+    const [paidCount, pendingCount] = await Promise.all([
+      prisma.transaction.count({
+        where: {
+          parentId: id,
+          tenantId,
+          deletedAt: null,
+          status: 'completed',
+        },
+      }),
+      prisma.transaction.count({
+        where: {
+          parentId: id,
+          tenantId,
+          deletedAt: null,
+          status: { not: 'completed' },
+        },
+      }),
+    ]);
+
+    return successResponse(res, {
+      hasPaidTransactions: paidCount > 0,
+      paidCount,
+      pendingCount,
+      totalCount: paidCount + pendingCount,
+    });
+  } catch (error) {
+    log.error('Check paid children error', { error, id: req.params.id, tenantId: req.tenantId });
+    return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao verificar transações pagas', 500);
+  }
+});
+
 // ==================== DELETE TRANSACTION ====================
 // DELETE /api/v1/transactions/:id
-// Query param: ?cascade=true para deletar também transações filhas (para contas recorrentes)
+// Query params: 
+//   ?cascade=true para deletar também transações filhas (para contas recorrentes)
+//   ?deleteMode=all|pending (all = deleta todas incluindo pagas, pending = só pendentes)
 router.delete('/:id', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const tenantId = req.tenantId!;
     const cascade = req.query.cascade === 'true';
+    const deleteMode = (req.query.deleteMode as 'all' | 'pending') || 'pending';
 
-    // Chama service com opção de cascade
-    await transactionService.delete(id, tenantId, cascade);
+    // Chama service com opção de cascade e deleteMode
+    const result = await transactionService.delete(id, tenantId, cascade, deleteMode);
 
-    return successResponse(res, { message: 'Transação excluída com sucesso' });
+    return successResponse(res, { 
+      message: result.deletedCount > 1 
+        ? `${result.deletedCount} transações excluídas com sucesso` 
+        : 'Transação excluída com sucesso',
+      deletedCount: result.deletedCount,
+      hasPaidTransactions: result.hasPaidTransactions,
+    });
   } catch (error: any) {
     log.error('Delete transaction error', { error, id: req.params.id, tenantId: req.tenantId });
 

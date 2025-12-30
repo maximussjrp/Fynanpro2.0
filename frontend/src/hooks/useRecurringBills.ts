@@ -73,6 +73,15 @@ interface RecurringBillForm {
   notes: string;
 }
 
+interface DeleteModalState {
+  isOpen: boolean;
+  billId: string | null;
+  billName: string;
+  paidCount: number;
+  pendingCount: number;
+  isFromTransaction: boolean;
+}
+
 export function useRecurringBills() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -81,6 +90,14 @@ export function useRecurringBills() {
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [editingBill, setEditingBill] = useState<RecurringBill | null>(null);
+  const [deleteModalState, setDeleteModalState] = useState<DeleteModalState>({
+    isOpen: false,
+    billId: null,
+    billName: '',
+    paidCount: 0,
+    pendingCount: 0,
+    isFromTransaction: false,
+  });
 
   const [recurringBillForm, setRecurringBillForm] = useState<RecurringBillForm>({
     name: '',
@@ -391,22 +408,97 @@ export function useRecurringBills() {
       // Verificar se é uma transação ou RecurringBill real
       const bill = recurringBills.find(b => b.id === id);
       
-      if (bill && (bill as any).isFromTransaction) {
-        // Se veio de Transaction, deletar como transação com cascade
-        // Isso vai deletar a transação pai e todas as filhas (lançamentos)
-        await api.delete(`/transactions/${id}?cascade=true`);
-        toast.success('Conta recorrente e seus lançamentos excluídos com sucesso!');
-      } else {
-        // Se é RecurringBill real, usar a API de recurring-bills
-        await api.delete(`/recurring-bills/${id}`);
-        toast.success('Conta recorrente excluída com sucesso!');
+      if (!bill) {
+        toast.error('Receita recorrente não encontrada');
+        return;
       }
+
+      const isFromTransaction = (bill as any).isFromTransaction;
+
+      // Verificar se existem transações/ocorrências pagas
+      let checkResponse;
+      if (isFromTransaction) {
+        checkResponse = await api.get(`/transactions/${id}/check-paid`);
+      } else {
+        checkResponse = await api.get(`/recurring-bills/${id}/check-paid`);
+      }
+
+      const { hasPaidOccurrences, paidCount, pendingCount } = checkResponse.data.data;
+
+      // Se não há transações pagas, excluir diretamente
+      if (!hasPaidOccurrences || paidCount === 0) {
+        if (isFromTransaction) {
+          await api.delete(`/transactions/${id}?cascade=true&deleteMode=all`);
+        } else {
+          await api.delete(`/recurring-bills/${id}?deleteMode=all`);
+        }
+        toast.success('Receita recorrente excluída com sucesso!');
+        await loadData();
+        return;
+      }
+
+      // Se há transações pagas, abrir modal para perguntar ao usuário
+      setDeleteModalState({
+        isOpen: true,
+        billId: id,
+        billName: bill.name,
+        paidCount,
+        pendingCount,
+        isFromTransaction,
+      });
+    } catch (error: any) {
+      console.error('Erro ao excluir conta recorrente:', error.response?.data || error.message);
+      toast.error(error.response?.data?.message || 'Erro ao excluir conta recorrente');
+    }
+  };
+
+  const handleConfirmDelete = async (deleteMode: 'all' | 'pending') => {
+    try {
+      const { billId, isFromTransaction } = deleteModalState;
+      
+      if (!billId) {
+        toast.error('ID da receita recorrente não encontrado');
+        return;
+      }
+
+      if (isFromTransaction) {
+        await api.delete(`/transactions/${billId}?cascade=true&deleteMode=${deleteMode}`);
+      } else {
+        await api.delete(`/recurring-bills/${billId}?deleteMode=${deleteMode}`);
+      }
+
+      if (deleteMode === 'all') {
+        toast.success('Receita recorrente e todas as transações excluídas com sucesso!');
+      } else {
+        toast.success('Receita recorrente excluída. Transações realizadas foram mantidas.');
+      }
+
+      // Fechar modal e recarregar dados
+      setDeleteModalState({
+        isOpen: false,
+        billId: null,
+        billName: '',
+        paidCount: 0,
+        pendingCount: 0,
+        isFromTransaction: false,
+      });
       
       await loadData();
     } catch (error: any) {
       console.error('Erro ao excluir conta recorrente:', error.response?.data || error.message);
       toast.error(error.response?.data?.message || 'Erro ao excluir conta recorrente');
     }
+  };
+
+  const handleCloseDeleteModal = () => {
+    setDeleteModalState({
+      isOpen: false,
+      billId: null,
+      billName: '',
+      paidCount: 0,
+      pendingCount: 0,
+      isFromTransaction: false,
+    });
   };
 
   const handleGenerateOccurrences = async (id: string) => {
@@ -559,5 +651,9 @@ export function useRecurringBills() {
     topCategories,
     expenseBills,
     incomeBills,
+    // Modal de exclusão
+    deleteModalState,
+    handleConfirmDelete,
+    handleCloseDeleteModal,
   };
 }

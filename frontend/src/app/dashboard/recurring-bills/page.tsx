@@ -8,7 +8,7 @@ import RecurringBillsHeader from '@/components/recurring-bills/RecurringBillsHea
 import BillsGrid from '@/components/recurring-bills/BillsGrid';
 import CreateBillModal from '@/components/recurring-bills/CreateBillModal';
 import EditBillModal from '@/components/recurring-bills/EditBillModal';
-import ConfirmationModal from '@/components/recurring-bills/ConfirmationModal';
+import DeleteRecurringModal from '@/components/DeleteRecurringModal';
 
 export default function RecurringBillsPage() {
   const router = useRouter();
@@ -40,12 +40,13 @@ export default function RecurringBillsPage() {
     netFixedMonthly,
     incomeCommitmentPercent,
     topCategories,
+    deleteModalState,
+    handleConfirmDelete,
+    handleCloseDeleteModal,
   } = useRecurringBills();
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [billToDelete, setBillToDelete] = useState<string | null>(null);
 
   useEffect(() => {
     const token = accessToken;
@@ -73,19 +74,6 @@ export default function RecurringBillsPage() {
   const handleEditClick = (bill: any) => {
     openEditModal(bill);
     setShowEditModal(true);
-  };
-
-  const handleDeleteClick = (id: string) => {
-    setBillToDelete(id);
-    setShowDeleteModal(true);
-  };
-
-  const confirmDelete = async () => {
-    if (billToDelete) {
-      await handleDeleteBill(billToDelete);
-      setShowDeleteModal(false);
-      setBillToDelete(null);
-    }
   };
 
   if (loading) {
@@ -139,7 +127,7 @@ export default function RecurringBillsPage() {
           bills={recurringBills}
           loading={loading}
           onEdit={handleEditClick}
-          onDelete={handleDeleteClick}
+          onDelete={handleDeleteBill}
           onToggleStatus={toggleBillStatus}
           onGenerateOccurrences={handleGenerateOccurrences}
           onCreateNew={() => setShowCreateModal(true)}
@@ -174,19 +162,14 @@ export default function RecurringBillsPage() {
           submitting={submitting}
         />
 
-        {/* Modal de Confirmação de Exclusão */}
-        <ConfirmationModal
-          isOpen={showDeleteModal}
-          onClose={() => {
-            setShowDeleteModal(false);
-            setBillToDelete(null);
-          }}
-          onConfirm={confirmDelete}
-          title="Excluir Conta Recorrente"
-          message="Tem certeza que deseja excluir esta conta recorrente? Esta ação não pode ser desfeita."
-          confirmText="Sim, Excluir"
-          cancelText="Cancelar"
-          type="danger"
+        {/* Modal de Confirmação de Exclusão com Transações Pagas */}
+        <DeleteRecurringModal
+          isOpen={deleteModalState.isOpen}
+          onClose={handleCloseDeleteModal}
+          onConfirm={handleConfirmDelete}
+          recurringName={deleteModalState.billName}
+          paidCount={deleteModalState.paidCount}
+          pendingCount={deleteModalState.pendingCount}
         />
       </div>
     </div>
