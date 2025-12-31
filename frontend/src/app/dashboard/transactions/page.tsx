@@ -209,16 +209,53 @@ export default function TransactionsPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Tem certeza que deseja excluir esta transação?')) return;
-
+  const handleDelete = async (transaction: Transaction) => {
     try {
-      await api.delete(`/transactions/${id}`);
-      toast.success('Transação excluída com sucesso!');
+      // Verificar se é uma transação recorrente (tem frequency ou parentId)
+      const isRecurring = transaction.frequency || transaction.parentId;
+      
+      if (isRecurring) {
+        // Para recorrentes, usar o parentId se existir, senão usar o próprio id (é o template)
+        const recurringId = transaction.parentId || transaction.id;
+        
+        // Verificar se há transações pagas
+        const checkResponse = await api.get(`/transactions/${recurringId}/check-paid`);
+        const hasPaidTransactions = checkResponse.data.data?.hasPaidTransactions || false;
+        
+        if (hasPaidTransactions) {
+          // Mostrar modal perguntando o que fazer
+          const deleteAll = confirm(
+            'Esta recorrência possui transações pagas. Deseja excluir:\n\n' +
+            'OK = Todas (incluindo pagas)\n' +
+            'Cancelar = Apenas as pendentes'
+          );
+          
+          const deleteMode = deleteAll ? 'all' : 'pending';
+          await api.delete(`/transactions/${recurringId}?cascade=true&deleteMode=${deleteMode}`);
+          
+          if (deleteMode === 'all') {
+            toast.success('Todas as transações recorrentes foram excluídas!');
+          } else {
+            toast.success('Transações pendentes excluídas. As pagas foram mantidas.');
+          }
+        } else {
+          // Sem transações pagas, apenas confirmar exclusão
+          if (!confirm('Tem certeza que deseja excluir todas as ocorrências desta recorrência?')) return;
+          
+          await api.delete(`/transactions/${recurringId}?cascade=true&deleteMode=all`);
+          toast.success('Recorrência excluída com sucesso!');
+        }
+      } else {
+        // Transação normal
+        if (!confirm('Tem certeza que deseja excluir esta transação?')) return;
+        await api.delete(`/transactions/${transaction.id}`);
+        toast.success('Transação excluída com sucesso!');
+      }
+      
       loadData();
     } catch (error: any) {
       console.error('Erro ao excluir transação:', error);
-      toast.error('Erro ao excluir transação');
+      toast.error(error.response?.data?.error?.message || 'Erro ao excluir transação');
     }
   };
 
@@ -622,7 +659,7 @@ export default function TransactionsPage() {
                                 <Edit2 className="w-4 h-4 text-blue-600" />
                               </button>
                               <button
-                                onClick={() => handleDelete(transaction.id)}
+                                onClick={() => handleDelete(transaction)}
                                 className="p-2 hover:bg-red-100 rounded-lg transition-colors"
                                 title="Excluir"
                               >
