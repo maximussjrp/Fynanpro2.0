@@ -27,6 +27,8 @@ interface Transaction {
   paymentMethodId?: string;
   isRecurringOccurrence?: boolean; // Flag para identificar ocorrências
   recurringBillId?: string;
+  parentId?: string; // ID do template pai (para transações filhas de recorrentes/parcelamentos)
+  frequency?: string; // Frequência da recorrência (daily, weekly, monthly, yearly)
   category: {
     id: string;
     name: string;
