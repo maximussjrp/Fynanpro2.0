@@ -423,10 +423,13 @@ export function useRecurringBills() {
         checkResponse = await api.get(`/recurring-bills/${id}/check-paid`);
       }
 
-      const { hasPaidOccurrences, paidCount, pendingCount } = checkResponse.data.data;
+      const data = checkResponse.data.data || {};
+      const hasPaidTransactions = data.hasPaidTransactions || data.hasPaidOccurrences || false;
+      const paidCount = data.paidCount || 0;
+      const pendingCount = data.pendingCount || 0;
 
       // Se não há transações pagas, excluir diretamente
-      if (!hasPaidOccurrences || paidCount === 0) {
+      if (!hasPaidTransactions || paidCount === 0) {
         if (isFromTransaction) {
           await api.delete(`/transactions/${id}?cascade=true&deleteMode=all`);
         } else {

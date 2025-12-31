@@ -1601,4 +1601,79 @@ router.put('/category-semantics/:categoryId', authenticateToken, async (req: Aut
   }
 });
 
+// ==================== TOP PENDING CATEGORIES ====================
+router.get('/top-pending-categories', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId;
+    const limit = parseInt(req.query.limit as string) || 10;
+
+    if (!tenantId) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'TenantId não encontrado' }
+      });
+    }
+
+    // Buscar transações pendentes agrupadas por categoria
+    const pendingByCategory = await prisma.transaction.groupBy({
+      by: ['categoryId'],
+      where: {
+        tenantId,
+        status: { in: ['pending', 'overdue'] },
+        deletedAt: null,
+        type: 'expense', // Apenas despesas
+      },
+      _sum: {
+        amount: true,
+      },
+      _count: {
+        id: true,
+      },
+    });
+
+    // Buscar informações das categorias
+    const categoryIds = pendingByCategory.map(item => item.categoryId).filter(Boolean) as string[];
+    
+    const categories = await prisma.category.findMany({
+      where: {
+        id: { in: categoryIds },
+      },
+      select: {
+        id: true,
+        name: true,
+        icon: true,
+        color: true,
+      },
+    });
+
+    // Mapear categorias
+    const categoryMap = new Map(categories.map(c => [c.id, c]));
+
+    // Combinar dados
+    const topCategories = pendingByCategory
+      .filter(item => item.categoryId)
+      .map(item => ({
+        category: categoryMap.get(item.categoryId!),
+        totalAmount: Number(item._sum.amount || 0),
+        count: item._count.id,
+      }))
+      .sort((a, b) => b.totalAmount - a.totalAmount)
+      .slice(0, limit);
+
+    return res.json({
+      success: true,
+      data: {
+        categories: topCategories,
+        total: topCategories.length,
+      },
+    });
+  } catch (error) {
+    log.error('Error fetching top-pending-categories:', error);
+    return res.status(500).json({
+      success: false,
+      error: { message: 'Erro ao buscar categorias pendentes' }
+    });
+  }
+});
+
 export default router;
