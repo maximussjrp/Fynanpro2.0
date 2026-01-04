@@ -3,6 +3,7 @@ import { prisma } from '../main';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { successResponse, errorResponse } from '../utils/response';
 import { z } from 'zod';
+import { log } from '../utils/logger';
 
 const router = Router();
 
@@ -653,9 +654,11 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
 
     const hasPaidOccurrences = paidOccurrences.length > 0;
 
-    // Se deleteMode = 'all', excluir tudo (recorrência + todas as ocorrências)
-    // Se deleteMode = 'pending', excluir apenas recorrência e ocorrências não pagas
+    // Se deleteMode = 'all', excluir tudo (recorrência + todas as ocorrências + transações)
+    // Se deleteMode = 'pending', excluir apenas recorrência e ocorrências/transações não pagas
     // CORREÇÃO BUG #2: Mudado para SOFT DELETE para manter histórico e auditoria
+    const now = new Date();
+    
     await prisma.$transaction(async (tx) => {
       if (deleteMode === 'all') {
         // Soft delete TODAS as ocorrências (inclusive as pagas)
@@ -665,8 +668,24 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
             tenantId,
           },
           data: {
-            deletedAt: new Date(),
+            deletedAt: now,
           },
+        });
+        
+        // Soft delete TODAS as transações vinculadas a esta recorrência
+        await tx.transaction.updateMany({
+          where: {
+            recurringBillId: id,
+            tenantId,
+          },
+          data: {
+            deletedAt: now,
+          },
+        });
+        
+        log.info('Deleted all transactions for recurring bill', { 
+          recurringBillId: id, 
+          deleteMode 
         });
       } else {
         // Soft delete apenas ocorrências NÃO PAGAS
@@ -677,8 +696,26 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
             status: { not: 'paid' },
           },
           data: {
-            deletedAt: new Date(),
+            deletedAt: now,
           },
+        });
+        
+        // Soft delete apenas transações PENDENTES vinculadas a esta recorrência
+        // Mantém transações já pagas (completed)
+        await tx.transaction.updateMany({
+          where: {
+            recurringBillId: id,
+            tenantId,
+            status: { not: 'completed' }, // Mantém as já pagas
+          },
+          data: {
+            deletedAt: now,
+          },
+        });
+        
+        log.info('Deleted pending transactions for recurring bill', { 
+          recurringBillId: id, 
+          deleteMode 
         });
       }
 
@@ -686,7 +723,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
       await tx.recurringBill.update({
         where: { id },
         data: {
-          deletedAt: new Date(),
+          deletedAt: now,
           status: 'cancelled',
         },
       });
