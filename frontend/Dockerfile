@@ -12,8 +12,11 @@ RUN npm ci
 # Copy source code
 COPY . .
 
-# Set environment for build
-ARG NEXT_PUBLIC_API_URL
+# Copy .env.production explicitly
+COPY .env.production .env.production
+
+# Set environment for build (fallback if not passed as ARG)
+ARG NEXT_PUBLIC_API_URL=https://api.utopsistema.com.br/api/v1
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 
 # Build Next.js app
