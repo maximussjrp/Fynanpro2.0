@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useRecurringBills } from '@/hooks/useRecurringBills';
 import RecurringBillsHeader from '@/components/recurring-bills/RecurringBillsHeader';
 import BillsGrid from '@/components/recurring-bills/BillsGrid';
-import CreateBillModal from '@/components/recurring-bills/CreateBillModal';
+import UnifiedTransactionModal from '@/components/UnifiedTransactionModal';
 import EditBillModal from '@/components/recurring-bills/EditBillModal';
 import DeleteRecurringModal from '@/components/DeleteRecurringModal';
 
@@ -57,11 +57,9 @@ export default function RecurringBillsPage() {
     loadData();
   }, []);
 
-  const handleCreateSubmit = async (e: React.FormEvent) => {
-    const success = await handleCreateBill(e);
-    if (success) {
-      setShowCreateModal(false);
-    }
+  const handleCreateSuccess = async () => {
+    await loadData();
+    // Modal permanece aberto para criar mais
   };
 
   const handleEditSubmit = async (e: React.FormEvent) => {
@@ -133,17 +131,13 @@ export default function RecurringBillsPage() {
           onCreateNew={() => setShowCreateModal(true)}
         />
 
-        {/* Modal Criar */}
-        <CreateBillModal
+        {/* Modal Criar - Usando modal unificado com tab de recorrência */}
+        <UnifiedTransactionModal
           isOpen={showCreateModal}
           onClose={() => setShowCreateModal(false)}
-          onSubmit={handleCreateSubmit}
-          form={recurringBillForm}
-          setForm={setRecurringBillForm}
-          categories={categories}
-          bankAccounts={bankAccounts}
-          paymentMethods={paymentMethods}
-          submitting={submitting}
+          onSuccess={handleCreateSuccess}
+          defaultType="expense"
+          initialTab="recurring"
         />
 
         {/* Modal Editar */}
