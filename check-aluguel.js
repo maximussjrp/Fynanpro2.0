@@ -1,37 +1,22 @@
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
-async function check() {
-  const transactions = await prisma.transaction.findMany({
-    where: { 
-      description: { contains: 'aluguel', mode: 'insensitive' }
-    },
-    select: { 
-      id: true, 
-      description: true, 
-      parentId: true, 
-      status: true 
-    }
+async function restore() {
+  // Restaurar RecurringBills deletadas
+  const bills = await prisma.recurringBill.updateMany({
+    where: { deletedAt: { not: null } },
+    data: { deletedAt: null }
   });
+  console.log('RecurringBills restauradas:', bills.count);
   
-  console.log('Transações com aluguel:');
-  console.log(JSON.stringify(transactions, null, 2));
-  
-  // Verificar RecurringBillOccurrences também
-  const occurrences = await prisma.recurringBillOccurrence.findMany({
-    where: {
-      recurringBill: {
-        name: { contains: 'aluguel', mode: 'insensitive' }
-      }
-    },
-    include: {
-      recurringBill: { select: { id: true, name: true } }
-    }
+  // Restaurar Occurrences deletadas
+  const occs = await prisma.recurringBillOccurrence.updateMany({
+    where: { deletedAt: { not: null } },
+    data: { deletedAt: null }
   });
-  console.log('\nRecurringBillOccurrences com aluguel:');
-  console.log(JSON.stringify(occurrences, null, 2));
+  console.log('Occurrences restauradas:', occs.count);
   
   await prisma.$disconnect();
 }
 
-check().catch(console.error);
+restore().catch(console.error);

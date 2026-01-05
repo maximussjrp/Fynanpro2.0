@@ -29,6 +29,9 @@ interface Transaction {
   recurringBillId?: string;
   parentId?: string; // ID do template pai (para transações filhas de recorrentes/parcelamentos)
   frequency?: string; // Frequência da recorrência (daily, weekly, monthly, yearly)
+  transactionType?: 'single' | 'recurring' | 'installment'; // Tipo de transação
+  installmentNumber?: number; // Número da parcela atual
+  totalInstallments?: number; // Total de parcelas
   category: {
     id: string;
     name: string;
@@ -213,39 +216,44 @@ export default function TransactionsPage() {
 
   const handleDelete = async (transaction: Transaction) => {
     try {
-      // Verificar se é uma transação recorrente (tem frequency ou parentId)
-      const isRecurring = transaction.frequency || transaction.parentId;
+      // Verificar se é uma transação recorrente (tem frequency ou parentId com transactionType = recurring)
+      const isRecurring = transaction.frequency || (transaction.parentId && transaction.transactionType === 'recurring');
       
-      if (isRecurring) {
-        // Para recorrentes, usar o parentId se existir, senão usar o próprio id (é o template)
-        const recurringId = transaction.parentId || transaction.id;
+      // Verificar se é parcelamento (tem parentId com transactionType = installment ou installmentNumber)
+      const isInstallment = (transaction.parentId && transaction.transactionType === 'installment') || 
+                           (transaction.installmentNumber && transaction.totalInstallments);
+      
+      if (isRecurring || isInstallment) {
+        // Para recorrentes/parcelamentos, usar o parentId se existir, senão usar o próprio id (é o template)
+        const parentId = transaction.parentId || transaction.id;
+        const typeLabel = isInstallment ? 'parcelamento' : 'recorrência';
         
         // Verificar se há transações pagas
-        const checkResponse = await api.get(`/transactions/${recurringId}/check-paid`);
+        const checkResponse = await api.get(`/transactions/${parentId}/check-paid`);
         const hasPaidTransactions = checkResponse.data.data?.hasPaidTransactions || false;
         
         if (hasPaidTransactions) {
           // Mostrar modal perguntando o que fazer
           const deleteAll = confirm(
-            'Esta recorrência possui transações pagas. Deseja excluir:\n\n' +
+            `Este ${typeLabel} possui transações pagas. Deseja excluir:\n\n` +
             'OK = Todas (incluindo pagas)\n' +
             'Cancelar = Apenas as pendentes'
           );
           
           const deleteMode = deleteAll ? 'all' : 'pending';
-          await api.delete(`/transactions/${recurringId}?cascade=true&deleteMode=${deleteMode}`);
+          await api.delete(`/transactions/${parentId}?cascade=true&deleteMode=${deleteMode}`);
           
           if (deleteMode === 'all') {
-            toast.success('Todas as transações recorrentes foram excluídas!');
+            toast.success(`Todas as transações do ${typeLabel} foram excluídas!`);
           } else {
             toast.success('Transações pendentes excluídas. As pagas foram mantidas.');
           }
         } else {
           // Sem transações pagas, apenas confirmar exclusão
-          if (!confirm('Tem certeza que deseja excluir todas as ocorrências desta recorrência?')) return;
+          if (!confirm(`Tem certeza que deseja excluir todas as ${isInstallment ? 'parcelas deste parcelamento' : 'ocorrências desta recorrência'}?`)) return;
           
-          await api.delete(`/transactions/${recurringId}?cascade=true&deleteMode=all`);
-          toast.success('Recorrência excluída com sucesso!');
+          await api.delete(`/transactions/${parentId}?cascade=true&deleteMode=all`);
+          toast.success(`${isInstallment ? 'Parcelamento' : 'Recorrência'} excluído(a) com sucesso!`);
         }
       } else {
         // Transação normal
