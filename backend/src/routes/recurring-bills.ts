@@ -192,6 +192,7 @@ router.get('/occurrences', async (req: AuthRequest, res: Response) => {
 
     const where: any = {
       tenantId,
+      deletedAt: null, // Filtrar apenas ocorrências não deletadas
     };
 
     // Filtro de data
