@@ -25,7 +25,7 @@ export const CreateTransactionSchema = z.object({
   
   // Campos para transações recorrentes
   transactionType: z.enum(['single', 'recurring', 'installment']).optional(),
-  frequency: z.enum(['daily', 'weekly', 'monthly', 'yearly']).optional(),
+  frequency: z.enum(['daily', 'weekly', 'biweekly', 'monthly', 'bimonthly', 'quarterly', 'semiannual', 'yearly']).optional(),
   frequencyInterval: z.number().int().positive().optional(),
   totalOccurrences: z.number().int().positive().optional(),
   
@@ -86,6 +86,10 @@ export const UpdateTransactionSchema = z.object({
   status: z.enum(['completed', 'pending', 'overdue']).optional(),
   notes: z.string().max(1000).nullable().optional(),
   tags: z.string().nullable().optional(),
+  
+  // Campos para transações parceladas
+  totalInstallments: z.number().int().positive().optional(),
+  installmentNumber: z.number().int().positive().optional(),
 });
 
 export type UpdateTransactionDTO = z.infer<typeof UpdateTransactionSchema>;
@@ -95,6 +99,7 @@ export const TransactionFiltersSchema = z.object({
   startDate: z.string().optional(),
   endDate: z.string().optional(),
   type: z.enum(['income', 'expense', 'transfer']).optional(),
+  transactionType: z.enum(['single', 'recurring', 'installment']).optional(),
   categoryId: z.string().uuid().optional(),
   bankAccountId: z.string().uuid().optional(),
   paymentMethodId: z.string().uuid().optional(),

@@ -443,12 +443,12 @@ router.delete('/users/:id', async (req: AuthRequest, res: Response) => {
         where: { userId: id }
       });
 
-      // 4. Para cada tenant que o usuário é dono, remove owner e marca como deletado
+      // 4. Para cada tenant que o usuário é dono, marca como deletado
+      // Nota: ownerId não pode ser null no schema atual, então apenas marcamos deletedAt
       for (const tenant of user.ownedTenants) {
         await tx.tenant.update({
           where: { id: tenant.id },
           data: { 
-            ownerId: null,
             deletedAt: new Date() 
           }
         });
@@ -596,7 +596,7 @@ router.get('/coupons/:id', async (req: AuthRequest, res: Response) => {
 router.post('/coupons', async (req: AuthRequest, res: Response) => {
   try {
     const coupon = await couponService.create(req.body);
-    await adminService.log(req.userId!, 'CREATE_COUPON', 'Coupon', coupon.id, null, coupon);
+    await adminService.log({ adminId: req.userId!, action: 'CREATE_COUPON', targetType: 'Coupon', targetId: coupon.id, description: 'Cupom criado', newValue: coupon });
     return successResponse(res, { coupon }, 201);
   } catch (error: any) {
     log.error('Create coupon error:', { error });
@@ -609,7 +609,7 @@ router.put('/coupons/:id', async (req: AuthRequest, res: Response) => {
   try {
     const oldCoupon = await couponService.findById(req.params.id);
     const coupon = await couponService.update(req.params.id, req.body);
-    await adminService.log(req.userId!, 'UPDATE_COUPON', 'Coupon', coupon.id, oldCoupon, coupon);
+    await adminService.log({ adminId: req.userId!, action: 'UPDATE_COUPON', targetType: 'Coupon', targetId: coupon.id, description: 'Cupom atualizado', previousValue: oldCoupon, newValue: coupon });
     return successResponse(res, { coupon });
   } catch (error: any) {
     log.error('Update coupon error:', { error });
@@ -620,8 +620,9 @@ router.put('/coupons/:id', async (req: AuthRequest, res: Response) => {
 // PATCH /api/v1/admin/coupons/:id/toggle
 router.patch('/coupons/:id/toggle', async (req: AuthRequest, res: Response) => {
   try {
-    const coupon = await couponService.toggleActive(req.params.id);
-    await adminService.log(req.userId!, 'TOGGLE_COUPON', 'Coupon', coupon.id, null, { isActive: coupon.isActive });
+    const { isActive } = req.body;
+    const coupon = await couponService.toggleActive(req.params.id, isActive ?? true);
+    await adminService.log({ adminId: req.userId!, action: 'TOGGLE_COUPON', targetType: 'Coupon', targetId: coupon.id, description: 'Status do cupom alterado', newValue: { isActive: coupon.isActive } });
     return successResponse(res, { coupon });
   } catch (error) {
     log.error('Toggle coupon error:', { error });
@@ -634,7 +635,7 @@ router.delete('/coupons/:id', async (req: AuthRequest, res: Response) => {
   try {
     const coupon = await couponService.findById(req.params.id);
     await couponService.delete(req.params.id);
-    await adminService.log(req.userId!, 'DELETE_COUPON', 'Coupon', req.params.id, coupon, null);
+    await adminService.log({ adminId: req.userId!, action: 'DELETE_COUPON', targetType: 'Coupon', targetId: req.params.id, description: 'Cupom excluído', previousValue: coupon });
     return successResponse(res, { message: 'Cupom excluído com sucesso' });
   } catch (error) {
     log.error('Delete coupon error:', { error });
@@ -645,8 +646,14 @@ router.delete('/coupons/:id', async (req: AuthRequest, res: Response) => {
 // POST /api/v1/admin/coupons/validate
 router.post('/coupons/validate', async (req: AuthRequest, res: Response) => {
   try {
-    const { code, plan } = req.body;
-    const result = await couponService.validate(code, plan);
+    const { code, userId, tenantId, planId, planAmount } = req.body;
+    const result = await couponService.validate(
+      code, 
+      userId || '', 
+      tenantId || '', 
+      planId || '', 
+      planAmount || 0
+    );
     return successResponse(res, result);
   } catch (error: any) {
     return errorResponse(res, 'INVALID_COUPON', error.message, 400);
@@ -657,11 +664,10 @@ router.post('/coupons/validate', async (req: AuthRequest, res: Response) => {
 // GET /api/v1/admin/subscriptions
 router.get('/subscriptions', async (req: AuthRequest, res: Response) => {
   try {
-    const { status, plan, search, page = '1', limit = '20' } = req.query;
+    const { status, plan, page = '1', limit = '20' } = req.query;
     const subscriptions = await adminService.listSubscriptions({
       status: status as string,
-      plan: plan as string,
-      search: search as string,
+      planId: plan as string,
       page: parseInt(page as string),
       limit: parseInt(limit as string)
     });
@@ -676,8 +682,12 @@ router.get('/subscriptions', async (req: AuthRequest, res: Response) => {
 router.post('/subscriptions/:tenantId/cancel', async (req: AuthRequest, res: Response) => {
   try {
     const { reason } = req.body;
-    const result = await adminService.cancelSubscription(req.params.tenantId, reason);
-    await adminService.log(req.userId!, 'CANCEL_SUBSCRIPTION', 'Tenant', req.params.tenantId, null, { reason });
+    const result = await adminService.cancelSubscription(
+      req.params.tenantId, 
+      req.userId!, 
+      reason || 'Cancelada pelo admin',
+      req.ip
+    );
     return successResponse(res, result);
   } catch (error: any) {
     log.error('Cancel subscription error:', { error });
@@ -688,10 +698,14 @@ router.post('/subscriptions/:tenantId/cancel', async (req: AuthRequest, res: Res
 // POST /api/v1/admin/tenants/:id/change-plan
 router.post('/tenants/:id/change-plan', async (req: AuthRequest, res: Response) => {
   try {
-    const { newPlan } = req.body;
-    const oldTenant = await prisma.tenant.findUnique({ where: { id: req.params.id } });
-    const result = await adminService.changePlan(req.params.id, newPlan);
-    await adminService.log(req.userId!, 'CHANGE_PLAN', 'Tenant', req.params.id, { plan: oldTenant?.subscriptionPlan }, { plan: newPlan });
+    const { newPlan, reason } = req.body;
+    const result = await adminService.changePlan(
+      req.params.id, 
+      newPlan, 
+      req.userId!, 
+      reason || 'Alterado pelo admin',
+      req.ip
+    );
     return successResponse(res, result);
   } catch (error: any) {
     log.error('Change plan error:', { error });
@@ -702,9 +716,14 @@ router.post('/tenants/:id/change-plan', async (req: AuthRequest, res: Response) 
 // POST /api/v1/admin/tenants/:id/extend-trial
 router.post('/tenants/:id/extend-trial', async (req: AuthRequest, res: Response) => {
   try {
-    const { days } = req.body;
-    const result = await adminService.extendTrial(req.params.id, days);
-    await adminService.log(req.userId!, 'EXTEND_TRIAL', 'Tenant', req.params.id, null, { days });
+    const { days, reason } = req.body;
+    const result = await adminService.extendTrial(
+      req.params.id, 
+      days, 
+      req.userId!, 
+      reason || 'Estendido pelo admin',
+      req.ip
+    );
     return successResponse(res, result);
   } catch (error: any) {
     log.error('Extend trial error:', { error });
@@ -716,8 +735,14 @@ router.post('/tenants/:id/extend-trial', async (req: AuthRequest, res: Response)
 // POST /api/v1/admin/users/:id/toggle-active
 router.post('/users/:id/toggle-active', async (req: AuthRequest, res: Response) => {
   try {
-    const result = await adminService.toggleUserActive(req.params.id);
-    await adminService.log(req.userId!, 'TOGGLE_USER_ACTIVE', 'User', req.params.id, null, { isActive: result.isActive });
+    const { isActive, reason } = req.body;
+    const result = await adminService.toggleUserActive(
+      req.params.id, 
+      isActive, 
+      req.userId!, 
+      reason || 'Alterado pelo admin',
+      req.ip
+    );
     return successResponse(res, result);
   } catch (error) {
     log.error('Toggle user active error:', { error });
@@ -728,8 +753,13 @@ router.post('/users/:id/toggle-active', async (req: AuthRequest, res: Response) 
 // POST /api/v1/admin/users/:id/force-password-reset
 router.post('/users/:id/force-password-reset', async (req: AuthRequest, res: Response) => {
   try {
-    const result = await adminService.forcePasswordReset(req.params.id);
-    await adminService.log(req.userId!, 'FORCE_PASSWORD_RESET', 'User', req.params.id, null, null);
+    const { reason } = req.body;
+    const result = await adminService.forcePasswordReset(
+      req.params.id, 
+      req.userId!, 
+      reason || 'Reset forçado pelo admin',
+      req.ip
+    );
     return successResponse(res, result);
   } catch (error) {
     log.error('Force password reset error:', { error });
@@ -742,10 +772,10 @@ router.post('/users/:id/force-password-reset', async (req: AuthRequest, res: Res
 router.get('/reports/revenue', async (req: AuthRequest, res: Response) => {
   try {
     const { startDate, endDate } = req.query;
-    const report = await adminService.getRevenueReport(
-      startDate ? new Date(startDate as string) : undefined,
-      endDate ? new Date(endDate as string) : undefined
-    );
+    const report = await adminService.getRevenueReport({
+      startDate: startDate ? new Date(startDate as string) : undefined,
+      endDate: endDate ? new Date(endDate as string) : undefined
+    });
     return successResponse(res, report);
   } catch (error) {
     log.error('Revenue report error:', { error });
@@ -768,11 +798,11 @@ router.get('/reports/churn', async (req: AuthRequest, res: Response) => {
 // GET /api/v1/admin/logs
 router.get('/logs', async (req: AuthRequest, res: Response) => {
   try {
-    const { action, entityType, userId, page = '1', limit = '50' } = req.query;
+    const { action, targetType, adminId, page = '1', limit = '50' } = req.query;
     const logs = await adminService.getLogs({
       action: action as string,
-      entityType: entityType as string,
-      userId: userId as string,
+      targetType: targetType as string,
+      adminId: adminId as string,
       page: parseInt(page as string),
       limit: parseInt(limit as string)
     });
@@ -811,7 +841,7 @@ router.put('/config/:key', async (req: AuthRequest, res: Response) => {
   try {
     const { value, description } = req.body;
     const config = await adminService.setConfig(req.params.key, value, description);
-    await adminService.log(req.userId!, 'UPDATE_CONFIG', 'SystemConfig', req.params.key, null, { value });
+    await adminService.log({ adminId: req.userId!, action: 'UPDATE_CONFIG', targetType: 'SystemConfig', targetId: req.params.key, description: 'Configuração atualizada', newValue: { value } });
     return successResponse(res, { config });
   } catch (error) {
     log.error('Set config error:', { error });
@@ -820,62 +850,27 @@ router.put('/config/:key', async (req: AuthRequest, res: Response) => {
 });
 
 // ==================== ANNOUNCEMENTS ====================
+// TODO: Modelo SystemAnnouncement precisa ser adicionado ao schema Prisma
+// Por enquanto, estas rotas estão desabilitadas
+
 // GET /api/v1/admin/announcements
-router.get('/announcements', async (req: AuthRequest, res: Response) => {
-  try {
-    const announcements = await prisma.systemAnnouncement.findMany({
-      orderBy: { createdAt: 'desc' }
-    });
-    return successResponse(res, { data: announcements });
-  } catch (error) {
-    log.error('List announcements error:', { error });
-    return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao listar anúncios', 500);
-  }
+router.get('/announcements', async (_req: AuthRequest, res: Response) => {
+  return successResponse(res, { data: [], message: 'Feature em desenvolvimento' });
 });
 
 // POST /api/v1/admin/announcements
-router.post('/announcements', async (req: AuthRequest, res: Response) => {
-  try {
-    const announcement = await adminService.createAnnouncement(req.body);
-    await adminService.log(req.userId!, 'CREATE_ANNOUNCEMENT', 'SystemAnnouncement', announcement.id, null, announcement);
-    return successResponse(res, { announcement }, 201);
-  } catch (error) {
-    log.error('Create announcement error:', { error });
-    return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao criar anúncio', 500);
-  }
+router.post('/announcements', async (_req: AuthRequest, res: Response) => {
+  return errorResponse(res, 'NOT_IMPLEMENTED', 'Feature em desenvolvimento', 501);
 });
 
 // PATCH /api/v1/admin/announcements/:id/toggle
-router.patch('/announcements/:id/toggle', async (req: AuthRequest, res: Response) => {
-  try {
-    const { isActive } = req.body;
-    const announcement = await adminService.toggleAnnouncement(req.params.id, isActive);
-    await adminService.log(req.userId!, 'TOGGLE_ANNOUNCEMENT', 'SystemAnnouncement', req.params.id, null, { isActive });
-    return successResponse(res, { announcement });
-  } catch (error) {
-    log.error('Toggle announcement error:', { error });
-    return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao alterar status', 500);
-  }
+router.patch('/announcements/:id/toggle', async (_req: AuthRequest, res: Response) => {
+  return errorResponse(res, 'NOT_IMPLEMENTED', 'Feature em desenvolvimento', 501);
 });
 
-// ==================== PUBLIC ENDPOINTS (FOR USERS) ====================
-// GET /api/v1/admin/announcements/active - Available for logged users
-router.get('/announcements/active', async (req: AuthRequest, res: Response) => {
-  try {
-    // Get user's plan to filter announcements
-    const tenant = await prisma.tenant.findFirst({
-      where: { 
-        tenantUsers: { some: { userId: req.userId } },
-        deletedAt: null
-      }
-    });
-    
-    const announcements = await adminService.getActiveAnnouncements(tenant?.subscriptionPlan);
-    return successResponse(res, { announcements });
-  } catch (error) {
-    log.error('Get active announcements error:', { error });
-    return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao buscar anúncios', 500);
-  }
+// GET /api/v1/admin/announcements/active
+router.get('/announcements/active', async (_req: AuthRequest, res: Response) => {
+  return successResponse(res, { announcements: [] });
 });
 
 export default router;

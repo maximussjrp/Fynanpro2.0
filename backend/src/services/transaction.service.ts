@@ -95,6 +95,11 @@ export class TransactionService {
         where.paymentMethodId = filters.paymentMethodId;
       }
 
+      // Filtro por tipo de transação (single, recurring, installment)
+      if (filters.transactionType) {
+        where.transactionType = filters.transactionType;
+      }
+
       if (filters.status) {
         where.status = filters.status;
       } else {
@@ -772,12 +777,13 @@ export class TransactionService {
     try {
       log.info('TransactionService.delete', { id, tenantId, cascade, deleteMode });
 
-      // Find transaction
+      // Find transaction - INCLUIR pais "deletados" pois são templates de recorrentes
+      // Transações recorrentes têm pai com deletedAt definido para não aparecer na listagem
       const transaction = await prisma.transaction.findFirst({
         where: {
           id,
           tenantId,
-          deletedAt: null,
+          // NÃO filtrar por deletedAt para encontrar pais de recorrentes
         },
       });
 

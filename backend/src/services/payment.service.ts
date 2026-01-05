@@ -170,7 +170,7 @@ async function asaasRequest(endpoint: string, method: string = 'GET', body?: any
   });
 
   if (!response.ok) {
-    const error = await response.json();
+    const error = await response.json() as { errors?: Array<{ description?: string }> };
     log.error('Asaas API Error', { endpoint, error });
     throw new Error(error.errors?.[0]?.description || 'Erro na API Asaas');
   }
@@ -251,6 +251,7 @@ export const paymentService = {
       create: {
         tenantId,
         planId,
+        plan: planId,
         billingCycle,
         status: 'pending',
         asaasCustomerId: customer.id,
@@ -260,6 +261,7 @@ export const paymentService = {
       },
       update: {
         planId,
+        plan: planId,
         billingCycle,
         status: 'pending',
         asaasCustomerId: customer.id,
@@ -341,6 +343,7 @@ export const paymentService = {
       create: {
         tenantId,
         planId,
+        plan: planId,
         billingCycle,
         status: subscription.status === 'ACTIVE' ? 'active' : 'pending',
         asaasCustomerId: customer.id,
@@ -350,6 +353,7 @@ export const paymentService = {
       },
       update: {
         planId,
+        plan: planId,
         billingCycle,
         status: subscription.status === 'ACTIVE' ? 'active' : 'pending',
         asaasCustomerId: customer.id,
@@ -412,24 +416,23 @@ export const paymentService = {
 
     // Upsert do pagamento
     await prisma.payment.upsert({
-      where: { id: existingPayment?.id || 'new' },
+      where: { asaasPaymentId: payment.id },
       create: {
-        tenantId: subscription.tenantId,
         subscriptionId: subscription.id,
         asaasPaymentId: payment.id,
-        amount: payment.value,
+        value: payment.value,
         status,
         billingType: payment.billingType,
         dueDate: new Date(payment.dueDate),
         paidAt: status === 'paid' ? new Date() : null,
         invoiceUrl: payment.invoiceUrl,
-        boletoUrl: payment.bankSlipUrl,
-        pixQrCodeUrl: payment.pixQrCodeUrl,
+        bankSlipUrl: payment.bankSlipUrl,
+        pixQrCode: payment.pixQrCodeUrl,
         pixCopiaECola: payment.pixCopiaECola,
       },
       update: {
         status,
-        paidAt: status === 'paid' ? new Date() : existingPayment?.paidAt,
+        paidAt: status === 'paid' ? new Date() : null,
       }
     });
 
@@ -441,19 +444,19 @@ export const paymentService = {
         data: {
           status: 'active',
           currentPeriodStart: new Date(),
-          currentPeriodEnd: this.calculatePeriodEnd(subscription.billingCycle as 'monthly' | 'yearly'),
+          currentPeriodEnd: this.calculatePeriodEnd((subscription.billingCycle || 'monthly') as 'monthly' | 'yearly'),
         }
       });
 
       await prisma.tenant.update({
         where: { id: subscription.tenantId },
         data: {
-          subscriptionPlan: subscription.planId,
+          subscriptionPlan: subscription.plan,
           subscriptionStatus: 'active',
         }
       });
 
-      log.info('Assinatura ativada', { tenantId: subscription.tenantId, planId: subscription.planId });
+      log.info('Assinatura ativada', { tenantId: subscription.tenantId, plan: subscription.plan });
     }
 
     if (event === 'PAYMENT_OVERDUE') {

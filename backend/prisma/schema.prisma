@@ -71,6 +71,7 @@ model Tenant {
   imports             Import[]
   savedFilters        SavedFilter[]
   auditLogs           AuditLog[]
+  subscriptions       Subscription[]
 
   @@index([ownerId])
   @@index([subscriptionPlan])
@@ -636,4 +637,110 @@ model RefreshToken {
   @@index([token])
   @@index([expiresAt])
   @@index([userId, isRevoked, expiresAt])
+}
+
+// ==================== ADMIN LOGS ====================
+
+model AdminLog {
+  id              String    @id @default(uuid())
+  adminId         String
+  action          String
+  targetType      String
+  targetId        String
+  description     String
+  previousValue   String?   // JSON
+  newValue        String?   // JSON
+  ipAddress       String?
+  userAgent       String?
+  createdAt       DateTime  @default(now())
+
+  @@index([adminId])
+  @@index([action])
+  @@index([targetType, targetId])
+  @@index([createdAt])
+}
+
+// ==================== SYSTEM CONFIG ====================
+
+model SystemConfig {
+  id              String    @id @default(uuid())
+  key             String    @unique
+  value           String
+  description     String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([key])
+}
+
+// ==================== SYSTEM ANNOUNCEMENTS ====================
+
+model SystemAnnouncement {
+  id              String    @id @default(uuid())
+  title           String
+  content         String
+  type            String    @default("info") // info, warning, success, error
+  targetPlans     String?   // JSON array de planos, null = todos
+  isActive        Boolean   @default(true)
+  startsAt        DateTime?
+  endsAt          DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([isActive])
+  @@index([startsAt, endsAt])
+}
+
+// ==================== PAYMENT & SUBSCRIPTION ====================
+
+model Subscription {
+  id                    String    @id @default(uuid())
+  tenantId              String    @unique
+  asaasSubscriptionId   String?   @unique
+  asaasCustomerId       String?
+  plan                  String    @default("trial") // trial, basic, plus, premium, business
+  planId                String?   // ID do plano no sistema
+  status                String    @default("active") // active, inactive, pending, cancelled, overdue
+  billingType           String?   // BOLETO, CREDIT_CARD, PIX
+  billingCycle          String?   // monthly, yearly
+  value                 Float?
+  cycle                 String?   // MONTHLY, YEARLY
+  nextDueDate           DateTime?
+  currentPeriodStart    DateTime?
+  currentPeriodEnd      DateTime?
+  cancelledAt           DateTime?
+  cancellationReason    String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  tenant                Tenant    @relation(fields: [tenantId], references: [id])
+  payments              Payment[]
+
+  @@index([asaasSubscriptionId])
+  @@index([status])
+}
+
+model Payment {
+  id                  String    @id @default(uuid())
+  subscriptionId      String
+  asaasPaymentId      String?   @unique
+  value               Float
+  netValue            Float?
+  status              String    @default("pending") // pending, confirmed, received, overdue, refunded, cancelled
+  billingType         String?   // BOLETO, CREDIT_CARD, PIX
+  dueDate             DateTime?
+  paymentDate         DateTime?
+  paidAt              DateTime?
+  invoiceUrl          String?
+  bankSlipUrl         String?
+  pixQrCode           String?
+  pixCopiaECola       String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  subscription        Subscription @relation(fields: [subscriptionId], references: [id])
+
+  @@index([subscriptionId])
+  @@index([asaasPaymentId])
+  @@index([status])
 }

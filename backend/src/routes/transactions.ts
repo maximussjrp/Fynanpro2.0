@@ -191,12 +191,13 @@ router.get('/:id/check-paid', async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const tenantId = req.tenantId!;
 
-    // Verificar se a transação existe
+    // Verificar se a transação existe (INCLUI pais "deletados" pois são templates)
+    // Transações recorrentes têm pai com deletedAt definido para não aparecer na listagem
     const transaction = await prisma.transaction.findFirst({
       where: {
         id,
         tenantId,
-        deletedAt: null,
+        // NÃO filtrar por deletedAt pois pais de recorrentes são marcados como deletados
       },
     });
 
@@ -934,10 +935,20 @@ router.post('/recurring', async (req: AuthRequest, res: Response) => {
       message: 'Transação recorrente criada com sucesso',
     }, 201);
   } catch (error: any) {
-    log.error('Create recurring transaction error', { error, body: req.body, tenantId: req.tenantId });
+    log.error('Create recurring transaction error', { 
+      error: error.message || error, 
+      errorName: error.name,
+      zodErrors: error.errors || null,
+      body: req.body, 
+      tenantId: req.tenantId 
+    });
 
     if (error.name === 'ZodError') {
-      return errorResponse(res, 'VALIDATION_ERROR', 'Dados inválidos', 400, error.errors);
+      const firstError = error.errors?.[0];
+      const errorMessage = firstError 
+        ? `${firstError.path?.join('.')}: ${firstError.message}` 
+        : 'Dados inválidos';
+      return errorResponse(res, 'VALIDATION_ERROR', errorMessage, 400, error.errors);
     }
 
     if (error.message.includes('obrigatória') || error.message.includes('não encontrada')) {

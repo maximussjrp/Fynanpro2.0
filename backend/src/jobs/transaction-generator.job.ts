@@ -43,9 +43,9 @@ export function startTransactionGeneratorJob() {
         try {
           const result = await generateAllTransactions(tenant.id, tenant.ownerId);
 
-          totalRecurring += result.generatedRecurring;
+          totalRecurring += result.generatedUnifiedRecurring + result.generatedOccurrences;
           totalInstallments += result.generatedInstallments;
-          totalOverdue += result.updatedOverdue;
+          totalOverdue += result.updatedOverdueOccurrences + result.updatedOverdueTransactions;
 
           if (result.errors.length > 0) {
             log.warn('[JOB] Tenant com erros', { 
@@ -57,7 +57,7 @@ export function startTransactionGeneratorJob() {
 
           log.info('[JOB] Tenant processado', { 
             tenantName: tenant.name, 
-            recurring: result.generatedRecurring, 
+            recurring: result.generatedUnifiedRecurring + result.generatedOccurrences, 
             installments: result.generatedInstallments 
           });
         } catch (error) {
@@ -101,7 +101,7 @@ export async function runTransactionGeneratorNow() {
 
   for (const tenant of tenants) {
     const result = await generateAllTransactions(tenant.id, tenant.ownerId);
-    const totalGenerated = result.generatedRecurring + result.generatedInstallments;
+    const totalGenerated = result.generatedUnifiedRecurring + result.generatedOccurrences + result.generatedInstallments;
     log.info('[JOB] Tenant processado manualmente', { 
       tenantId: tenant.id, 
       totalGenerated 
