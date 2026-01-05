@@ -263,15 +263,16 @@ export default function TransactionsPage() {
 
   const togglePaidStatus = async (transaction: Transaction) => {
     try {
-      // Se for ocorrência de recorrência, usar endpoint específico
-      if (transaction.isRecurringOccurrence && transaction.recurringBillId) {
+      // Se for ocorrência do modelo ANTIGO (RecurringBillOccurrence), usar endpoint específico
+      // Identificamos pelo campo isRecurringOccurrence que vem do mapeamento de /recurring-bills/occurrences
+      if (transaction.isRecurringOccurrence && transaction.recurringBillId && !transaction.parentId) {
         await api.post(`/recurring-bills/${transaction.recurringBillId}/occurrences/${transaction.id}/pay`, {
           paidDate: new Date().toISOString(),
           paidAmount: transaction.amount,
         });
         toast.success('Recorrência paga com sucesso!');
       } else {
-        // Transação normal
+        // Transação normal ou transação do modelo NOVO (com parentId)
         const newStatus = transaction.status === 'completed' ? 'pending' : 'completed';
         await api.put(`/transactions/${transaction.id}`, {
           status: newStatus,
