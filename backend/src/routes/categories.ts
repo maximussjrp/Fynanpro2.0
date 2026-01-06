@@ -152,18 +152,21 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       }
     }
 
-    // Verificar se já existe categoria com mesmo nome e tipo
+    // Verificar se já existe categoria com mesmo nome, tipo E mesmo pai
+    // Permite nomes iguais em pais diferentes (ex: Transporte > Combustível e Veículos > Combustível)
     const existing = await prisma.category.findFirst({
       where: {
         tenantId,
         name: { equals: name, mode: 'insensitive' },
         type,
+        parentId: parentId || null,
         deletedAt: null
       }
     });
 
     if (existing) {
-      return errorResponse(res, 'VALIDATION_ERROR', `Já existe uma categoria "${name}" do tipo ${type === 'income' ? 'receita' : 'despesa'}`, 400);
+      const parentInfo = parentId ? ' neste nível' : '';
+      return errorResponse(res, 'VALIDATION_ERROR', `Já existe uma categoria "${name}" do tipo ${type === 'income' ? 'receita' : 'despesa'}${parentInfo}`, 400);
     }
 
     // Criar categoria

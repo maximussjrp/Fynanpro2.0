@@ -360,8 +360,20 @@ export default function CategoriesPage() {
     return filtered;
   };
 
-  const getRootCategories = () => {
-    return categories.filter(c => c.level === 1 && c.type === categoryForm.type);
+  // Retorna categorias que podem ser pai (nível 1 e 2 - para permitir criar até nível 3)
+  const getParentCandidates = () => {
+    const level1 = categories.filter(c => c.level === 1 && c.type === categoryForm.type);
+    const level2 = categories.filter(c => c.level === 2 && c.type === categoryForm.type);
+    
+    // Retorna array com categorias L1 e seus filhos L2 indentados
+    const result: Category[] = [];
+    level1.forEach(cat => {
+      result.push(cat);
+      const children = level2.filter(c => c.parentId === cat.id);
+      children.forEach(child => result.push(child));
+    });
+    
+    return result;
   };
 
   if (loading) {
@@ -594,9 +606,9 @@ export default function CategoriesPage() {
                              text-gray-900 bg-white min-h-[44px] cursor-pointer"
                 >
                   <option value="">Nenhuma (categoria raiz)</option>
-                  {getRootCategories().map((cat) => (
+                  {getParentCandidates().map((cat) => (
                     <option key={cat.id} value={cat.id}>
-                      {cat.icon} {cat.name}
+                      {cat.level === 2 ? '   ↳ ' : ''}{cat.icon} {cat.name}
                     </option>
                   ))}
                 </select>
