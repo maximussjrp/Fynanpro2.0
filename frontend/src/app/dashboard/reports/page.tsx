@@ -1136,12 +1136,20 @@ export default function ReportsPage() {
               {/* Tabela Mapa Financeiro */}
               {dreData && (() => {
                 // Determinar meses a exibir baseado no modo de visualização
-                const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-                const displayMonths = dreViewMode === 'month' && dreMonth !== null 
-                  ? [monthNames[dreMonth]]
-                  : dreData.months; // Mostrar todos os 12 meses no modo ano
+                // IMPORTANTE: Usar os nomes de mês do backend (JAN, FEV, etc) para que as chaves correspondam aos dados
+                const monthNamesDisplay = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+                const backendMonthNames = dreData.months; // ['JAN', 'FEV', ...] - chaves do backend
+                
+                // Para exibição usamos nomes formatados, mas para acessar dados usamos as chaves do backend
+                const displayMonthIndices = dreViewMode === 'month' && dreMonth !== null 
+                  ? [dreMonth] // Índice do mês selecionado
+                  : backendMonthNames.map((_, i) => i); // Todos os índices
                 
                 const showYearTotal = dreViewMode === 'year'; // Só mostrar total do ano quando em modo ano
+                
+                // Função auxiliar para obter a chave do backend pelo índice
+                const getBackendMonth = (index: number) => backendMonthNames[index];
+                const getDisplayMonth = (index: number) => monthNamesDisplay[index];
                 
                 return (
                 <div ref={dreTableRef} className="overflow-x-auto border border-gray-200 rounded-lg">
@@ -1158,9 +1166,9 @@ export default function ReportsPage() {
                           </button>
                         </th>
                         {/* Meses baseado no modo de visualização */}
-                        {displayMonths.map(month => (
-                          <th key={month} colSpan={showExpected ? 4 : 3} className="text-center px-1 py-2 font-semibold border-l border-gray-700">
-                            {month}
+                        {displayMonthIndices.map(monthIndex => (
+                          <th key={monthIndex} colSpan={showExpected ? 4 : 3} className="text-center px-1 py-2 font-semibold border-l border-gray-700">
+                            {getDisplayMonth(monthIndex)}
                           </th>
                         ))}
                         {showYearTotal && (
@@ -1172,8 +1180,8 @@ export default function ReportsPage() {
                       {/* Subheader com Esperado/Realizado/AV/AH */}
                       <tr className="bg-gray-700 text-gray-200 text-xs">
                         <th className="sticky left-0 bg-gray-700 text-left px-3 py-1"></th>
-                        {displayMonths.map(month => (
-                          <React.Fragment key={`sub-${month}`}>
+                        {displayMonthIndices.map(monthIndex => (
+                          <React.Fragment key={`sub-${monthIndex}`}>
                             {showExpected && <th className="px-1 py-1 text-right border-l border-gray-600">ESPERADO</th>}
                             <th className="px-1 py-1 text-right">REALIZADO</th>
                             <th className="px-1 py-1 text-right">AV%</th>
@@ -1195,12 +1203,13 @@ export default function ReportsPage() {
                         <td className="sticky left-0 bg-blue-100 hover:bg-blue-200 px-3 py-2">
                           ▶ {dreData.linhasCalculadas.RECEITA_FATURAMENTO?.name || '📈 RECEITA/FATURAMENTO'}
                         </td>
-                        {displayMonths.map(month => {
+                        {displayMonthIndices.map(monthIndex => {
+                          const month = getBackendMonth(monthIndex);
                           const data = dreData.linhasCalculadas.RECEITA_FATURAMENTO?.months[month] || { esperado: 0, realizado: 0 };
                           const total = dreData.receitas.monthly[month]?.realizado || 1;
                           const av = total > 0 ? 100 : 0;
                           return (
-                            <React.Fragment key={`rec-${month}`}>
+                            <React.Fragment key={`rec-${monthIndex}`}>
                               {showExpected && <td className="px-1 py-2 text-right border-l border-gray-200">{formatCurrency(data.esperado)}</td>}
                               <td className="px-1 py-2 text-right text-blue-700 font-semibold">{formatCurrency(data.realizado)}</td>
                               <td className="px-1 py-2 text-right text-gray-600">100.0%</td>
@@ -1234,10 +1243,11 @@ export default function ReportsPage() {
                                 )}
                                 <span className="pl-2">{cat.icon} {cat.name}</span>
                               </td>
-                              {displayMonths.map(month => {
+                              {displayMonthIndices.map(monthIndex => {
+                                const month = getBackendMonth(monthIndex);
                                 const monthData = cat.months[month] || { esperado: 0, realizado: 0, av: 0, ah: 0 };
                                 return (
-                                  <React.Fragment key={`${cat.id}-${month}`}>
+                                  <React.Fragment key={`${cat.id}-${monthIndex}`}>
                                     {showExpected && <td className="px-1 py-1.5 text-right border-l border-gray-100 text-gray-500">{monthData.esperado > 0 ? formatCurrency(monthData.esperado) : '-'}</td>}
                                     <td className="px-1 py-1.5 text-right text-blue-600">{monthData.realizado > 0 ? formatCurrency(monthData.realizado) : '-'}</td>
                                     <td className="px-1 py-1.5 text-right text-gray-500 text-xs">{monthData.av > 0 ? `${monthData.av.toFixed(1)}%` : '-'}</td>
@@ -1262,10 +1272,11 @@ export default function ReportsPage() {
                                 <td className="sticky left-0 bg-gray-50/50 hover:bg-gray-100 px-3 py-1 pl-8 text-gray-600">
                                   {child.icon} {child.name}
                                 </td>
-                                {displayMonths.map(month => {
+                                {displayMonthIndices.map(monthIndex => {
+                                  const month = getBackendMonth(monthIndex);
                                   const monthData = child.months[month] || { esperado: 0, realizado: 0, av: 0, ah: 0 };
                                   return (
-                                    <React.Fragment key={`${child.id}-${month}`}>
+                                    <React.Fragment key={`${child.id}-${monthIndex}`}>
                                       {showExpected && <td className="px-1 py-1 text-right border-l border-gray-100 text-gray-400 text-xs">{monthData.esperado > 0 ? formatCurrency(monthData.esperado) : '-'}</td>}
                                       <td className="px-1 py-1 text-right text-blue-500 text-xs">{monthData.realizado > 0 ? formatCurrency(monthData.realizado) : '-'}</td>
                                       <td className="px-1 py-1 text-right text-gray-400 text-xs">{monthData.av > 0 ? `${monthData.av.toFixed(1)}%` : '-'}</td>
@@ -1296,10 +1307,11 @@ export default function ReportsPage() {
                         <td className="sticky left-0 bg-orange-100 hover:bg-orange-200 px-3 py-2">
                           ▶ {dreData.linhasCalculadas.CUSTOS_VARIAVEIS?.name || '📊 CUSTOS VARIÁVEIS'}
                         </td>
-                        {displayMonths.map(month => {
+                        {displayMonthIndices.map(monthIndex => {
+                          const month = getBackendMonth(monthIndex);
                           const data = dreData.linhasCalculadas.CUSTOS_VARIAVEIS?.months[month] || { esperado: 0, realizado: 0 };
                           return (
-                            <React.Fragment key={`cv-${month}`}>
+                            <React.Fragment key={`cv-${monthIndex}`}>
                               {showExpected && <td className="px-1 py-2 text-right border-l border-gray-200">{formatCurrency(data.esperado)}</td>}
                               <td className="px-1 py-2 text-right text-orange-700 font-semibold">{formatCurrency(data.realizado)}</td>
                               <td className="px-1 py-2 text-right text-gray-600">-</td>
@@ -1333,10 +1345,11 @@ export default function ReportsPage() {
                                 )}
                                 <span className="pl-2">{cat.icon} {cat.name}</span>
                               </td>
-                              {displayMonths.map(month => {
+                              {displayMonthIndices.map(monthIndex => {
+                                const month = getBackendMonth(monthIndex);
                                 const monthData = cat.months[month] || { esperado: 0, realizado: 0, av: 0, ah: 0 };
                                 return (
-                                  <React.Fragment key={`${cat.id}-${month}`}>
+                                  <React.Fragment key={`${cat.id}-${monthIndex}`}>
                                     {showExpected && <td className="px-1 py-1.5 text-right border-l border-gray-100 text-gray-500">{monthData.esperado > 0 ? formatCurrency(monthData.esperado) : '-'}</td>}
                                     <td className="px-1 py-1.5 text-right text-rose-600">{monthData.realizado > 0 ? formatCurrency(monthData.realizado) : '-'}</td>
                                     <td className="px-1 py-1.5 text-right text-gray-500 text-xs">{monthData.av > 0 ? `${monthData.av.toFixed(1)}%` : '-'}</td>
@@ -1361,10 +1374,11 @@ export default function ReportsPage() {
                                 <td className="sticky left-0 bg-gray-50/50 hover:bg-gray-100 px-3 py-1 pl-8 text-gray-600">
                                   {child.icon} {child.name}
                                 </td>
-                                {displayMonths.map(month => {
+                                {displayMonthIndices.map(monthIndex => {
+                                  const month = getBackendMonth(monthIndex);
                                   const monthData = child.months[month] || { esperado: 0, realizado: 0, av: 0, ah: 0 };
                                   return (
-                                    <React.Fragment key={`${child.id}-${month}`}>
+                                    <React.Fragment key={`${child.id}-${monthIndex}`}>
                                       {showExpected && <td className="px-1 py-1 text-right border-l border-gray-100 text-gray-400 text-xs">{monthData.esperado > 0 ? formatCurrency(monthData.esperado) : '-'}</td>}
                                       <td className="px-1 py-1 text-right text-rose-500 text-xs">{monthData.realizado > 0 ? formatCurrency(monthData.realizado) : '-'}</td>
                                       <td className="px-1 py-1 text-right text-gray-400 text-xs">{monthData.av > 0 ? `${monthData.av.toFixed(1)}%` : '-'}</td>
@@ -1395,11 +1409,12 @@ export default function ReportsPage() {
                         <td className="sticky left-0 bg-green-100 hover:bg-green-200 px-3 py-2 text-green-800">
                           ✅ {dreData.linhasCalculadas.RESULTADO_LIQUIDO?.name || 'RESULTADO LÍQUIDO'}
                         </td>
-                        {displayMonths.map(month => {
+                        {displayMonthIndices.map(monthIndex => {
+                          const month = getBackendMonth(monthIndex);
                           const data = dreData.linhasCalculadas.RESULTADO_LIQUIDO?.months[month] || { esperado: 0, realizado: 0 };
                           const isPositive = data.realizado >= 0;
                           return (
-                            <React.Fragment key={`rl-${month}`}>
+                            <React.Fragment key={`rl-${monthIndex}`}>
                               {showExpected && <td className="px-1 py-2 text-right border-l border-gray-200">{formatCurrency(data.esperado)}</td>}
                               <td className={`px-1 py-2 text-right font-bold ${isPositive ? 'text-green-700' : 'text-red-700'}`}>{formatCurrency(data.realizado)}</td>
                               <td className="px-1 py-2 text-right text-gray-600">-</td>
