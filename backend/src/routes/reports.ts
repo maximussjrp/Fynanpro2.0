@@ -712,7 +712,11 @@ router.get('/trends', authenticateToken, async (req: AuthRequest, res: Response)
   }
 });
 
-// ==================== DRE - DEMONSTRAÇÃO DE RESULTADO ====================
+// ==================== MAPA FINANCEIRO (ESPERADO vs REALIZADO) ====================
+// LÓGICA:
+// - ESPERADO: Todas as transações lançadas (pendentes + pagas + scheduled) 
+// - REALIZADO: Apenas transações efetivamente pagas (status = 'completed')
+// Isso permite comparar o que foi planejado/lançado vs o que realmente aconteceu
 router.get('/dre', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId;
@@ -746,7 +750,7 @@ router.get('/dre', authenticateToken, async (req: AuthRequest, res: Response) =>
       orderBy: [{ type: 'asc' }, { name: 'asc' }]
     });
 
-    // Buscar transações do ano
+    // Buscar transações do ano (exceto canceladas)
     const startOfYear = new Date(targetYear, 0, 1);
     const endOfYear = new Date(targetYear, 11, 31, 23, 59, 59);
 
@@ -754,7 +758,8 @@ router.get('/dre', authenticateToken, async (req: AuthRequest, res: Response) =>
       where: {
         tenantId,
         transactionDate: { gte: startOfYear, lte: endOfYear },
-        deletedAt: null
+        deletedAt: null,
+        status: { not: 'cancelled' } // Excluir apenas canceladas
       },
       select: {
         categoryId: true,
@@ -765,59 +770,43 @@ router.get('/dre', authenticateToken, async (req: AuthRequest, res: Response) =>
       }
     });
 
-    // Buscar orçamentos para valores esperados
-    const budgets = await prisma.budget.findMany({
-      where: {
-        tenantId,
-        isActive: true
-      },
-      select: {
-        categoryId: true,
-        amount: true,
-        period: true
-      }
-    });
-
-    // Criar mapa de orçamentos mensais por categoria
-    const budgetMap = new Map<string, number>();
-    budgets.forEach(b => {
-      if (!b.categoryId) return;
-      let monthlyAmount = Number(b.amount);
-      switch (b.period) {
-        case 'quarterly': monthlyAmount = monthlyAmount / 3; break;
-        case 'semester': monthlyAmount = monthlyAmount / 6; break;
-        case 'annual': monthlyAmount = monthlyAmount / 12; break;
-      }
-      budgetMap.set(b.categoryId, (budgetMap.get(b.categoryId) || 0) + monthlyAmount);
-    });
-
     // Mapear transações por categoria e mês
+    // ESPERADO = todas as transações lançadas (pending + completed + scheduled)
+    // REALIZADO = apenas transações pagas (completed)
     type MonthData = { realizado: number; esperado: number };
     type CategoryMonthlyData = Map<number, MonthData>;
     const categoryMonthlyData = new Map<string, CategoryMonthlyData>();
 
-    // Inicializar todas as categorias
+    // Inicializar todas as categorias com zeros
     allCategories.forEach(cat => {
       const monthData = new Map<number, MonthData>();
       for (let m = 0; m < 12; m++) {
         monthData.set(m, { 
           realizado: 0, 
-          esperado: budgetMap.get(cat.id) || 0 
+          esperado: 0 // Começa em zero, será preenchido pelas transações
         });
       }
       categoryMonthlyData.set(cat.id, monthData);
     });
 
-    // Preencher com transações realizadas
+    // Preencher com transações
     transactions.forEach(t => {
-      if (!t.categoryId || t.status === 'cancelled') return;
+      if (!t.categoryId) return;
       
       const month = new Date(t.transactionDate).getMonth();
       const catData = categoryMonthlyData.get(t.categoryId);
       if (catData) {
         const monthData = catData.get(month);
         if (monthData) {
-          monthData.realizado += Number(t.amount);
+          const amount = Number(t.amount);
+          
+          // ESPERADO: Soma de TODAS as transações lançadas (não canceladas)
+          monthData.esperado += amount;
+          
+          // REALIZADO: Apenas transações efetivamente pagas (completed)
+          if (t.status === 'completed') {
+            monthData.realizado += amount;
+          }
         }
       }
     });
@@ -839,8 +828,8 @@ router.get('/dre', authenticateToken, async (req: AuthRequest, res: Response) =>
       return { realizado: totalRealizado, esperado: totalEsperado };
     };
 
-    // Interface para linha do DRE
-    interface DRERow {
+    // Interface para linha do Mapa Financeiro (antes chamado DRE)
+    interface FinancialMapRow {
       id: string;
       name: string;
       icon: string | null;
@@ -861,11 +850,11 @@ router.get('/dre', authenticateToken, async (req: AuthRequest, res: Response) =>
         realizado: number;
         av: number;
       };
-      children: DRERow[];
+      children: FinancialMapRow[];
     }
 
-    // Construir árvore hierárquica para DRE
-    const buildDRETree = (parentId: string | null, level: number, filterType?: string): DRERow[] => {
+    // Construir árvore hierárquica para Mapa Financeiro
+    const buildFinancialTree = (parentId: string | null, level: number, filterType?: string): FinancialMapRow[] => {
       let cats = allCategories.filter(c => {
         // Para level 1, buscar categorias sem parent (null, undefined, ou '')
         if (parentId === null) {
@@ -878,7 +867,7 @@ router.get('/dre', authenticateToken, async (req: AuthRequest, res: Response) =>
       }
 
       return cats.map(cat => {
-        const months: DRERow['months'] = {};
+        const months: FinancialMapRow['months'] = {};
         let totalYearRealizado = 0;
         let totalYearEsperado = 0;
 
@@ -908,14 +897,14 @@ router.get('/dre', authenticateToken, async (req: AuthRequest, res: Response) =>
             realizado: totalYearRealizado,
             av: 0
           },
-          children: buildDRETree(cat.id, (cat.level || 1) + 1)
+          children: buildFinancialTree(cat.id, (cat.level || 1) + 1)
         };
       }).sort((a, b) => b.totalYear.realizado - a.totalYear.realizado);
     };
 
     // Separar receitas e despesas (lowercase - como está no banco)
-    const receitaCategories = buildDRETree(null, 1, 'income');
-    const despesaCategories = buildDRETree(null, 1, 'expense');
+    const receitaCategories = buildFinancialTree(null, 1, 'income');
+    const despesaCategories = buildFinancialTree(null, 1, 'expense');
 
     // Calcular totais gerais por mês
     const totaisMensais = {
@@ -947,7 +936,7 @@ router.get('/dre', authenticateToken, async (req: AuthRequest, res: Response) =>
     }
 
     // Calcular AV% (Análise Vertical - % do total do mês)
-    const calculateAV = (rows: DRERow[], totalKey: 'receitas' | 'despesas') => {
+    const calculateAV = (rows: FinancialMapRow[], totalKey: 'receitas' | 'despesas') => {
       rows.forEach(row => {
         Object.keys(row.months).forEach(month => {
           const totalMes = totaisMensais[totalKey][month]?.realizado || 1;
@@ -966,7 +955,7 @@ router.get('/dre', authenticateToken, async (req: AuthRequest, res: Response) =>
     };
 
     // Calcular AH% (Análise Horizontal - % variação vs mês anterior)
-    const calculateAH = (rows: DRERow[]) => {
+    const calculateAH = (rows: FinancialMapRow[]) => {
       rows.forEach(row => {
         let previousValue = 0;
         monthNames.forEach((month, index) => {
@@ -1102,10 +1091,10 @@ router.get('/dre', authenticateToken, async (req: AuthRequest, res: Response) =>
       }
     });
   } catch (error: any) {
-    log.error('Erro ao gerar DRE:', { error, tenantId: req.tenantId });
+    log.error('Erro ao gerar Mapa Financeiro:', { error, tenantId: req.tenantId });
     res.status(500).json({
       success: false,
-      error: { message: error.message || 'Erro ao gerar DRE' }
+      error: { message: error.message || 'Erro ao gerar Mapa Financeiro' }
     });
   }
 });

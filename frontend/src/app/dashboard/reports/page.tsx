@@ -112,7 +112,10 @@ interface IncomeVsExpenseData {
   };
 }
 
-// Interface para DRE
+// Interface para Mapa Financeiro (Esperado vs Realizado)
+// LÓGICA:
+// - ESPERADO: Total de todas as transações lançadas (pendentes + pagas)
+// - REALIZADO: Total apenas das transações efetivamente pagas (status = completed)
 interface DRERowData {
   id: string;
   name: string;
@@ -469,7 +472,7 @@ export default function ReportsPage() {
   const tabs = [
     { id: 'cashflow', label: '📈 Fluxo', fullLabel: '📈 Fluxo de Caixa' },
     { id: 'categories', label: '🍕 Categorias', fullLabel: '🍕 Por Categoria' },
-    { id: 'dre', label: '📊 DRE', fullLabel: '📊 DRE (Resultado)' },
+    { id: 'dre', label: '�️ Mapa', fullLabel: '🗺️ Mapa Financeiro' },
     { id: 'comparison', label: '⚖️ Comparativo', fullLabel: '⚖️ Receitas x Despesas' },
     { id: 'budgets', label: '💰 Orçamentos', fullLabel: '💰 Orçamentos' },
   ] as const;
@@ -937,15 +940,15 @@ export default function ReportsPage() {
             </div>
           )}
 
-          {/* DRE - Demonstração de Resultado */}
+          {/* Mapa Financeiro - Esperado vs Realizado */}
           {activeTab === 'dre' && (
             <div className="space-y-6">
-              {/* Toolbar DRE */}
+              {/* Toolbar Mapa Financeiro */}
               <div className="flex flex-col gap-4">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                   <div className="flex items-center gap-2">
                     <Table2 className="w-5 h-5 text-gray-600" />
-                    <h3 className="text-lg sm:text-xl font-bold text-gray-900">DRE - Demonstração de Resultado</h3>
+                    <h3 className="text-lg sm:text-xl font-bold text-gray-900">🗺️ Mapa Financeiro</h3>
                   </div>
                 
                   <div className="flex flex-wrap items-center gap-3">
@@ -1092,7 +1095,7 @@ export default function ReportsPage() {
                 </div>
               </div>
 
-              {/* Resumo DRE */}
+              {/* Resumo Mapa Financeiro */}
               {dreData && (
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
@@ -1130,7 +1133,7 @@ export default function ReportsPage() {
                 </div>
               )}
 
-              {/* Tabela DRE */}
+              {/* Tabela Mapa Financeiro */}
               {dreData && (() => {
                 // Determinar meses a exibir baseado no modo de visualização
                 const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
