@@ -1543,24 +1543,36 @@ export class ChatbotService {
     
     // Detectar gasto
     const expensePatterns = [
-      /gastei\s+([\d,\.]+)/i,
-      /paguei\s+([\d,\.]+)/i,
-      /comprei\s+.+\s+([\d,\.]+)/i,
-      /^([\d,\.]+)\s+(?:no|na|em|de)\s+/i,
+      /gastei\s+r?\$?\s*([\d,\.]+)\s*(?:reais|real)?(?:\s+(?:no|na|em|de|com|pra|para)\s+(.+))?/i,
+      /paguei\s+r?\$?\s*([\d,\.]+)\s*(?:reais|real)?(?:\s+(?:no|na|em|de|com|pra|para)\s+(.+))?/i,
+      /comprei\s+(.+?)\s+(?:por\s+)?r?\$?\s*([\d,\.]+)/i,
+      /^r?\$?\s*([\d,\.]+)\s+(?:no|na|em|de|com)\s+(.+)/i,
     ];
     
     for (const pattern of expensePatterns) {
-      const match = normalized.match(pattern);
+      const match = input.match(pattern);
       if (match) {
-        const amount = parseMoneyValue(match[1]);
+        // Para o padrão "comprei X por Y", o valor está no grupo 2 e descrição no grupo 1
+        let amount: number | null;
+        let description: string | undefined;
+        
+        if (pattern.source.startsWith('comprei')) {
+          amount = parseMoneyValue(match[2]);
+          description = match[1]?.trim();
+        } else {
+          amount = parseMoneyValue(match[1]);
+          description = match[2]?.trim();
+        }
+        
         if (amount) {
           session.context.tempTransaction = { type: 'expense', amount };
+          if (description) {
+            session.context.tempTransaction.description = description;
+          }
           session.state = ChatState.ADDING_EXPENSE;
           
-          // Tentar extrair descrição
-          const descMatch = input.match(/(?:no|na|em|de|com)\s+(.+?)(?:\s+[\d,\.]+)?$/i);
-          if (descMatch) {
-            session.context.tempTransaction.description = descMatch[1].trim();
+          // Se temos descrição, sugerir categoria
+          if (description) {
             return this.suggestCategoryFromDescription(session);
           }
           
@@ -1573,17 +1585,21 @@ export class ChatbotService {
     
     // Detectar receita
     const incomePatterns = [
-      /recebi\s+([\d,\.]+)/i,
-      /entrou\s+([\d,\.]+)/i,
-      /ganhei\s+([\d,\.]+)/i,
+      /recebi\s+r?\$?\s*([\d,\.]+)\s*(?:reais|real)?(?:\s+(?:de|do|da)\s+(.+))?/i,
+      /entrou\s+r?\$?\s*([\d,\.]+)\s*(?:reais|real)?/i,
+      /ganhei\s+r?\$?\s*([\d,\.]+)\s*(?:reais|real)?/i,
     ];
     
     for (const pattern of incomePatterns) {
-      const match = normalized.match(pattern);
+      const match = input.match(pattern);
       if (match) {
         const amount = parseMoneyValue(match[1]);
         if (amount) {
           session.context.tempTransaction = { type: 'income', amount };
+          // Se tiver descrição da origem, salvar
+          if (match[2]) {
+            session.context.tempTransaction.description = match[2].trim();
+          }
           session.state = ChatState.ADDING_INCOME;
           return {
             response: `💵 Receita de **R$ ${formatMoney(amount)}**\n\nQual a origem?`,
@@ -1662,6 +1678,7 @@ export class ChatbotService {
   private async suggestCategoryFromDescription(session: ChatSession) {
     const description = session.context.tempTransaction?.description || '';
     const patterns = session.context.learnedPatterns || [];
+    const type = session.context.tempTransaction?.type || 'expense';
     
     // Tentar encontrar padrão aprendido
     const suggested = this.findSuggestedCategory(description, patterns);
@@ -1728,6 +1745,74 @@ export class ChatbotService {
       };
     }
     
+    // NOVO: Tentar encontrar subcategoria pelo nome da descrição
+    const normalizedDesc = description.toLowerCase().trim();
+    const subcategoryMatch = await prisma.category.findFirst({
+      where: {
+        tenantId: session.tenantId,
+        type,
+        level: { gte: 2 }, // Apenas subcategorias (L2 ou L3)
+        isActive: true,
+        deletedAt: null,
+        name: { contains: normalizedDesc, mode: 'insensitive' },
+      },
+      include: {
+        parent: true,
+      },
+    });
+    
+    if (subcategoryMatch) {
+      // Encontrou subcategoria direta (ex: "cigarro" -> Cigarro)
+      session.context.tempTransaction!.categoryId = subcategoryMatch.id;
+      session.context.tempTransaction!.categoryName = subcategoryMatch.name;
+      session.state = ChatState.ASKING_ACCOUNT;
+      
+      const amount = session.context.tempTransaction?.amount || 0;
+      const parentName = subcategoryMatch.parent?.name || '';
+      
+      // Carregar contas
+      if (!session.context.bankAccounts) {
+        session.context.bankAccounts = await prisma.bankAccount.findMany({
+          where: {
+            tenantId: session.tenantId,
+            isActive: true,
+            deletedAt: null,
+          },
+          orderBy: { name: 'asc' },
+        });
+      }
+      
+      const accounts = session.context.bankAccounts;
+      
+      if (accounts.length === 1) {
+        session.context.tempTransaction!.bankAccountId = accounts[0].id;
+        session.state = ChatState.CONFIRMING;
+        
+        return {
+          response: `🎯 Encontrei a categoria!\n\n` +
+            `📝 ${description}\n` +
+            `💰 R$ ${formatMoney(amount)}\n` +
+            `🏷️ ${subcategoryMatch.name}${parentName ? ` (${parentName})` : ''}\n` +
+            `🏦 ${accounts[0].name}\n\n` +
+            `Está correto?`,
+          quickReplies: ['Sim, confirmar', 'Mudar categoria', 'Cancelar'],
+        };
+      }
+      
+      const options = accounts.map((a, i) => `${i + 1}️⃣ ${a.name}`);
+      const quickReplies = accounts.slice(0, 4).map(a => a.name.split(' ')[0]);
+      
+      return {
+        response: `🎯 Encontrei a categoria!\n\n` +
+          `📝 ${description}\n` +
+          `💰 R$ ${formatMoney(amount)}\n` +
+          `🏷️ ${subcategoryMatch.name}${parentName ? ` (${parentName})` : ''}\n\n` +
+          `De qual conta saiu o dinheiro?`,
+        options,
+        quickReplies,
+      };
+    }
+    
     // Não encontrou padrão, perguntar categoria
     session.state = ChatState.ASKING_CATEGORY;
     return this.askCategory(session);
@@ -1764,6 +1849,11 @@ export class ChatbotService {
   private async handleAskingCategory(session: ChatSession, input: string) {
     const type = session.context.tempTransaction?.type || 'expense';
     
+    // Se está pedindo subcategoria
+    if (session.context.askingSubcategory && session.context.selectedParentCategory) {
+      return this.handleAskingSubcategory(session, input);
+    }
+    
     // Carregar categorias se não tiver
     if (!session.context.categories) {
       session.context.categories = await prisma.category.findMany({
@@ -1781,25 +1871,74 @@ export class ChatbotService {
     const categories = session.context.categories.filter(c => c.type === type);
     const normalized = input.toLowerCase().trim();
     
-    // Tentar encontrar por número
-    const num = parseInt(normalized);
-    if (!isNaN(num) && num >= 1 && num <= categories.length) {
-      const selected = categories[num - 1];
-      session.context.tempTransaction!.categoryId = selected.id;
-      session.context.tempTransaction!.categoryName = selected.name;
+    // Primeiro, tentar encontrar subcategoria direta pelo nome (ex: "cigarro")
+    const subcategory = await prisma.category.findFirst({
+      where: {
+        tenantId: session.tenantId,
+        type,
+        level: { gte: 2 },
+        isActive: true,
+        deletedAt: null,
+        name: { contains: normalized, mode: 'insensitive' },
+      },
+      include: { parent: true },
+    });
+    
+    if (subcategory) {
+      session.context.tempTransaction!.categoryId = subcategory.id;
+      session.context.tempTransaction!.categoryName = subcategory.name;
       session.state = ChatState.ASKING_ACCOUNT;
       return this.askAccount(session);
     }
     
-    // Tentar encontrar por nome
-    const found = categories.find(c => 
-      c.name.toLowerCase().includes(normalized) ||
-      normalized.includes(c.name.toLowerCase().replace(/^\W+\s*/, ''))
-    );
+    // Tentar encontrar por número
+    const num = parseInt(normalized);
+    let selected: any = null;
     
-    if (found) {
-      session.context.tempTransaction!.categoryId = found.id;
-      session.context.tempTransaction!.categoryName = found.name;
+    if (!isNaN(num) && num >= 1 && num <= categories.length) {
+      selected = categories[num - 1];
+    } else {
+      // Tentar encontrar por nome
+      selected = categories.find(c => 
+        c.name.toLowerCase().includes(normalized) ||
+        normalized.includes(c.name.toLowerCase().replace(/^\W+\s*/, ''))
+      );
+    }
+    
+    if (selected) {
+      // Verificar se a categoria tem subcategorias
+      const subcategories = await prisma.category.findMany({
+        where: {
+          tenantId: session.tenantId,
+          parentId: selected.id,
+          isActive: true,
+          deletedAt: null,
+        },
+        orderBy: { name: 'asc' },
+      });
+      
+      if (subcategories.length > 0) {
+        // Perguntar pela subcategoria
+        session.context.selectedParentCategory = selected;
+        session.context.subcategories = subcategories;
+        session.context.askingSubcategory = true;
+        
+        const options = subcategories.map((s, i) => `${i + 1}️⃣ ${s.icon || '📝'} ${s.name}`);
+        options.push(`${subcategories.length + 1}️⃣ Usar categoria principal`);
+        
+        const quickReplies = subcategories.slice(0, 3).map(s => s.name);
+        quickReplies.push(selected.name.replace(/^\W+\s*/, ''));
+        
+        return {
+          response: `📁 **${selected.name}** tem subcategorias.\n\nQual você quer usar?`,
+          options: options.slice(0, 10),
+          quickReplies: quickReplies.slice(0, 4),
+        };
+      }
+      
+      // Sem subcategorias, usar diretamente
+      session.context.tempTransaction!.categoryId = selected.id;
+      session.context.tempTransaction!.categoryName = selected.name;
       session.state = ChatState.ASKING_ACCOUNT;
       return this.askAccount(session);
     }
@@ -1807,6 +1946,61 @@ export class ChatbotService {
     return {
       response: `Não encontrei a categoria "${input}". Por favor, escolha uma da lista:`,
       options: categories.slice(0, 10).map((c, i) => `${i + 1}️⃣ ${c.name}`),
+    };
+  }
+  
+  private async handleAskingSubcategory(session: ChatSession, input: string) {
+    const parent = session.context.selectedParentCategory;
+    const subcategories = session.context.subcategories || [];
+    const normalized = input.toLowerCase().trim();
+    
+    // Opção de usar categoria principal
+    const num = parseInt(normalized);
+    if (num === subcategories.length + 1 || normalized.includes('principal') || normalized.includes(parent.name.toLowerCase().replace(/^\W+\s*/, ''))) {
+      session.context.tempTransaction!.categoryId = parent.id;
+      session.context.tempTransaction!.categoryName = parent.name;
+      session.context.askingSubcategory = false;
+      session.context.selectedParentCategory = null;
+      session.context.subcategories = null;
+      session.state = ChatState.ASKING_ACCOUNT;
+      return this.askAccount(session);
+    }
+    
+    // Tentar encontrar por número
+    if (!isNaN(num) && num >= 1 && num <= subcategories.length) {
+      const selected = subcategories[num - 1];
+      session.context.tempTransaction!.categoryId = selected.id;
+      session.context.tempTransaction!.categoryName = selected.name;
+      session.context.askingSubcategory = false;
+      session.context.selectedParentCategory = null;
+      session.context.subcategories = null;
+      session.state = ChatState.ASKING_ACCOUNT;
+      return this.askAccount(session);
+    }
+    
+    // Tentar encontrar por nome
+    const found = subcategories.find((s: any) => 
+      s.name.toLowerCase().includes(normalized) ||
+      normalized.includes(s.name.toLowerCase())
+    );
+    
+    if (found) {
+      session.context.tempTransaction!.categoryId = found.id;
+      session.context.tempTransaction!.categoryName = found.name;
+      session.context.askingSubcategory = false;
+      session.context.selectedParentCategory = null;
+      session.context.subcategories = null;
+      session.state = ChatState.ASKING_ACCOUNT;
+      return this.askAccount(session);
+    }
+    
+    // Não encontrou, mostrar opções novamente
+    const options = subcategories.map((s: any, i: number) => `${i + 1}️⃣ ${s.icon || '📝'} ${s.name}`);
+    options.push(`${subcategories.length + 1}️⃣ Usar categoria principal`);
+    
+    return {
+      response: `Não entendi. Por favor, escolha uma subcategoria:`,
+      options: options.slice(0, 10),
     };
   }
   
