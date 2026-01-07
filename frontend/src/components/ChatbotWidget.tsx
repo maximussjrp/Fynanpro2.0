@@ -87,6 +87,7 @@ export default function ChatbotWidget() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const baseTextRef = useRef<string>(''); // Texto base antes de iniciar gravação
 
   // Verificar suporte a reconhecimento de voz
   useEffect(() => {
@@ -104,25 +105,28 @@ export default function ChatbotWidget() {
         let finalTranscript = '';
         let interimTranscript = '';
         
+        // Processar apenas o resultado atual, não acumular
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const transcript = event.results[i][0].transcript;
           if (event.results[i].isFinal) {
-            finalTranscript += transcript;
+            finalTranscript = transcript;
           } else {
-            interimTranscript += transcript;
+            interimTranscript = transcript;
           }
         }
         
-        // Atualizar input com texto reconhecido
+        // Usar o texto base + novo texto (sem acumular)
+        const base = baseTextRef.current;
+        const separator = base ? ' ' : '';
+        
         if (finalTranscript) {
-          setInputValue(prev => prev + finalTranscript);
+          // Resultado final - definir como texto base + resultado
+          const newText = base + separator + finalTranscript;
+          setInputValue(newText);
+          baseTextRef.current = newText; // Atualizar base para próxima gravação
         } else if (interimTranscript) {
-          // Mostrar texto provisório
-          setInputValue(prev => {
-            // Remover texto provisório anterior e adicionar novo
-            const baseText = prev.replace(/\[.*?\]$/, '').trim();
-            return baseText ? `${baseText} ${interimTranscript}` : interimTranscript;
-          });
+          // Resultado intermediário - mostrar preview sem alterar base
+          setInputValue(base + separator + interimTranscript);
         }
       };
 
@@ -154,6 +158,8 @@ export default function ChatbotWidget() {
       recognitionRef.current.stop();
       setIsListening(false);
     } else {
+      // Salvar o texto atual como base antes de iniciar
+      baseTextRef.current = inputValue;
       try {
         recognitionRef.current.start();
       } catch (error) {
@@ -239,6 +245,7 @@ export default function ChatbotWidget() {
       messages: [...prev.messages, userMessage],
     }));
     setInputValue('');
+    baseTextRef.current = ''; // Limpar base ao enviar
 
     try {
       const response = await api.post('/chatbot/message', { message });
