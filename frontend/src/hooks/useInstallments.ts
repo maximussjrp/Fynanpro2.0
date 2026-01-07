@@ -33,6 +33,8 @@ interface InstallmentPurchase {
     color: string;
   };
   installments?: any[];
+  isFromTransaction?: boolean;
+  isFromRecurringBill?: boolean;
 }
 
 interface Category {
@@ -133,11 +135,51 @@ export default function useInstallments() {
     
   const topCategories = Object.values(categoryBreakdown)
     .sort((a, b) => b.remaining - a.remaining)
-    .slice(0, 5)
     .map(cat => ({
       ...cat,
-      percent: totalOwed > 0 ? Math.round((cat.remaining / totalOwed) * 100) : 0
+      percent: totalOwed > 0 ? Math.round((cat.remaining / totalOwed) * 100) : 0,
+      // Novo: progresso de pagamento (quanto já foi pago do total dessa categoria)
+      paid: cat.total - cat.remaining,
+      paymentProgress: cat.total > 0 ? Math.round(((cat.total - cat.remaining) / cat.total) * 100) : 0,
     }));
+
+  // NOVO: Calcular redução mensal de gastos por mês
+  // Para cada mês futuro, somar quantas parcelas terminam naquele mês
+  const calculateMonthlyReductions = () => {
+    const reductions: Record<string, { month: string; monthLabel: string; reduction: number; endingPurchases: string[] }> = {};
+    
+    activePurchases.forEach(p => {
+      if (!p.firstDueDate || !p.numberOfInstallments || !p.installments) return;
+      
+      // Pegar a última parcela pendente
+      const pendingInstallments = p.installments.filter((i: any) => i.status === 'pending');
+      if (pendingInstallments.length === 0) return;
+      
+      // A última parcela indica quando esse parcelamento termina
+      const lastInstallment = pendingInstallments.reduce((last: any, inst: any) => {
+        const instDate = new Date(inst.dueDate?.split('T')[0] || p.firstDueDate.split('T')[0]);
+        const lastDate = last ? new Date(last.dueDate?.split('T')[0] || p.firstDueDate.split('T')[0]) : null;
+        return !lastDate || instDate > lastDate ? inst : last;
+      }, null);
+      
+      if (lastInstallment) {
+        const endDate = new Date(lastInstallment.dueDate?.split('T')[0]);
+        const monthKey = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}`;
+        const monthLabel = endDate.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' });
+        
+        if (!reductions[monthKey]) {
+          reductions[monthKey] = { month: monthKey, monthLabel, reduction: 0, endingPurchases: [] };
+        }
+        reductions[monthKey].reduction += Number(p.installmentAmount);
+        reductions[monthKey].endingPurchases.push(p.name);
+      }
+    });
+    
+    return Object.values(reductions).sort((a, b) => b.reduction - a.reduction);
+  };
+  
+  const monthlyReductions = calculateMonthlyReductions();
+  const biggestReductionMonth = monthlyReductions.length > 0 ? monthlyReductions[0] : null;
 
   // Carregar dados iniciais
   const loadData = async () => {
@@ -438,7 +480,21 @@ export default function useInstallments() {
   // Deletar parcelamento
   const handleDeletePurchase = async (id: string) => {
     try {
-      await apiClient.delete(`/installments/${id}`);
+      // Encontrar o parcelamento para saber de qual modelo veio
+      const purchase = purchases.find(p => p.id === id);
+      
+      if (purchase?.isFromTransaction) {
+        // Parcelamento criado pelo modal unificado (Transaction)
+        // Usar endpoint de transactions com cascade
+        await apiClient.delete(`/transactions/${id}?cascade=true&deleteMode=all`);
+      } else if (purchase?.isFromRecurringBill) {
+        // Parcelamento que veio de RecurringBill - não suportado por enquanto
+        toast.error('Este parcelamento é do modelo antigo. Delete pela página de Contas Recorrentes.');
+        return;
+      } else {
+        // Parcelamento do modelo InstallmentPurchase (antigo)
+        await apiClient.delete(`/installments/${id}`);
+      }
 
       toast.success('Compra parcelada removida com sucesso!');
       
@@ -475,6 +531,10 @@ export default function useInstallments() {
     monthsUntilPayoff,
     overallProgress,
     topCategories,
+    
+    // Previsão de reduções
+    monthlyReductions,
+    biggestReductionMonth,
 
     // Ações
     loadData,

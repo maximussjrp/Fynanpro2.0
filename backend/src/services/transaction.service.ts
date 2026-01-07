@@ -824,8 +824,10 @@ export class TransactionService {
       // Delete with atomic balance revert
       await prisma.$transaction(async (tx) => {
         // Lista de transações para processar
-        // CORREÇÃO BUG #3: Se deleteMode = 'pending', verificar se ainda há filhos após exclusão
-        const shouldDeleteParent = deleteMode === 'all' || transaction.status !== 'completed';
+        // CORREÇÃO: Para transações simples (sem cascade e sem filhos), sempre deletar
+        // deleteMode só se aplica quando há cascade=true (recorrentes/parcelamentos)
+        const isSimpleTransaction = !cascade && childTransactions.length === 0;
+        const shouldDeleteParent = isSimpleTransaction || deleteMode === 'all' || transaction.status !== 'completed';
         
         // Se não vai deletar o pai, verificar se ainda terá filhos após a exclusão
         let finalShouldDeleteParent = shouldDeleteParent;

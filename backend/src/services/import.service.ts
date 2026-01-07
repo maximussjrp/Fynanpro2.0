@@ -16,11 +16,16 @@ export interface ImportedTransaction {
   type: 'income' | 'expense';
   balance?: number;
   
-  // Campos para categorização
+  // Campos para categorização (apenas sugestão, usuário decide)
   suggestedCategoryId?: string;
   suggestedCategoryName?: string;
   categoryId?: string;
   categoryName?: string;
+  
+  // Detecção de transferência
+  isLikelyTransfer?: boolean;
+  transferType?: 'pix' | 'ted' | 'doc' | 'internal' | null;
+  possibleLinkedAccount?: string;
   
   // Status
   isDuplicate?: boolean;
@@ -83,6 +88,84 @@ const previewCache = new Map<string, ImportPreview>();
 // ==================== SERVIÇO PRINCIPAL ====================
 
 export class ImportService {
+  
+  // ==================== DETECÇÃO DE TRANSFERÊNCIAS ====================
+  
+  /**
+   * Detecta se uma descrição indica transferência entre contas
+   */
+  detectTransferFromDescription(description: string): { isTransfer: boolean; type: 'pix' | 'ted' | 'doc' | 'internal' | null } {
+    const desc = description.toLowerCase();
+    
+    // Padrões de PIX
+    const pixPatterns = [
+      /pix\s*(enviado|recebido|transf)/i,
+      /transf\.?\s*pix/i,
+      /pagamento.*pix/i,
+      /pix.*pagamento/i,
+    ];
+    
+    // Padrões de TED
+    const tedPatterns = [
+      /ted\s*(enviado|recebido)/i,
+      /transf\.?\s*ted/i,
+      /transferencia\s*ted/i,
+    ];
+    
+    // Padrões de DOC
+    const docPatterns = [
+      /doc\s*(enviado|recebido)/i,
+      /transf\.?\s*doc/i,
+    ];
+    
+    // Padrões gerais de transferência
+    const transferPatterns = [
+      /transfer[eê]ncia\s*(enviada|recebida|entre)/i,
+      /transf\.?\s*(p\/|para|de)\s*/i,
+      /credito\s*em\s*conta/i,
+      /debito\s*em\s*conta/i,
+      /deposito.*conta/i,
+    ];
+    
+    // Verificar PIX
+    for (const pattern of pixPatterns) {
+      if (pattern.test(description)) {
+        return { isTransfer: true, type: 'pix' };
+      }
+    }
+    
+    // Verificar TED
+    for (const pattern of tedPatterns) {
+      if (pattern.test(description)) {
+        return { isTransfer: true, type: 'ted' };
+      }
+    }
+    
+    // Verificar DOC
+    for (const pattern of docPatterns) {
+      if (pattern.test(description)) {
+        return { isTransfer: true, type: 'doc' };
+      }
+    }
+    
+    // Verificar transferências gerais
+    for (const pattern of transferPatterns) {
+      if (pattern.test(description)) {
+        return { isTransfer: true, type: 'internal' };
+      }
+    }
+    
+    // Palavras-chave simples
+    if (desc.includes('pix') && (desc.includes('enviad') || desc.includes('recebid') || desc.includes('transf'))) {
+      return { isTransfer: true, type: 'pix' };
+    }
+    
+    if (desc.includes('transferencia') || desc.includes('transferência')) {
+      return { isTransfer: true, type: 'internal' };
+    }
+    
+    return { isTransfer: false, type: null };
+  }
   
   // ==================== PARSE CSV ====================
   
@@ -762,8 +845,11 @@ export class ImportService {
       // Verificar duplicata
       const duplicateOf = await this.checkDuplicate(tenantId, date, absAmount, description);
       
-      // Sugerir categoria
+      // Sugerir categoria (NÃO atribuir automaticamente - usuário decide)
       const suggested = await this.suggestCategory(tenantId, description, type, patterns);
+      
+      // Detectar se parece transferência
+      const transferInfo = this.detectTransferFromDescription(description);
       
       const tx: ImportedTransaction = {
         id: `csv-${i}-${Date.now()}`,
@@ -773,8 +859,12 @@ export class ImportService {
         type,
         suggestedCategoryId: suggested?.categoryId,
         suggestedCategoryName: suggested?.categoryName,
-        categoryId: suggested?.categoryId,
-        categoryName: suggested?.categoryName,
+        // NÃO atribuir categoria automaticamente - importação entra como lançamento simples
+        categoryId: undefined,
+        categoryName: undefined,
+        // Informação de transferência
+        isLikelyTransfer: transferInfo.isTransfer,
+        transferType: transferInfo.type,
         isDuplicate: !!duplicateOf,
         duplicateOf: duplicateOf || undefined,
         isSelected: !duplicateOf,
@@ -838,12 +928,18 @@ export class ImportService {
       tx.duplicateOf = duplicateOf || undefined;
       tx.isSelected = !duplicateOf;
       
-      // Sugerir categoria
+      // Sugerir categoria (NÃO atribuir automaticamente - usuário decide)
       const suggested = await this.suggestCategory(tenantId, tx.description, tx.type, patterns);
       tx.suggestedCategoryId = suggested?.categoryId;
       tx.suggestedCategoryName = suggested?.categoryName;
-      tx.categoryId = suggested?.categoryId;
-      tx.categoryName = suggested?.categoryName;
+      // NÃO atribuir categoria automaticamente - importação entra como lançamento simples
+      tx.categoryId = undefined;
+      tx.categoryName = undefined;
+      
+      // Detectar se parece transferência
+      const transferInfo = this.detectTransferFromDescription(tx.description);
+      tx.isLikelyTransfer = transferInfo.isTransfer;
+      tx.transferType = transferInfo.type;
       
       if (tx.type === 'income') {
         totalIncome += tx.amount;
@@ -904,12 +1000,18 @@ export class ImportService {
       tx.duplicateOf = duplicateOf || undefined;
       tx.isSelected = !duplicateOf;
       
-      // Sugerir categoria
+      // Sugerir categoria (NÃO atribuir automaticamente - usuário decide)
       const suggested = await this.suggestCategory(tenantId, tx.description, tx.type, patterns);
       tx.suggestedCategoryId = suggested?.categoryId;
       tx.suggestedCategoryName = suggested?.categoryName;
-      tx.categoryId = suggested?.categoryId;
-      tx.categoryName = suggested?.categoryName;
+      // NÃO atribuir categoria automaticamente - importação entra como lançamento simples
+      tx.categoryId = undefined;
+      tx.categoryName = undefined;
+      
+      // Detectar se parece transferência
+      const transferInfo = this.detectTransferFromDescription(tx.description);
+      tx.isLikelyTransfer = transferInfo.isTransfer;
+      tx.transferType = transferInfo.type;
       
       if (tx.type === 'income') {
         totalIncome += tx.amount;

@@ -32,6 +32,8 @@ export default function InstallmentsPage() {
     monthsUntilPayoff,
     overallProgress,
     topCategories,
+    monthlyReductions,
+    biggestReductionMonth,
     handleCreatePurchase,
     handlePayInstallment,
     handleDeletePurchase,
@@ -101,6 +103,8 @@ export default function InstallmentsPage() {
           monthsUntilPayoff={monthsUntilPayoff}
           overallProgress={overallProgress}
           topCategories={topCategories}
+          monthlyReductions={monthlyReductions}
+          biggestReductionMonth={biggestReductionMonth}
           onCreateNew={handleOpenCreate}
         />
 

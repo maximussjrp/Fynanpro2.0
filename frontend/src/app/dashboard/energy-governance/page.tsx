@@ -2,16 +2,21 @@
 
 /**
  * ══════════════════════════════════════════════════════════════════════════════
- * PÁGINA DE GOVERNANÇA DE ENERGIA
+ * PÁGINA DE GOVERNANÇA DE ENERGIA - VISUALIZAÇÃO
  * ══════════════════════════════════════════════════════════════════════════════
  * 
- * UI para visualização e edição da classificação energética de categorias.
+ * UI para VISUALIZAÇÃO da classificação energética de categorias.
+ * 
+ * ⚠️ IMPORTANTE: A classificação é determinada AUTOMATICAMENTE pelo sistema.
+ * O usuário NÃO pode editar a classificação diretamente.
  * 
  * Funcionalidades:
  * - Listar todas as categorias com seus pesos de energia
  * - Indicar status de validação (validado, inferido, não validado)
- * - Permitir edição dos pesos
+ * - Visualizar justificativa da classificação automática
  * - Auditoria de categorias com problemas
+ * 
+ * A lógica de classificação está em: backend/src/contracts/energy-auto-classification.ts
  * 
  * Ref: backend/src/contracts/ENERGY-CONTRACT.md
  * ══════════════════════════════════════════════════════════════════════════════
@@ -187,11 +192,9 @@ function StatsCards({ stats }: { stats: Stats }) {
 }
 
 function CategoryRow({ 
-  category, 
-  onEdit 
+  category
 }: { 
   category: CategoryWithSemantics;
-  onEdit: (category: CategoryWithSemantics) => void;
 }) {
   const { semantics } = category;
   
@@ -214,12 +217,9 @@ function CategoryRow({
         </div>
         <div className="flex items-center gap-2">
           <ValidationBadge status={semantics.validationStatus} />
-          <button
-            onClick={() => onEdit(category)}
-            className="px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-          >
-            Ajustar
-          </button>
+          <span className="px-2 py-1 text-xs bg-gray-100 text-gray-500 rounded-lg">
+            🤖 Auto
+          </span>
         </div>
       </div>
       
@@ -269,323 +269,6 @@ function CategoryRow({
   );
 }
 
-function EditModal({
-  category,
-  onClose,
-  onSave
-}: {
-  category: CategoryWithSemantics;
-  onClose: () => void;
-  onSave: (categoryId: string, data: Partial<CategorySemantics> & { justification?: string }) => Promise<{ warnings?: string[] } | void>;
-}) {
-  const [survival, setSurvival] = useState(category.semantics.survivalWeight * 100);
-  const [choice, setChoice] = useState(category.semantics.choiceWeight * 100);
-  const [future, setFuture] = useState(category.semantics.futureWeight * 100);
-  const [loss, setLoss] = useState(category.semantics.lossWeight * 100);
-  const [isFixed, setIsFixed] = useState(category.semantics.isFixed);
-  const [isEssential, setIsEssential] = useState(category.semantics.isEssential);
-  const [isInvestment, setIsInvestment] = useState(category.semantics.isInvestment);
-  const [justification, setJustification] = useState(category.semantics.justification || '');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [warning, setWarning] = useState<string | null>(null);
-  
-  const total = survival + choice + future + loss;
-  const isValid = Math.abs(total - 100) < 0.1;
-  const isHybrid = [survival, choice, future, loss].filter(v => v > 0).length > 1;
-  
-  const handleSave = async () => {
-    if (!isValid) {
-      setError('A soma dos pesos deve ser exatamente 100%');
-      return;
-    }
-    
-    if (isHybrid && !justification.trim()) {
-      setError('Classificações híbridas requerem justificativa');
-      return;
-    }
-    
-    setSaving(true);
-    setError(null);
-    setWarning(null);
-    
-    try {
-      const response = await onSave(category.id, {
-        survivalWeight: survival / 100,
-        choiceWeight: choice / 100,
-        futureWeight: future / 100,
-        lossWeight: loss / 100,
-        isFixed,
-        isEssential,
-        isInvestment,
-        justification: justification.trim() || undefined
-      });
-      
-      // Verificar se há warnings na resposta
-      if (response && response.warnings && response.warnings.length > 0) {
-        setWarning(response.warnings.join('; '));
-        // Não fecha automaticamente para usuário ver o warning
-        setSaving(false);
-        return;
-      }
-      
-      onClose();
-    } catch (err: any) {
-      // Extrair mensagem de erro do axios
-      const errorMsg = err.response?.data?.error || err.response?.data?.message || err.message || 'Erro ao salvar';
-      const details = err.response?.data?.details;
-      
-      if (details && Array.isArray(details)) {
-        setError(`${errorMsg}: ${details.join(', ')}`);
-      } else {
-        setError(errorMsg);
-      }
-    } finally {
-      setSaving(false);
-    }
-  };
-  
-  // Presets
-  const applyPreset = (preset: string) => {
-    switch (preset) {
-      case 'survival':
-        setSurvival(100); setChoice(0); setFuture(0); setLoss(0);
-        setIsFixed(true); setIsEssential(true); setIsInvestment(false);
-        setJustification('');
-        break;
-      case 'choice':
-        setSurvival(0); setChoice(100); setFuture(0); setLoss(0);
-        setIsFixed(false); setIsEssential(false); setIsInvestment(false);
-        setJustification('');
-        break;
-      case 'future':
-        setSurvival(0); setChoice(0); setFuture(100); setLoss(0);
-        setIsFixed(false); setIsEssential(false); setIsInvestment(true);
-        setJustification('');
-        break;
-      case 'loss':
-        setSurvival(0); setChoice(0); setFuture(0); setLoss(100);
-        setIsFixed(false); setIsEssential(false); setIsInvestment(false);
-        setJustification('');
-        break;
-      case 'survival_choice':
-        setSurvival(60); setChoice(40); setFuture(0); setLoss(0);
-        setIsFixed(false); setIsEssential(true); setIsInvestment(false);
-        setJustification('Necessidade básica com componente de conforto');
-        break;
-    }
-  };
-  
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
-        <div className="p-6 border-b">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <span className="text-2xl">{category.icon || '📂'}</span>
-              <div>
-                <h2 className="text-xl font-bold text-gray-900">{category.name}</h2>
-                <p className="text-sm text-gray-500">Classificação energética</p>
-              </div>
-            </div>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl">
-              ×
-            </button>
-          </div>
-        </div>
-        
-        <div className="p-6 space-y-6">
-          {/* Presets */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Presets rápidos
-            </label>
-            <div className="flex flex-wrap gap-2">
-              <button onClick={() => applyPreset('survival')} className="px-3 py-1.5 text-sm rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200">
-                🏠 100% Sobrevivência
-              </button>
-              <button onClick={() => applyPreset('choice')} className="px-3 py-1.5 text-sm rounded-lg bg-purple-100 text-purple-700 hover:bg-purple-200">
-                🎯 100% Escolha
-              </button>
-              <button onClick={() => applyPreset('future')} className="px-3 py-1.5 text-sm rounded-lg bg-green-100 text-green-700 hover:bg-green-200">
-                🚀 100% Futuro
-              </button>
-              <button onClick={() => applyPreset('loss')} className="px-3 py-1.5 text-sm rounded-lg bg-red-100 text-red-700 hover:bg-red-200">
-                💸 100% Perdida
-              </button>
-              <button onClick={() => applyPreset('survival_choice')} className="px-3 py-1.5 text-sm rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200">
-                🔀 60/40 Híbrido
-              </button>
-            </div>
-          </div>
-          
-          {/* Sliders */}
-          <div className="space-y-4">
-            <div>
-              <div className="flex justify-between text-sm mb-1">
-                <span style={{ color: ENERGY_COLORS.survival }}>🏠 Sobrevivência</span>
-                <span className="font-medium">{survival.toFixed(0)}%</span>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={survival}
-                onChange={(e) => setSurvival(Number(e.target.value))}
-                className="w-full h-2 rounded-lg appearance-none cursor-pointer"
-                style={{ accentColor: ENERGY_COLORS.survival }}
-              />
-            </div>
-            
-            <div>
-              <div className="flex justify-between text-sm mb-1">
-                <span style={{ color: ENERGY_COLORS.choice }}>🎯 Escolha</span>
-                <span className="font-medium">{choice.toFixed(0)}%</span>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={choice}
-                onChange={(e) => setChoice(Number(e.target.value))}
-                className="w-full h-2 rounded-lg appearance-none cursor-pointer"
-                style={{ accentColor: ENERGY_COLORS.choice }}
-              />
-            </div>
-            
-            <div>
-              <div className="flex justify-between text-sm mb-1">
-                <span style={{ color: ENERGY_COLORS.future }}>🚀 Futuro</span>
-                <span className="font-medium">{future.toFixed(0)}%</span>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={future}
-                onChange={(e) => setFuture(Number(e.target.value))}
-                className="w-full h-2 rounded-lg appearance-none cursor-pointer"
-                style={{ accentColor: ENERGY_COLORS.future }}
-              />
-            </div>
-            
-            <div>
-              <div className="flex justify-between text-sm mb-1">
-                <span style={{ color: ENERGY_COLORS.loss }}>💸 Energia Perdida</span>
-                <span className="font-medium">{loss.toFixed(0)}%</span>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={loss}
-                onChange={(e) => setLoss(Number(e.target.value))}
-                className="w-full h-2 rounded-lg appearance-none cursor-pointer"
-                style={{ accentColor: ENERGY_COLORS.loss }}
-              />
-            </div>
-          </div>
-          
-          {/* Total */}
-          <div className={`p-3 rounded-lg ${isValid ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
-            <div className="flex justify-between items-center">
-              <span className={isValid ? 'text-green-700' : 'text-red-700'}>Total:</span>
-              <span className={`font-bold ${isValid ? 'text-green-700' : 'text-red-700'}`}>
-                {total.toFixed(0)}% {isValid ? '✓' : '(deve ser 100%)'}
-              </span>
-            </div>
-            <EnergyBar survival={survival/100} choice={choice/100} future={future/100} loss={loss/100} />
-          </div>
-          
-          {/* Flags */}
-          <div className="space-y-2">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={isFixed}
-                onChange={(e) => setIsFixed(e.target.checked)}
-                className="rounded border-gray-300"
-              />
-              <span className="text-sm text-gray-700">Gasto fixo (valor não varia)</span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={isEssential}
-                onChange={(e) => setIsEssential(e.target.checked)}
-                className="rounded border-gray-300"
-              />
-              <span className="text-sm text-gray-700">Essencial (não pode ser cortado)</span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={isInvestment}
-                onChange={(e) => setIsInvestment(e.target.checked)}
-                className="rounded border-gray-300"
-              />
-              <span className="text-sm text-gray-700">É investimento</span>
-            </label>
-          </div>
-          
-          {/* Justificativa */}
-          {isHybrid && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Justificativa (obrigatória para híbridos)
-              </label>
-              <textarea
-                value={justification}
-                onChange={(e) => setJustification(e.target.value)}
-                placeholder="Ex: Alimentação inclui supermercado (essencial) e restaurantes (escolha)"
-                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-                rows={3}
-              />
-            </div>
-          )}
-          
-          {error && (
-            <div className="p-3 bg-red-50 text-red-700 rounded-lg text-sm">
-              ❌ {error}
-            </div>
-          )}
-          
-          {warning && (
-            <div className="p-3 bg-amber-50 text-amber-700 rounded-lg text-sm border border-amber-200">
-              <div className="flex items-start gap-2">
-                <span className="text-lg">⚠️</span>
-                <div>
-                  <p className="font-medium">Aviso de consistência</p>
-                  <p>{warning}</p>
-                  <p className="mt-2 text-xs text-amber-600">A classificação foi salva, mas revise se faz sentido para seu contexto.</p>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-        
-        <div className="p-6 border-t flex justify-end gap-3">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
-          >
-            {warning ? 'Fechar' : 'Cancelar'}
-          </button>
-          {!warning && (
-            <button
-              onClick={handleSave}
-              disabled={!isValid || saving}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {saving ? 'Salvando...' : 'Salvar Classificação'}
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ═══════════════════════════════════════════════════════════════════════════════
 // PÁGINA PRINCIPAL
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -596,7 +279,6 @@ export default function EnergyGovernancePage() {
   const [stats, setStats] = useState<Stats>({ total: 0, validated: 0, inferred: 0, notValidated: 0, default: 0, withoutSemantics: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [editingCategory, setEditingCategory] = useState<CategoryWithSemantics | null>(null);
   const [filter, setFilter] = useState<'all' | 'needs_validation' | 'validated'>('all');
   const [showAudit, setShowAudit] = useState(false);
   const [auditIssues, setAuditIssues] = useState<AuditIssue[]>([]);
@@ -632,12 +314,6 @@ export default function EnergyGovernancePage() {
     fetchCategories();
   }, [fetchCategories]);
   
-  const handleSave = async (categoryId: string, data: any) => {
-    const response = await api.put(`/energy-governance/categories/${categoryId}`, data);
-    await fetchCategories();
-    return response.data; // Retorna para o modal verificar warnings
-  };
-  
   const filteredCategories = categories.filter(cat => {
     if (filter === 'needs_validation') return cat.needsValidation;
     if (filter === 'validated') return cat.semantics.validationStatus === 'validated';
@@ -661,7 +337,7 @@ export default function EnergyGovernancePage() {
           <h1 className="text-2xl font-bold text-gray-900">Governança de Energia</h1>
         </div>
         <p className="text-gray-600">
-          Classifique suas categorias para que o sistema entenda o impacto de cada gasto na sua vida financeira.
+          Visualize como suas categorias são classificadas automaticamente pelo sistema para calcular o impacto de cada gasto na sua vida financeira.
         </p>
       </div>
       
@@ -760,15 +436,9 @@ export default function EnergyGovernancePage() {
                     <span className="font-medium">{issue.categoryName}</span>
                     <span className="text-sm text-gray-600">— {issue.issue}</span>
                   </div>
-                  <button
-                    onClick={() => {
-                      const cat = categories.find(c => c.id === issue.categoryId);
-                      if (cat) setEditingCategory(cat);
-                    }}
-                    className="px-2 py-1 text-xs bg-white rounded hover:bg-gray-50"
-                  >
-                    Corrigir
-                  </button>
+                  <span className="px-2 py-1 text-xs bg-white/50 rounded text-gray-500">
+                    Classificação automática pendente
+                  </span>
                 </div>
               ))}
             </div>
@@ -787,20 +457,19 @@ export default function EnergyGovernancePage() {
             <CategoryRow 
               key={cat.id} 
               category={cat} 
-              onEdit={setEditingCategory}
             />
           ))
         )}
       </div>
       
-      {/* Edit Modal */}
-      {editingCategory && (
-        <EditModal
-          category={editingCategory}
-          onClose={() => setEditingCategory(null)}
-          onSave={handleSave}
-        />
-      )}
+      {/* Informação sobre classificação automática */}
+      <div className="mt-8 p-4 bg-blue-50 rounded-xl border border-blue-200">
+        <h4 className="font-medium text-blue-800 mb-2">ℹ️ Classificação Automática</h4>
+        <p className="text-sm text-blue-600">
+          As categorias são classificadas automaticamente pelo sistema com base em regras pré-definidas.
+          A classificação não pode ser editada manualmente para garantir consistência nos relatórios de energia.
+        </p>
+      </div>
     </div>
   );
 }

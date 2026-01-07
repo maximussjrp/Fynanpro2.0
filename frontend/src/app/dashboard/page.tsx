@@ -1174,7 +1174,7 @@ export default function Dashboard() {
         onClose={() => setShowTransactionModal(false)}
         onSuccess={() => {
           loadDashboardData();
-          setShowTransactionModal(false);
+          // Modal permanece aberto para continuar lançando transações
         }}
       />
 

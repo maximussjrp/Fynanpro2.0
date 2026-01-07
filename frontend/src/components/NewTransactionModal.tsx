@@ -34,13 +34,14 @@ interface Transaction {
   id: string;
   amount: string;
   description: string;
+  type?: 'income' | 'expense'; // Tipo direto da transação
   transactionDate: string;
   status: string;
   notes?: string;
   categoryId: string;
   bankAccountId: string;
   paymentMethodId?: string;
-  category: Category;
+  category?: Category; // Pode ser nulo em transações sem categoria
   bankAccount: BankAccount;
   paymentMethod?: PaymentMethod;
   // Campos para parcelas e recorrências
@@ -105,18 +106,18 @@ export default function TransactionModal({
       loadFormData();
       if (transaction) {
         setFormData({
-          type: transaction.category.type as 'income' | 'expense',
+          type: (transaction.category?.type || transaction.type || defaultType) as 'income' | 'expense',
           amount: transaction.amount,
           description: transaction.description,
           transactionDate: transaction.transactionDate.split('T')[0],
-          categoryId: transaction.categoryId,
+          categoryId: transaction.categoryId || '',
           bankAccountId: transaction.bankAccountId,
           paymentMethodId: transaction.paymentMethodId || '',
           status: transaction.status,
           notes: transaction.notes || '',
           totalInstallments: undefined,
         });
-        setCategorySearch(transaction.category.name);
+        setCategorySearch(transaction.category?.name || '');
       } else {
         resetForm();
       }

@@ -1,6 +1,6 @@
 'use client';
 
-import { Trash2, Calendar, ChevronDown, ChevronUp, CheckCircle, XCircle } from 'lucide-react';
+import { Trash2, Calendar, ChevronDown, ChevronUp, CheckCircle, XCircle, Clock } from 'lucide-react';
 import { useState } from 'react';
 
 interface InstallmentPurchase {
@@ -69,6 +69,50 @@ export default function InstallmentCard({
   const progress = (purchase.paidInstallments / purchase.numberOfInstallments) * 100;
   const pendingInstallments = purchase.installments?.filter(i => i.status === 'pending').length || 0;
 
+  // Calcular meses restantes até quitação
+  const calculateMonthsRemaining = () => {
+    const pendingInsts = purchase.installments?.filter(i => i.status === 'pending') || [];
+    if (pendingInsts.length === 0) return 0;
+    
+    // Pegar a última parcela pendente (maior data de vencimento)
+    const lastPendingDate = pendingInsts.reduce((latest, inst) => {
+      const instDate = new Date(inst.dueDate.split('T')[0]);
+      return instDate > latest ? instDate : latest;
+    }, new Date(pendingInsts[0].dueDate.split('T')[0]));
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    // Calcular diferença em meses
+    const months = (lastPendingDate.getFullYear() - today.getFullYear()) * 12 
+      + (lastPendingDate.getMonth() - today.getMonth());
+    
+    return Math.max(0, months + 1); // +1 para incluir o mês atual
+  };
+
+  // Calcular data prevista de quitação
+  const getPayoffDate = () => {
+    const pendingInsts = purchase.installments?.filter(i => i.status === 'pending') || [];
+    if (pendingInsts.length === 0) return null;
+    
+    const lastPendingDate = pendingInsts.reduce((latest, inst) => {
+      const instDate = new Date(inst.dueDate.split('T')[0]);
+      return instDate > latest ? instDate : latest;
+    }, new Date(pendingInsts[0].dueDate.split('T')[0]));
+    
+    return lastPendingDate;
+  };
+
+  const monthsRemaining = calculateMonthsRemaining();
+  const payoffDate = getPayoffDate();
+
+  const formatMonthYear = (date: Date) => {
+    return date.toLocaleDateString('pt-BR', {
+      month: 'short',
+      year: 'numeric',
+    });
+  };
+
   return (
     <div className="bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 overflow-hidden border border-gray-100">
       {/* Header com Gradiente Roxo */}
@@ -129,6 +173,33 @@ export default function InstallmentCard({
             />
           </div>
         </div>
+
+        {/* Previsão de Quitação Individual */}
+        {pendingInstallments > 0 && payoffDate && (
+          <div className="flex items-center justify-between pt-3 pb-1 border-t border-gray-100 bg-gradient-to-r from-purple-50 to-white -mx-6 px-6">
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-[#8B5CF6]" />
+              <div>
+                <p className="text-xs text-gray-500">Quitação prevista</p>
+                <p className="text-sm font-bold text-gray-800">{formatMonthYear(payoffDate)}</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-gray-500">Faltam</p>
+              <p className="text-lg font-bold text-[#8B5CF6]">
+                {monthsRemaining} {monthsRemaining === 1 ? 'mês' : 'meses'}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Card Concluído */}
+        {pendingInstallments === 0 && (
+          <div className="flex items-center justify-center gap-2 pt-3 pb-1 border-t border-gray-100 bg-gradient-to-r from-green-50 to-white -mx-6 px-6">
+            <CheckCircle className="w-5 h-5 text-green-500" />
+            <p className="text-sm font-bold text-green-600">Parcelamento quitado!</p>
+          </div>
+        )}
 
         {/* Informações Adicionais */}
         <div className="flex items-center justify-between pt-3 border-t border-gray-200">
