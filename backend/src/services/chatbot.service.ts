@@ -37,7 +37,9 @@ export enum ChatState {
   ADDING_EXPENSE = 'adding_expense',
   ADDING_INCOME = 'adding_income',
   ASKING_CATEGORY = 'asking_category',
+  ASKING_SUBCATEGORY = 'asking_subcategory',
   ASKING_ACCOUNT = 'asking_account',
+  ASKING_PAYMENT_METHOD = 'asking_payment_method',
   ASKING_AMOUNT = 'asking_amount',
   ASKING_DESCRIPTION = 'asking_description',
   ASKING_DATE = 'asking_date',
@@ -475,8 +477,16 @@ export class ChatbotService {
         result = await this.handleAskingCategory(session, input);
         break;
         
+      case ChatState.ASKING_SUBCATEGORY:
+        result = await this.handleAskingSubcategory(session, input);
+        break;
+        
       case ChatState.ASKING_ACCOUNT:
         result = await this.handleAskingAccount(session, input);
+        break;
+        
+      case ChatState.ASKING_PAYMENT_METHOD:
+        result = await this.handleAskingPaymentMethod(session, input);
         break;
         
       case ChatState.ASKING_AMOUNT:
@@ -1781,32 +1791,99 @@ export class ChatbotService {
     const categories = session.context.categories.filter(c => c.type === type);
     const normalized = input.toLowerCase().trim();
     
+    let selectedCategory: any = null;
+    
     // Tentar encontrar por número
     const num = parseInt(normalized);
     if (!isNaN(num) && num >= 1 && num <= categories.length) {
-      const selected = categories[num - 1];
-      session.context.tempTransaction!.categoryId = selected.id;
-      session.context.tempTransaction!.categoryName = selected.name;
-      session.state = ChatState.ASKING_ACCOUNT;
-      return this.askAccount(session);
+      selectedCategory = categories[num - 1];
+    } else {
+      // Tentar encontrar por nome
+      selectedCategory = categories.find(c => 
+        c.name.toLowerCase().includes(normalized) ||
+        normalized.includes(c.name.toLowerCase().replace(/^\W+\s*/, ''))
+      );
     }
     
-    // Tentar encontrar por nome
-    const found = categories.find(c => 
-      c.name.toLowerCase().includes(normalized) ||
-      normalized.includes(c.name.toLowerCase().replace(/^\W+\s*/, ''))
-    );
-    
-    if (found) {
-      session.context.tempTransaction!.categoryId = found.id;
-      session.context.tempTransaction!.categoryName = found.name;
-      session.state = ChatState.ASKING_ACCOUNT;
-      return this.askAccount(session);
+    if (selectedCategory) {
+      session.context.tempTransaction!.categoryId = selectedCategory.id;
+      session.context.tempTransaction!.categoryName = selectedCategory.name;
+      
+      // Verificar se tem subcategorias
+      return this.askSubcategoryOrContinue(session, selectedCategory.id);
     }
     
     return {
       response: `Não encontrei a categoria "${input}". Por favor, escolha uma da lista:`,
       options: categories.slice(0, 10).map((c, i) => `${i + 1}️⃣ ${c.name}`),
+    };
+  }
+  
+  private async askSubcategoryOrContinue(session: ChatSession, parentCategoryId: string) {
+    // Buscar subcategorias
+    const subcategories = await prisma.category.findMany({
+      where: {
+        tenantId: session.tenantId,
+        parentId: parentCategoryId,
+        isActive: true,
+        deletedAt: null,
+      },
+      orderBy: { name: 'asc' },
+    });
+    
+    if (subcategories.length === 0) {
+      // Sem subcategorias, ir para conta
+      return this.askAccount(session);
+    }
+    
+    // Guardar subcategorias no contexto
+    (session.context as any).subcategories = subcategories;
+    session.state = ChatState.ASKING_SUBCATEGORY;
+    
+    const options = subcategories.map((s, i) => `${i + 1}️⃣ ${s.icon || ''} ${s.name}`.trim());
+    const quickReplies = subcategories.slice(0, 4).map(s => s.name);
+    
+    return {
+      response: `📂 **${session.context.tempTransaction!.categoryName}**\n\nQual subcategoria?`,
+      options: options.slice(0, 10),
+      quickReplies,
+    };
+  }
+  
+  private async handleAskingSubcategory(session: ChatSession, input: string) {
+    const subcategories = (session.context as any).subcategories || [];
+    const normalized = input.toLowerCase().trim();
+    
+    let selected: any = null;
+    
+    // Tentar encontrar por número
+    const num = parseInt(normalized);
+    if (!isNaN(num) && num >= 1 && num <= subcategories.length) {
+      selected = subcategories[num - 1];
+    } else {
+      // Tentar encontrar por nome
+      selected = subcategories.find((s: any) => 
+        s.name.toLowerCase().includes(normalized) ||
+        normalized.includes(s.name.toLowerCase())
+      );
+    }
+    
+    if (selected) {
+      // Usar a subcategoria ao invés da categoria pai
+      session.context.tempTransaction!.categoryId = selected.id;
+      session.context.tempTransaction!.categoryName = `${session.context.tempTransaction!.categoryName} > ${selected.name}`;
+      return this.askAccount(session);
+    }
+    
+    // Se o usuário digitar "pular" ou "nenhuma", usar a categoria pai
+    if (normalized.includes('pular') || normalized.includes('nenhum') || normalized.includes('outr')) {
+      return this.askAccount(session);
+    }
+    
+    return {
+      response: `Não encontrei "${input}". Escolha uma subcategoria ou digite "pular":`,
+      options: subcategories.slice(0, 10).map((s: any, i: number) => `${i + 1}️⃣ ${s.icon || ''} ${s.name}`.trim()),
+      quickReplies: ['Pular'],
     };
   }
   
@@ -1824,11 +1901,17 @@ export class ChatbotService {
     }
     
     const accounts = session.context.bankAccounts;
+    session.state = ChatState.ASKING_ACCOUNT;
+    
+    if (accounts.length === 0) {
+      // Sem contas, pular para meio de pagamento
+      return this.askPaymentMethodForTransaction(session);
+    }
     
     if (accounts.length === 1) {
-      // Se só tem uma conta, usar ela
+      // Se só tem uma conta, usar ela e ir para meio de pagamento
       session.context.tempTransaction!.bankAccountId = accounts[0].id;
-      return this.confirmTransaction(session);
+      return this.askPaymentMethodForTransaction(session);
     }
     
     const options = accounts.map((a, i) => `${i + 1}️⃣ ${a.name}`);
@@ -1849,7 +1932,7 @@ export class ChatbotService {
     const num = parseInt(normalized);
     if (!isNaN(num) && num >= 1 && num <= accounts.length) {
       session.context.tempTransaction!.bankAccountId = accounts[num - 1].id;
-      return this.confirmTransaction(session);
+      return this.askPaymentMethodForTransaction(session);
     }
     
     // Tentar encontrar por nome
@@ -1860,7 +1943,7 @@ export class ChatbotService {
     
     if (found) {
       session.context.tempTransaction!.bankAccountId = found.id;
-      return this.confirmTransaction(session);
+      return this.askPaymentMethodForTransaction(session);
     }
     
     return {
@@ -1869,6 +1952,109 @@ export class ChatbotService {
     };
   }
   
+  private async askPaymentMethodForTransaction(session: ChatSession) {
+    // Carregar meios de pagamento do usuário
+    const paymentMethods = await prisma.paymentMethod.findMany({
+      where: {
+        tenantId: session.tenantId,
+        isActive: true,
+        deletedAt: null,
+      },
+      orderBy: { name: 'asc' },
+    });
+    
+    // Guardar no contexto
+    session.context.paymentMethods = paymentMethods;
+    session.state = ChatState.ASKING_PAYMENT_METHOD;
+    
+    // Opções padrão + meios do usuário
+    const defaultOptions = ['PIX', 'Cartão de Crédito', 'Cartão de Débito', 'Dinheiro', 'Boleto'];
+    
+    // Combinar meios existentes com padrão
+    const userMethodNames = paymentMethods.map(p => p.name);
+    const allOptions = [...new Set([...userMethodNames, ...defaultOptions])];
+    
+    const options = allOptions.slice(0, 8).map((name, i) => `${i + 1}️⃣ ${name}`);
+    const quickReplies = allOptions.slice(0, 4);
+    
+    return {
+      response: '💳 **Qual o meio de pagamento?**',
+      options,
+      quickReplies,
+    };
+  }
+  
+  private async handleAskingPaymentMethod(session: ChatSession, input: string) {
+    const normalized = input.toLowerCase().trim();
+    const paymentMethods = session.context.paymentMethods || [];
+    
+    // Mapear entrada para tipo de pagamento
+    let paymentType = 'other';
+    let paymentName = input.trim();
+    
+    // Tentar encontrar por número na lista
+    const num = parseInt(normalized);
+    const defaultOptions = ['PIX', 'Cartão de Crédito', 'Cartão de Débito', 'Dinheiro', 'Boleto'];
+    const userMethodNames = paymentMethods.map((p: any) => p.name);
+    const allOptions = [...new Set([...userMethodNames, ...defaultOptions])];
+    
+    if (!isNaN(num) && num >= 1 && num <= allOptions.length) {
+      paymentName = allOptions[num - 1];
+    }
+    
+    // Detectar tipo pelo nome
+    const paymentLower = paymentName.toLowerCase();
+    if (paymentLower.includes('pix')) {
+      paymentType = 'pix';
+      paymentName = 'PIX';
+    } else if (paymentLower.includes('crédito') || paymentLower.includes('credito') || paymentLower.includes('credit')) {
+      paymentType = 'credit_card';
+      paymentName = 'Cartão de Crédito';
+    } else if (paymentLower.includes('débito') || paymentLower.includes('debito') || paymentLower.includes('debit')) {
+      paymentType = 'debit_card';
+      paymentName = 'Cartão de Débito';
+    } else if (paymentLower.includes('dinheiro') || paymentLower.includes('cash') || paymentLower.includes('espécie')) {
+      paymentType = 'cash';
+      paymentName = 'Dinheiro';
+    } else if (paymentLower.includes('boleto')) {
+      paymentType = 'boleto';
+      paymentName = 'Boleto';
+    } else if (paymentLower.includes('transf')) {
+      paymentType = 'transfer';
+      paymentName = 'Transferência';
+    }
+    
+    // Buscar ou criar meio de pagamento
+    let paymentMethod = await prisma.paymentMethod.findFirst({
+      where: {
+        tenantId: session.tenantId,
+        OR: [
+          { type: paymentType },
+          { name: { contains: paymentName, mode: 'insensitive' } },
+        ],
+        isActive: true,
+        deletedAt: null,
+      },
+    });
+    
+    if (!paymentMethod) {
+      // Criar novo meio de pagamento
+      paymentMethod = await prisma.paymentMethod.create({
+        data: {
+          tenantId: session.tenantId,
+          name: paymentName,
+          type: paymentType,
+          isActive: true,
+        },
+      });
+      log.info(`Meio de pagamento "${paymentName}" criado automaticamente pelo chatbot`);
+    }
+    
+    session.context.tempTransaction!.paymentMethodId = paymentMethod.id;
+    
+    return this.confirmTransaction(session);
+  }
+
   private async handleAskingAmount(session: ChatSession, input: string) {
     const amount = parseMoneyValue(input);
     
@@ -1898,16 +2084,23 @@ export class ChatbotService {
     const tx = session.context.tempTransaction!;
     const type = tx.type === 'income' ? '💵 Receita' : '💸 Despesa';
     const account = session.context.bankAccounts?.find(a => a.id === tx.bankAccountId);
+    const paymentMethod = session.context.paymentMethods?.find((p: any) => p.id === tx.paymentMethodId);
     
     session.state = ChatState.CONFIRMING;
     
+    let confirmMessage = `📋 **Confirma o lançamento?**\n\n` +
+      `${type}\n` +
+      `📝 ${tx.description}\n` +
+      `💰 R$ ${formatMoney(tx.amount!)}\n` +
+      `🏷️ ${tx.categoryName}\n` +
+      `🏦 ${account?.name || 'Não definido'}`;
+    
+    if (paymentMethod) {
+      confirmMessage += `\n💳 ${paymentMethod.name}`;
+    }
+    
     return {
-      response: `📋 **Confirma o lançamento?**\n\n` +
-        `${type}\n` +
-        `📝 ${tx.description}\n` +
-        `💰 R$ ${formatMoney(tx.amount!)}\n` +
-        `🏷️ ${tx.categoryName}\n` +
-        `🏦 ${account?.name || 'Não definido'}`,
+      response: confirmMessage,
       options: ['✅ Confirmar', '❌ Cancelar', '✏️ Editar'],
       quickReplies: ['Confirmar', 'Cancelar'],
     };
@@ -1941,6 +2134,7 @@ export class ChatbotService {
           type: tx.type || 'expense',
           categoryId: tx.categoryId,
           bankAccountId: tx.bankAccountId,
+          paymentMethodId: tx.paymentMethodId,
           amount: tx.amount!,
           description: tx.description,
           transactionDate: new Date(),
