@@ -29,6 +29,8 @@ import { startAllJobs } from './jobs/notification.job';
 import { authService } from './services/auth.service';
 import { RegisterSchema, LoginSchema, RefreshTokenSchema } from './dtos/auth.dto';
 import { log, httpLogger } from './utils/logger';
+import { subscriptionMiddlewareWithExemptions } from './middleware/subscription';
+import { authMiddleware } from './middleware/auth';
 
 // Carregar variáveis de ambiente
 dotenv.config();
@@ -69,6 +71,9 @@ prisma.$use(async (params, next) => {
 // Criar aplicação Express
 const app: Express = express();
 const port = env.PORT;
+
+// Confiar em proxy reverso (nginx) para obter IP real
+app.set('trust proxy', 1);
 
 // Middleware de logging HTTP
 app.use(httpLogger);
@@ -182,6 +187,21 @@ app.get('/health', async (req: Request, res: Response) => {
 
 // Rotas da API v1
 const apiRouter = express.Router();
+
+// Middleware de verificação de assinatura (com exceções para rotas de pagamento)
+// Aplica verificação apenas em rotas que requerem autenticação
+apiRouter.use((req, res, next) => {
+  // Rotas públicas que não precisam de verificação de assinatura
+  const publicRoutes = ['/auth', '/subscription/plans', '/subscription/webhook'];
+  const isPublic = publicRoutes.some(route => req.path.startsWith(route));
+  
+  if (isPublic) {
+    return next();
+  }
+  
+  // Se não é rota pública, aplicar middleware de assinatura
+  return subscriptionMiddlewareWithExemptions(req as any, res, next);
+});
 
 // Dashboard routes
 apiRouter.use('/dashboard', dashboardRoutes);

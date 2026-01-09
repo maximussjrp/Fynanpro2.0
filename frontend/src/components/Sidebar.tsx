@@ -50,8 +50,9 @@ const menuItems: MenuItem[] = [
   { icon: Target, label: 'Planejamento Anual', href: '/dashboard/planning' },
   { icon: Calendar, label: 'Calendário', href: '/dashboard/calendar' },
   { icon: FileText, label: 'Relatórios', href: '/dashboard/reports' },
-  { icon: Zap, label: 'Energia Financeira', href: '/dashboard/reports/energy' },
-  { icon: Zap, label: '⚡ Governança', href: '/dashboard/energy-governance' },
+  // Temporariamente desabilitados - aguardando finalização
+  // { icon: Zap, label: 'Energia Financeira', href: '/dashboard/reports/energy' },
+  // { icon: Zap, label: '⚡ Governança', href: '/dashboard/energy-governance' },
 ];
 
 export default function Sidebar({ className = '', isMobileOpen = false, onCloseMobile }: SidebarProps) {

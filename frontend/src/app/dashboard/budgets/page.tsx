@@ -6,6 +6,8 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { PlusCircle, TrendingUp, AlertTriangle, CheckCircle, ArrowLeft } from 'lucide-react';
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
+
 interface Category {
   id: string;
   name: string;
@@ -62,7 +64,7 @@ export default function BudgetsPage() {
   const loadBudgets = async () => {
     try {
       const token = accessToken;
-      const url = `http://localhost:3000/api/v1/budgets?month=${selectedMonth}&year=${selectedYear}`;
+      const url = `${API_URL}/budgets?month=${selectedMonth}&year=${selectedYear}`;
       const response = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -80,7 +82,7 @@ export default function BudgetsPage() {
   const loadCategories = async () => {
     try {
       const token = accessToken;
-      const response = await fetch('http://localhost:3000/api/v1/categories?type=expense&isActive=true', {
+      const response = await fetch(`${API_URL}/categories?type=expense&isActive=true`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await response.json();
@@ -101,8 +103,8 @@ export default function BudgetsPage() {
     try {
       const token = accessToken;
       const url = editingBudget
-        ? `http://localhost:3000/api/v1/budgets/${editingBudget.id}`
-        : 'http://localhost:3000/api/v1/budgets';
+        ? `${API_URL}/budgets/${editingBudget.id}`
+        : `${API_URL}/budgets`;
       
       const response = await fetch(url, {
         method: editingBudget ? 'PUT' : 'POST',
@@ -135,7 +137,7 @@ export default function BudgetsPage() {
     
     try {
       const token = accessToken;
-      const response = await fetch(`http://localhost:3000/api/v1/budgets/${id}`, {
+      const response = await fetch(`${API_URL}/budgets/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });

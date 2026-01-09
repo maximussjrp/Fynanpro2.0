@@ -4,24 +4,18 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import InstallmentsHeader from '@/components/installments/InstallmentsHeader';
 import InstallmentsGrid from '@/components/installments/InstallmentsGrid';
-import CreateInstallmentModal from '@/components/installments/CreateInstallmentModal';
 import ConfirmationModal from '@/components/recurring-bills/ConfirmationModal';
+import UnifiedTransactionModal from '@/components/UnifiedTransactionModal';
 import useInstallments from '@/hooks/useInstallments';
 
 export default function InstallmentsPage() {
   const router = useRouter();
-  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showNewTransactionModal, setShowNewTransactionModal] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const {
     purchases,
-    categories,
-    bankAccounts,
-    paymentMethods,
     loading,
-    submitting,
-    form,
-    setForm,
     totalActive,
     totalOwed,
     pendingInstallments,
@@ -34,24 +28,13 @@ export default function InstallmentsPage() {
     topCategories,
     monthlyReductions,
     biggestReductionMonth,
-    handleCreatePurchase,
     handlePayInstallment,
     handleDeletePurchase,
+    loadData,
   } = useInstallments();
 
   const handleOpenCreate = () => {
-    setShowCreateModal(true);
-  };
-
-  const handleCloseCreate = () => {
-    setShowCreateModal(false);
-  };
-
-  const handleSubmitCreate = async () => {
-    const success = await handleCreatePurchase();
-    if (success) {
-      setShowCreateModal(false);
-    }
+    setShowNewTransactionModal(true);
   };
 
   const handleDeleteClick = (id: string) => {
@@ -72,6 +55,22 @@ export default function InstallmentsPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#F4F7FB] to-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Botão Nova Transação */}
+        <div className="mb-6">
+          <button
+            onClick={() => setShowNewTransactionModal(true)}
+            className="flex items-center gap-3 p-4 bg-gradient-to-r from-[#1A1A1A] to-[#2A2A2A] border border-[#C9A962] rounded-xl hover:shadow-lg transition-all group"
+          >
+            <div className="w-12 h-12 rounded-lg bg-[#C9A962]/20 flex items-center justify-center group-hover:scale-110 transition-transform">
+              <span className="text-2xl">+</span>
+            </div>
+            <div className="text-left">
+              <p className="text-sm font-semibold text-white">Nova Transação</p>
+              <p className="text-xs text-white/80">Receita ou Despesa</p>
+            </div>
+          </button>
+        </div>
+
         {/* Banner de Migração */}
         <div className="mb-6 p-4 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl">
           <div className="flex items-center justify-between flex-wrap gap-4">
@@ -117,19 +116,6 @@ export default function InstallmentsPage() {
           onCreateNew={handleOpenCreate}
         />
 
-        {/* Modal Criar Parcelamento */}
-        <CreateInstallmentModal
-          isOpen={showCreateModal}
-          onClose={handleCloseCreate}
-          onSubmit={handleSubmitCreate}
-          form={form}
-          setForm={setForm}
-          categories={categories}
-          bankAccounts={bankAccounts}
-          paymentMethods={paymentMethods}
-          submitting={submitting}
-        />
-
         {/* Modal Confirmação de Exclusão */}
         <ConfirmationModal
           isOpen={deleteConfirmId !== null}
@@ -140,6 +126,17 @@ export default function InstallmentsPage() {
           type="danger"
           onConfirm={handleConfirmDelete}
           onClose={handleCancelDelete}
+        />
+
+        {/* Modal Nova Transação */}
+        <UnifiedTransactionModal
+          isOpen={showNewTransactionModal}
+          onClose={() => setShowNewTransactionModal(false)}
+          onSuccess={() => {
+            loadData();
+          }}
+          defaultType="expense"
+          initialTab="installment"
         />
       </div>
     </div>

@@ -6,6 +6,7 @@
  */
 
 import { PrismaClient, Prisma } from '@prisma/client';
+import { autoClassifyCategory } from '../contracts/energy-auto-classification';
 
 const prisma = new PrismaClient();
 
@@ -284,12 +285,11 @@ export async function getEnergyDistribution(
   let future = 0;
   let loss = 0;
   
-  // FASE 2: Rastrear cobertura semântica
-  // IMPORTANTE: Apenas despesas com validationStatus='validated' contam como classificadas
-  // Despesas sem semântica validada NÃO entram no cálculo de energia (ficam pendentes)
-  let classifiedAmount = 0;   // Despesas com semântica VALIDATED (não inferred/default)
-  let unclassifiedAmount = 0; // Despesas sem validação (pendentes de classificação)
-  let pendingEnergy = 0;      // Energia "em suspenso" de despesas não classificadas
+  // FASE 3: Rastrear cobertura semântica
+  // MUDANÇA: Usar classificação automática quando não há semântica validada
+  let classifiedAmount = 0;   // Despesas com semântica (validated ou auto-inferido)
+  let unclassifiedAmount = 0; // Despesas sem classificação possível
+  let pendingEnergy = 0;      // Energia "em suspenso" (apenas se não conseguir classificar)
 
   const categoryTotals = new Map<string, { amount: number; weights: any; name: string; icon: string | null }>();
 
@@ -311,29 +311,52 @@ export async function getEnergyDistribution(
     } else if (t.type === 'expense') {
       const semanticData = t.categoryId ? semanticsMap.get(t.categoryId) : null;
       
+      // Tentar obter classificação: primeiro do banco, depois automática
+      let weights: { survival: number; choice: number; future: number; loss: number } | null = null;
+      
       if (semanticData && semanticData.isValidated) {
-        // ✅ VALIDATED: Entra no cálculo de energia com confiança
-        survival += amount * semanticData.survival;
-        choice += amount * semanticData.choice;
-        future += amount * semanticData.future;
-        loss += amount * semanticData.loss;
+        // ✅ VALIDATED: Usar do banco
+        weights = {
+          survival: semanticData.survival,
+          choice: semanticData.choice,
+          future: semanticData.future,
+          loss: semanticData.loss
+        };
+      } else if (t.category?.name) {
+        // 🤖 AUTO: Classificar automaticamente pelo nome da categoria
+        const autoClass = autoClassifyCategory(t.category.name, 'expense');
+        if (autoClass.matched || autoClass.confidence !== 'low') {
+          weights = {
+            survival: autoClass.distribution.survival,
+            choice: autoClass.distribution.choice,
+            future: autoClass.distribution.future,
+            loss: autoClass.distribution.loss
+          };
+        }
+      }
+      
+      if (weights) {
+        // ✅ Tem classificação (validated ou auto): Entra no cálculo
+        survival += amount * weights.survival;
+        choice += amount * weights.choice;
+        future += amount * weights.future;
+        loss += amount * weights.loss;
         classifiedAmount += amount;
         
         // Track category
-        const key = t.categoryId!;
+        const key = t.categoryId || 'sem-categoria';
         const current = categoryTotals.get(key) || { 
           amount: 0, 
-          weights: semanticData,
+          weights: weights,
           name: t.category?.name || 'Sem Categoria',
           icon: t.category?.icon || null
         };
         current.amount += amount;
         categoryTotals.set(key, current);
       } else {
-        // ⚠️ NÃO VALIDATED (inferred, default, ou sem semântica)
-        // NÃO entra no cálculo de energia - fica como "pendente"
+        // ⚠️ Sem classificação possível - fica como "pendente"
         unclassifiedAmount += amount;
-        pendingEnergy += amount; // Contabilizar energia pendente de classificação
+        pendingEnergy += amount;
         
         // Track category mesmo assim para mostrar na UI
         const key = t.categoryId || 'sem-categoria';

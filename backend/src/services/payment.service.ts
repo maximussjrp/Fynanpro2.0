@@ -5,6 +5,7 @@
 
 import { PrismaClient } from '@prisma/client';
 import { log } from '../utils/logger';
+import { clearSubscriptionCache } from '../middleware/subscription';
 
 const prisma = new PrismaClient();
 
@@ -456,6 +457,9 @@ export const paymentService = {
         }
       });
 
+      // Limpar cache de assinatura para liberar acesso imediatamente
+      clearSubscriptionCache(subscription.tenantId);
+
       log.info('Assinatura ativada', { tenantId: subscription.tenantId, plan: subscription.plan });
     }
 
@@ -533,22 +537,33 @@ export const paymentService = {
       where: { id: tenantId }
     });
 
-    // Calcular dias restantes do trial
+    // Calcular dias restantes
     let daysRemaining = 0;
     let trialEndsAt = tenant?.trialEndsAt;
+    let periodEnd = tenant?.stripeCurrentPeriodEnd;
     
     if (tenant?.subscriptionPlan === 'trial' && tenant.trialEndsAt) {
+      // Trial - calcular baseado em trialEndsAt
       const now = new Date();
       const trialEnd = new Date(tenant.trialEndsAt);
       const diffTime = trialEnd.getTime() - now.getTime();
       daysRemaining = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+    } else if (tenant?.stripeCurrentPeriodEnd) {
+      // Plano pago - calcular baseado em stripeCurrentPeriodEnd
+      const now = new Date();
+      const endDate = new Date(tenant.stripeCurrentPeriodEnd);
+      const diffTime = endDate.getTime() - now.getTime();
+      daysRemaining = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
     }
 
     return {
-      subscription: null,
+      subscription: periodEnd ? {
+        currentPeriodEnd: periodEnd.toISOString()
+      } : null,
       currentPlan: tenant?.subscriptionPlan || 'trial',
       status: tenant?.subscriptionStatus || 'active',
       trialEndsAt: trialEndsAt ? trialEndsAt.toISOString() : null,
+      periodEnd: periodEnd ? periodEnd.toISOString() : null,
       daysRemaining,
       isActive: tenant?.subscriptionStatus === 'active',
       plans: PLANS,

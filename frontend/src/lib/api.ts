@@ -68,12 +68,25 @@ api.interceptors.request.use(
 
 /**
  * Interceptor de RESPONSE
- * Trata erros 401 e tenta fazer refresh automático do token
+ * Trata erros 401 (não autorizado) e 402 (pagamento necessário)
  */
 api.interceptors.response.use(
   (response) => response, // Sucesso, retorna normalmente
   async (error: AxiosError) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+
+    // Tratar 402 - Assinatura expirada/suspensa
+    if (error.response?.status === 402) {
+      console.warn('Assinatura expirada ou suspensa, redirecionando para página de bloqueio...');
+      const errorData = error.response.data as any;
+      const reason = errorData?.error?.trialExpired ? 'trial_expired' 
+        : errorData?.error?.subscriptionStatus === 'cancelled' ? 'cancelled' 
+        : 'suspended';
+      
+      // Redireciona para página de bloqueio
+      window.location.href = `/blocked?reason=${reason}`;
+      return Promise.reject(error);
+    }
 
     // Se não é 401 ou não tem config, rejeita direto
     if (!error.response || error.response.status !== 401 || !originalRequest) {

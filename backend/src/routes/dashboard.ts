@@ -257,17 +257,20 @@ router.get('/expense-ranking', async (req: AuthRequest, res) => {
         percentage: totalExpense > 0 ? (cat.total / totalExpense) * 100 : 0,
       }));
 
-    // Calcular Pareto 80%
+    // Calcular Pareto 80/20: 20% das categorias que mais impactam
+    // Se tiver 10 categorias, mostra as 2 maiores (20%)
+    // Mínimo de 1, máximo de 5 para não poluir
+    const totalCategories = ranking.length;
+    const pareto20Count = Math.max(1, Math.min(5, Math.ceil(totalCategories * 0.2)));
+    
     let accumulated = 0;
-    const pareto80 = [];
-    for (const item of ranking) {
+    const pareto80 = ranking.slice(0, pareto20Count).map((item: any) => {
       accumulated += item.percentage;
-      pareto80.push({
+      return {
         ...item,
         accumulatedPercentage: accumulated,
-      });
-      if (accumulated >= 80) break;
-    }
+      };
+    });
 
     return successResponse(res, {
       period: {
@@ -875,15 +878,20 @@ router.get('/today-summary', async (req: AuthRequest, res) => {
       },
     });
 
-    // TRANSAÇÕES ATRASADAS (data < hoje e status pending)
+    // TRANSAÇÕES ATRASADAS (status overdue OU (data < hoje e status pending))
     const overdueTransactions = await prisma.transaction.findMany({
       where: {
         tenantId,
         type: 'expense',
-        status: 'pending',
-        transactionDate: {
-          lt: today,
-        },
+        OR: [
+          { status: 'overdue' },
+          {
+            status: 'pending',
+            transactionDate: {
+              lt: today,
+            },
+          },
+        ],
         deletedAt: null,
       },
       select: {
@@ -891,6 +899,7 @@ router.get('/today-summary', async (req: AuthRequest, res) => {
         amount: true,
         description: true,
         transactionDate: true,
+        dueDate: true,
         category: {
           select: { name: true, icon: true }
         },

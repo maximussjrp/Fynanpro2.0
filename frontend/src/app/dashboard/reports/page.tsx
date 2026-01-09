@@ -112,6 +112,32 @@ interface IncomeVsExpenseData {
   };
 }
 
+// Interface para Orçamentos
+interface BudgetCategory {
+  id: string;
+  name: string;
+  icon: string;
+  color: string;
+  type: string;
+}
+
+interface BudgetData {
+  id: string;
+  name: string;
+  categoryId: string;
+  category: BudgetCategory;
+  amount: number;
+  period: string;
+  startDate: string;
+  endDate: string;
+  isActive: boolean;
+  spent: number;
+  percentage: number;
+  remaining: number;
+  status: 'normal' | 'warning' | 'exceeded';
+  isCurrentPeriod: boolean;
+}
+
 // Interface para Mapa Financeiro (Esperado vs Realizado)
 // LÓGICA:
 // - ESPERADO: Total de todas as transações lançadas (pendentes + pagas)
@@ -191,6 +217,7 @@ export default function ReportsPage() {
   const [hierarchicalData, setHierarchicalData] = useState<HierarchicalCategoryData | null>(null);
   const [incomeVsExpenseData, setIncomeVsExpenseData] = useState<IncomeVsExpenseData | null>(null);
   const [dreData, setDreData] = useState<DREData | null>(null);
+  const [budgetData, setBudgetData] = useState<BudgetData[]>([]);
   
   // Estado de expansão das categorias
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
@@ -229,7 +256,8 @@ export default function ReportsPage() {
         loadCategoryAnalysis(),
         loadHierarchicalCategories(),
         loadIncomeVsExpense(),
-        loadDREReport()
+        loadDREReport(),
+        loadBudgets()
       ]);
     } catch (error) {
       console.error('Erro ao carregar relatórios:', error);
@@ -300,6 +328,19 @@ export default function ReportsPage() {
       }
     } catch (error) {
       console.error('Erro ao carregar DRE:', error);
+    }
+  };
+
+  const loadBudgets = async () => {
+    try {
+      const currentMonth = new Date().getMonth() + 1;
+      const currentYear = new Date().getFullYear();
+      const response = await api.get(`/budgets?month=${currentMonth}&year=${currentYear}`);
+      if (response.data.success) {
+        setBudgetData(response.data.data);
+      }
+    } catch (error) {
+      console.error('Erro ao carregar orçamentos:', error);
     }
   };
 
@@ -1239,19 +1280,19 @@ export default function ReportsPage() {
                             >
                               <td className="sticky left-0 bg-white hover:bg-gray-50 px-3 py-1.5 flex items-center gap-1">
                                 {hasChildren && (
-                                  <span className="text-gray-400">{isExpanded ? '▼' : '▶'}</span>
+                                  <span className="text-gray-500">{isExpanded ? '▼' : '▶'}</span>
                                 )}
-                                <span className="pl-2">{cat.icon} {cat.name}</span>
+                                <span className="pl-2 text-gray-900 font-medium">{cat.icon} {cat.name}</span>
                               </td>
                               {displayMonthIndices.map(monthIndex => {
                                 const month = getBackendMonth(monthIndex);
                                 const monthData = cat.months[month] || { esperado: 0, realizado: 0, av: 0, ah: 0 };
                                 return (
                                   <React.Fragment key={`${cat.id}-${monthIndex}`}>
-                                    {showExpected && <td className="px-1 py-1.5 text-right border-l border-gray-100 text-gray-500">{monthData.esperado > 0 ? formatCurrency(monthData.esperado) : '-'}</td>}
-                                    <td className="px-1 py-1.5 text-right text-blue-600">{monthData.realizado > 0 ? formatCurrency(monthData.realizado) : '-'}</td>
-                                    <td className="px-1 py-1.5 text-right text-gray-500 text-xs">{monthData.av > 0 ? `${monthData.av.toFixed(1)}%` : '-'}</td>
-                                    <td className={`px-1 py-1.5 text-right text-xs ${monthData.ah > 0 ? 'text-green-600' : monthData.ah < 0 ? 'text-red-600' : 'text-gray-400'}`}>
+                                    {showExpected && <td className="px-1 py-1.5 text-right border-l border-gray-100 text-gray-600">{monthData.esperado > 0 ? formatCurrency(monthData.esperado) : '-'}</td>}
+                                    <td className="px-1 py-1.5 text-right text-blue-700 font-medium">{monthData.realizado > 0 ? formatCurrency(monthData.realizado) : '-'}</td>
+                                    <td className="px-1 py-1.5 text-right text-gray-600 text-xs">{monthData.av > 0 ? `${monthData.av.toFixed(1)}%` : '-'}</td>
+                                    <td className={`px-1 py-1.5 text-right text-xs ${monthData.ah > 0 ? 'text-green-700' : monthData.ah < 0 ? 'text-red-700' : 'text-gray-500'}`}>
                                       {monthData.ah !== 0 ? `${monthData.ah > 0 ? '+' : ''}${monthData.ah.toFixed(1)}%` : '-'}
                                     </td>
                                   </React.Fragment>
@@ -1259,9 +1300,9 @@ export default function ReportsPage() {
                               })}
                               {showYearTotal && (
                                 <>
-                                  {showExpected && <td className="px-1 py-1.5 text-right border-l border-gray-200 bg-teal-50/50 text-gray-500">{cat.totalYear.esperado > 0 ? formatCurrency(cat.totalYear.esperado) : '-'}</td>}
-                                  <td className="px-1 py-1.5 text-right text-blue-600 font-medium bg-teal-50/50">{cat.totalYear.realizado > 0 ? formatCurrency(cat.totalYear.realizado) : '-'}</td>
-                                  <td className="px-1 py-1.5 text-right text-gray-500 text-xs bg-teal-50/50">{cat.totalYear.av > 0 ? `${cat.totalYear.av.toFixed(1)}%` : '-'}</td>
+                                  {showExpected && <td className="px-1 py-1.5 text-right border-l border-gray-200 bg-teal-50/50 text-gray-600">{cat.totalYear.esperado > 0 ? formatCurrency(cat.totalYear.esperado) : '-'}</td>}
+                                  <td className="px-1 py-1.5 text-right text-blue-700 font-semibold bg-teal-50/50">{cat.totalYear.realizado > 0 ? formatCurrency(cat.totalYear.realizado) : '-'}</td>
+                                  <td className="px-1 py-1.5 text-right text-gray-600 text-xs bg-teal-50/50">{cat.totalYear.av > 0 ? `${cat.totalYear.av.toFixed(1)}%` : '-'}</td>
                                 </>
                               )}
                             </tr>
@@ -1269,7 +1310,7 @@ export default function ReportsPage() {
                             {/* Filhos expandidos */}
                             {hasChildren && isExpanded && cat.children.map((child) => (
                               <tr key={child.id} className="bg-gray-50/50 hover:bg-gray-100 transition text-sm">
-                                <td className="sticky left-0 bg-gray-50/50 hover:bg-gray-100 px-3 py-1 pl-8 text-gray-600">
+                                <td className="sticky left-0 bg-gray-50/50 hover:bg-gray-100 px-3 py-1 pl-8 text-gray-800">
                                   {child.icon} {child.name}
                                 </td>
                                 {displayMonthIndices.map(monthIndex => {
@@ -1277,7 +1318,7 @@ export default function ReportsPage() {
                                   const monthData = child.months[month] || { esperado: 0, realizado: 0, av: 0, ah: 0 };
                                   return (
                                     <React.Fragment key={`${child.id}-${monthIndex}`}>
-                                      {showExpected && <td className="px-1 py-1 text-right border-l border-gray-100 text-gray-400 text-xs">{monthData.esperado > 0 ? formatCurrency(monthData.esperado) : '-'}</td>}
+                                      {showExpected && <td className="px-1 py-1 text-right border-l border-gray-100 text-gray-500 text-xs">{monthData.esperado > 0 ? formatCurrency(monthData.esperado) : '-'}</td>}
                                       <td className="px-1 py-1 text-right text-blue-500 text-xs">{monthData.realizado > 0 ? formatCurrency(monthData.realizado) : '-'}</td>
                                       <td className="px-1 py-1 text-right text-gray-400 text-xs">{monthData.av > 0 ? `${monthData.av.toFixed(1)}%` : '-'}</td>
                                       <td className={`px-1 py-1 text-right text-xs ${monthData.ah > 0 ? 'text-green-500' : monthData.ah < 0 ? 'text-red-500' : 'text-gray-300'}`}>
@@ -1341,19 +1382,19 @@ export default function ReportsPage() {
                             >
                               <td className="sticky left-0 bg-white hover:bg-gray-50 px-3 py-1.5 flex items-center gap-1">
                                 {hasChildren && (
-                                  <span className="text-gray-400">{isExpanded ? '▼' : '▶'}</span>
+                                  <span className="text-gray-500">{isExpanded ? '▼' : '▶'}</span>
                                 )}
-                                <span className="pl-2">{cat.icon} {cat.name}</span>
+                                <span className="pl-2 text-gray-900 font-medium">{cat.icon} {cat.name}</span>
                               </td>
                               {displayMonthIndices.map(monthIndex => {
                                 const month = getBackendMonth(monthIndex);
                                 const monthData = cat.months[month] || { esperado: 0, realizado: 0, av: 0, ah: 0 };
                                 return (
                                   <React.Fragment key={`${cat.id}-${monthIndex}`}>
-                                    {showExpected && <td className="px-1 py-1.5 text-right border-l border-gray-100 text-gray-500">{monthData.esperado > 0 ? formatCurrency(monthData.esperado) : '-'}</td>}
-                                    <td className="px-1 py-1.5 text-right text-rose-600">{monthData.realizado > 0 ? formatCurrency(monthData.realizado) : '-'}</td>
-                                    <td className="px-1 py-1.5 text-right text-gray-500 text-xs">{monthData.av > 0 ? `${monthData.av.toFixed(1)}%` : '-'}</td>
-                                    <td className={`px-1 py-1.5 text-right text-xs ${monthData.ah > 0 ? 'text-red-600' : monthData.ah < 0 ? 'text-green-600' : 'text-gray-400'}`}>
+                                    {showExpected && <td className="px-1 py-1.5 text-right border-l border-gray-100 text-gray-600">{monthData.esperado > 0 ? formatCurrency(monthData.esperado) : '-'}</td>}
+                                    <td className="px-1 py-1.5 text-right text-rose-700 font-medium">{monthData.realizado > 0 ? formatCurrency(monthData.realizado) : '-'}</td>
+                                    <td className="px-1 py-1.5 text-right text-gray-600 text-xs">{monthData.av > 0 ? `${monthData.av.toFixed(1)}%` : '-'}</td>
+                                    <td className={`px-1 py-1.5 text-right text-xs ${monthData.ah > 0 ? 'text-red-700' : monthData.ah < 0 ? 'text-green-700' : 'text-gray-500'}`}>
                                       {monthData.ah !== 0 ? `${monthData.ah > 0 ? '+' : ''}${monthData.ah.toFixed(1)}%` : '-'}
                                     </td>
                                   </React.Fragment>
@@ -1361,9 +1402,9 @@ export default function ReportsPage() {
                               })}
                               {showYearTotal && (
                                 <>
-                                  {showExpected && <td className="px-1 py-1.5 text-right border-l border-gray-200 bg-teal-50/50 text-gray-500">{cat.totalYear.esperado > 0 ? formatCurrency(cat.totalYear.esperado) : '-'}</td>}
-                                  <td className="px-1 py-1.5 text-right text-rose-600 font-medium bg-teal-50/50">{cat.totalYear.realizado > 0 ? formatCurrency(cat.totalYear.realizado) : '-'}</td>
-                                  <td className="px-1 py-1.5 text-right text-gray-500 text-xs bg-teal-50/50">{cat.totalYear.av > 0 ? `${cat.totalYear.av.toFixed(1)}%` : '-'}</td>
+                                  {showExpected && <td className="px-1 py-1.5 text-right border-l border-gray-200 bg-teal-50/50 text-gray-600">{cat.totalYear.esperado > 0 ? formatCurrency(cat.totalYear.esperado) : '-'}</td>}
+                                  <td className="px-1 py-1.5 text-right text-rose-700 font-semibold bg-teal-50/50">{cat.totalYear.realizado > 0 ? formatCurrency(cat.totalYear.realizado) : '-'}</td>
+                                  <td className="px-1 py-1.5 text-right text-gray-600 text-xs bg-teal-50/50">{cat.totalYear.av > 0 ? `${cat.totalYear.av.toFixed(1)}%` : '-'}</td>
                                 </>
                               )}
                             </tr>
@@ -1371,7 +1412,7 @@ export default function ReportsPage() {
                             {/* Filhos expandidos */}
                             {hasChildren && isExpanded && cat.children.map((child) => (
                               <tr key={child.id} className="bg-gray-50/50 hover:bg-gray-100 transition text-sm">
-                                <td className="sticky left-0 bg-gray-50/50 hover:bg-gray-100 px-3 py-1 pl-8 text-gray-600">
+                                <td className="sticky left-0 bg-gray-50/50 hover:bg-gray-100 px-3 py-1 pl-8 text-gray-800">
                                   {child.icon} {child.name}
                                 </td>
                                 {displayMonthIndices.map(monthIndex => {
@@ -1379,10 +1420,10 @@ export default function ReportsPage() {
                                   const monthData = child.months[month] || { esperado: 0, realizado: 0, av: 0, ah: 0 };
                                   return (
                                     <React.Fragment key={`${child.id}-${monthIndex}`}>
-                                      {showExpected && <td className="px-1 py-1 text-right border-l border-gray-100 text-gray-400 text-xs">{monthData.esperado > 0 ? formatCurrency(monthData.esperado) : '-'}</td>}
-                                      <td className="px-1 py-1 text-right text-rose-500 text-xs">{monthData.realizado > 0 ? formatCurrency(monthData.realizado) : '-'}</td>
-                                      <td className="px-1 py-1 text-right text-gray-400 text-xs">{monthData.av > 0 ? `${monthData.av.toFixed(1)}%` : '-'}</td>
-                                      <td className={`px-1 py-1 text-right text-xs ${monthData.ah > 0 ? 'text-red-500' : monthData.ah < 0 ? 'text-green-500' : 'text-gray-300'}`}>
+                                      {showExpected && <td className="px-1 py-1 text-right border-l border-gray-100 text-gray-500 text-xs">{monthData.esperado > 0 ? formatCurrency(monthData.esperado) : '-'}</td>}
+                                      <td className="px-1 py-1 text-right text-rose-600 text-xs">{monthData.realizado > 0 ? formatCurrency(monthData.realizado) : '-'}</td>
+                                      <td className="px-1 py-1 text-right text-gray-500 text-xs">{monthData.av > 0 ? `${monthData.av.toFixed(1)}%` : '-'}</td>
+                                      <td className={`px-1 py-1 text-right text-xs ${monthData.ah > 0 ? 'text-red-600' : monthData.ah < 0 ? 'text-green-600' : 'text-gray-400'}`}>
                                         {monthData.ah !== 0 ? `${monthData.ah > 0 ? '+' : ''}${monthData.ah.toFixed(1)}%` : '-'}
                                       </td>
                                     </React.Fragment>
@@ -1390,9 +1431,9 @@ export default function ReportsPage() {
                                 })}
                                 {showYearTotal && (
                                   <>
-                                    {showExpected && <td className="px-1 py-1 text-right border-l border-gray-200 bg-teal-50/30 text-gray-400 text-xs">{child.totalYear.esperado > 0 ? formatCurrency(child.totalYear.esperado) : '-'}</td>}
-                                    <td className="px-1 py-1 text-right text-rose-500 text-xs bg-teal-50/30">{child.totalYear.realizado > 0 ? formatCurrency(child.totalYear.realizado) : '-'}</td>
-                                    <td className="px-1 py-1 text-right text-gray-400 text-xs bg-teal-50/30">{child.totalYear.av > 0 ? `${child.totalYear.av.toFixed(1)}%` : '-'}</td>
+                                    {showExpected && <td className="px-1 py-1 text-right border-l border-gray-200 bg-teal-50/30 text-gray-500 text-xs">{child.totalYear.esperado > 0 ? formatCurrency(child.totalYear.esperado) : '-'}</td>}
+                                    <td className="px-1 py-1 text-right text-rose-600 text-xs bg-teal-50/30">{child.totalYear.realizado > 0 ? formatCurrency(child.totalYear.realizado) : '-'}</td>
+                                    <td className="px-1 py-1 text-right text-gray-500 text-xs bg-teal-50/30">{child.totalYear.av > 0 ? `${child.totalYear.av.toFixed(1)}%` : '-'}</td>
                                   </>
                                 )}
                               </tr>
@@ -1493,9 +1534,231 @@ export default function ReportsPage() {
 
           {/* Orçamentos */}
           {activeTab === 'budgets' && (
-            <div className="text-center py-12 text-gray-500">
-              <BarChart3 className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-4 opacity-50" />
-              <p className="text-sm sm:text-base">Análise de orçamentos será carregada aqui</p>
+            <div className="space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <h3 className="text-lg sm:text-xl font-bold text-gray-900">Análise de Orçamentos</h3>
+                <div className="text-sm text-gray-500">
+                  Período: {format(new Date(), 'MMMM yyyy', { locale: ptBR })}
+                </div>
+              </div>
+
+              {budgetData.length === 0 ? (
+                <div className="text-center py-12 text-gray-500 bg-gray-50 rounded-lg">
+                  <BarChart3 className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-4 opacity-50" />
+                  <p className="text-sm sm:text-base mb-2">Nenhum orçamento cadastrado</p>
+                  <button
+                    onClick={() => router.push('/dashboard/budgets')}
+                    className="text-[#1F4FD8] hover:text-[#1A44BF] font-medium"
+                  >
+                    Criar orçamento
+                  </button>
+                </div>
+              ) : (
+                <>
+                  {/* Resumo Geral */}
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 sm:gap-4">
+                    <div className="bg-blue-50 p-4 rounded-lg">
+                      <div className="text-xs sm:text-sm text-blue-600 font-medium">Total Orçado</div>
+                      <div className="text-xl sm:text-2xl font-bold text-blue-900 truncate">
+                        {formatCurrency(budgetData.reduce((sum, b) => sum + b.amount, 0))}
+                      </div>
+                    </div>
+                    <div className="bg-orange-50 p-4 rounded-lg">
+                      <div className="text-xs sm:text-sm text-orange-600 font-medium">Total Gasto</div>
+                      <div className="text-xl sm:text-2xl font-bold text-orange-900 truncate">
+                        {formatCurrency(budgetData.reduce((sum, b) => sum + b.spent, 0))}
+                      </div>
+                    </div>
+                    <div className="bg-green-50 p-4 rounded-lg">
+                      <div className="text-xs sm:text-sm text-green-600 font-medium">Saldo Disponível</div>
+                      <div className="text-xl sm:text-2xl font-bold text-green-900 truncate">
+                        {formatCurrency(budgetData.reduce((sum, b) => sum + Math.max(0, b.remaining), 0))}
+                      </div>
+                    </div>
+                    <div className="bg-purple-50 p-4 rounded-lg">
+                      <div className="text-xs sm:text-sm text-purple-600 font-medium">Utilização Média</div>
+                      <div className="text-xl sm:text-2xl font-bold text-purple-900">
+                        {budgetData.length > 0 
+                          ? (budgetData.reduce((sum, b) => sum + b.percentage, 0) / budgetData.length).toFixed(1) 
+                          : 0}%
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Gráfico de Barras Comparativo */}
+                  <div className="bg-white border border-gray-200 rounded-lg p-4">
+                    <h4 className="font-semibold text-gray-700 mb-4">Orçado vs Gasto por Categoria</h4>
+                    <div className="w-full overflow-x-auto">
+                      <div className="min-w-[500px]">
+                        <ResponsiveContainer width="100%" height={300}>
+                          <BarChart data={budgetData.map(b => ({
+                            name: b.category.name.length > 15 ? b.category.name.substring(0, 15) + '...' : b.category.name,
+                            fullName: b.category.name,
+                            orcado: b.amount,
+                            gasto: b.spent
+                          }))}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="name" tick={{ fontSize: 11 }} angle={-20} textAnchor="end" height={60} />
+                            <YAxis tick={{ fontSize: 12 }} />
+                            <Tooltip 
+                              formatter={(value) => formatCurrency(Number(value))}
+                              labelFormatter={(label, payload) => payload?.[0]?.payload?.fullName || label}
+                            />
+                            <Legend wrapperStyle={{ fontSize: '12px' }} />
+                            <Bar dataKey="orcado" fill="#3B82F6" name="Orçado" />
+                            <Bar dataKey="gasto" fill="#F97316" name="Gasto" />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Cards de Orçamentos Individuais */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {budgetData.map((budget) => (
+                      <div
+                        key={budget.id}
+                        className={`bg-white rounded-xl shadow-sm border-2 p-4 ${
+                          budget.status === 'exceeded'
+                            ? 'border-red-300 bg-red-50/50'
+                            : budget.status === 'warning'
+                            ? 'border-yellow-300 bg-yellow-50/50'
+                            : 'border-green-300 bg-green-50/50'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex items-center gap-3">
+                            <div
+                              className="w-10 h-10 rounded-full flex items-center justify-center text-xl"
+                              style={{ backgroundColor: (budget.category.color || '#6B7280') + '20' }}
+                            >
+                              {budget.category.icon || '📊'}
+                            </div>
+                            <div>
+                              <h4 className="font-bold text-gray-900">{budget.name}</h4>
+                              <p className="text-xs text-gray-500">{budget.category.name}</p>
+                            </div>
+                          </div>
+                          <div className={`text-xs font-semibold px-2 py-1 rounded ${
+                            budget.status === 'exceeded' ? 'bg-red-100 text-red-700' :
+                            budget.status === 'warning' ? 'bg-yellow-100 text-yellow-700' :
+                            'bg-green-100 text-green-700'
+                          }`}>
+                            {budget.status === 'exceeded' ? 'Excedido' : 
+                             budget.status === 'warning' ? 'Alerta' : 'Normal'}
+                          </div>
+                        </div>
+
+                        <div className="space-y-2 mb-3">
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600">Orçado</span>
+                            <span className="font-semibold">{formatCurrency(budget.amount)}</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600">Gasto</span>
+                            <span className={budget.percentage >= 100 ? 'text-red-600 font-bold' : 'font-semibold'}>
+                              {formatCurrency(budget.spent)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600">Restante</span>
+                            <span className={budget.remaining < 0 ? 'text-red-600 font-bold' : 'text-green-600 font-semibold'}>
+                              {formatCurrency(Math.abs(budget.remaining))}
+                              {budget.remaining < 0 && ' (excedido)'}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="relative w-full h-3 bg-gray-200 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full transition-all duration-500 ${
+                              budget.percentage >= 100 ? 'bg-red-500' :
+                              budget.percentage >= 90 ? 'bg-yellow-500' :
+                              budget.percentage >= 70 ? 'bg-blue-500' :
+                              'bg-green-500'
+                            }`}
+                            style={{ width: `${Math.min(budget.percentage, 100)}%` }}
+                          />
+                        </div>
+                        <div className="text-center mt-2">
+                          <span className={`text-lg font-bold ${
+                            budget.percentage >= 100 ? 'text-red-600' :
+                            budget.percentage >= 90 ? 'text-yellow-600' :
+                            'text-green-600'
+                          }`}>
+                            {budget.percentage.toFixed(1)}%
+                          </span>
+                          <span className="text-xs text-gray-500 ml-1">utilizado</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Gráfico de Pizza - Distribuição por Status */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div className="bg-white border border-gray-200 rounded-lg p-4">
+                      <h4 className="font-semibold text-gray-700 mb-4">Status dos Orçamentos</h4>
+                      <ResponsiveContainer width="100%" height={200}>
+                        <RePieChart>
+                          <Pie
+                            data={[
+                              { name: 'Normal', value: budgetData.filter(b => b.status === 'normal').length, color: '#22C55E' },
+                              { name: 'Alerta', value: budgetData.filter(b => b.status === 'warning').length, color: '#EAB308' },
+                              { name: 'Excedido', value: budgetData.filter(b => b.status === 'exceeded').length, color: '#EF4444' }
+                            ].filter(d => d.value > 0)}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={40}
+                            outerRadius={70}
+                            dataKey="value"
+                            label={({ name, value }) => `${name}: ${value}`}
+                          >
+                            {[
+                              { name: 'Normal', value: budgetData.filter(b => b.status === 'normal').length, color: '#22C55E' },
+                              { name: 'Alerta', value: budgetData.filter(b => b.status === 'warning').length, color: '#EAB308' },
+                              { name: 'Excedido', value: budgetData.filter(b => b.status === 'exceeded').length, color: '#EF4444' }
+                            ].filter(d => d.value > 0).map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.color} />
+                            ))}
+                          </Pie>
+                          <Tooltip />
+                        </RePieChart>
+                      </ResponsiveContainer>
+                    </div>
+                    
+                    <div className="bg-white border border-gray-200 rounded-lg p-4">
+                      <h4 className="font-semibold text-gray-700 mb-4">Resumo por Período</h4>
+                      <div className="space-y-3">
+                        {(() => {
+                          const byPeriod = budgetData.reduce((acc, b) => {
+                            const periodName = b.period === 'monthly' ? 'Mensal' :
+                                               b.period === 'quarterly' ? 'Trimestral' :
+                                               b.period === 'semester' ? 'Semestral' : 'Anual';
+                            if (!acc[periodName]) acc[periodName] = { count: 0, total: 0, spent: 0 };
+                            acc[periodName].count++;
+                            acc[periodName].total += b.amount;
+                            acc[periodName].spent += b.spent;
+                            return acc;
+                          }, {} as Record<string, { count: number; total: number; spent: number }>);
+                          
+                          return Object.entries(byPeriod).map(([period, data]) => (
+                            <div key={period} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                              <div>
+                                <div className="font-medium text-gray-900">{period}</div>
+                                <div className="text-xs text-gray-500">{data.count} orçamento(s)</div>
+                              </div>
+                              <div className="text-right">
+                                <div className="font-semibold text-gray-900">{formatCurrency(data.total)}</div>
+                                <div className="text-xs text-orange-600">{formatCurrency(data.spent)} gasto</div>
+                              </div>
+                            </div>
+                          ));
+                        })()}
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>

@@ -441,7 +441,13 @@ export default function Dashboard() {
         {todaySummary && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             {/* Receitas a Receber HOJE */}
-            <div className="bg-white rounded-xl shadow-sm border border-l-4 border-l-[#2563EB] p-4 hover:shadow-md transition-shadow">
+            <div 
+              onClick={() => {
+                const today = new Date().toISOString().split('T')[0];
+                router.push(`/dashboard/transactions?type=income&status=pending&date=${today}`);
+              }}
+              className="bg-white rounded-xl shadow-sm border border-l-4 border-l-[#2563EB] p-4 hover:shadow-md transition-shadow cursor-pointer"
+            >
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-sm font-medium text-gray-600" style={{fontFamily: 'Inter, sans-serif'}}>
                   💰 Receitas a Receber Hoje
@@ -470,7 +476,13 @@ export default function Dashboard() {
             </div>
 
             {/* Despesas a Pagar HOJE */}
-            <div className="bg-white rounded-xl shadow-sm border border-l-4 border-l-[#F59E0B] p-4 hover:shadow-md transition-shadow">
+            <div 
+              onClick={() => {
+                const today = new Date().toISOString().split('T')[0];
+                router.push(`/dashboard/transactions?type=expense&status=pending&date=${today}`);
+              }}
+              className="bg-white rounded-xl shadow-sm border border-l-4 border-l-[#F59E0B] p-4 hover:shadow-md transition-shadow cursor-pointer"
+            >
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-sm font-medium text-gray-600" style={{fontFamily: 'Inter, sans-serif'}}>
                   💸 Despesas a Pagar Hoje
@@ -499,7 +511,9 @@ export default function Dashboard() {
             </div>
 
             {/* Despesas ATRASADAS */}
-            <div className={`bg-white rounded-xl shadow-sm border border-l-4 p-4 hover:shadow-md transition-shadow ${
+            <div 
+              onClick={() => router.push('/dashboard/transactions?type=expense&status=overdue')}
+              className={`bg-white rounded-xl shadow-sm border border-l-4 p-4 hover:shadow-md transition-shadow cursor-pointer ${
               todaySummary.overdue?.count > 0 ? 'border-l-[#E11D48]' : 'border-l-gray-300'
             }`}>
               <div className="flex items-center justify-between mb-2">
@@ -537,16 +551,16 @@ export default function Dashboard() {
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-3 text-sm text-gray-600" style={{fontFamily: 'Inter, sans-serif'}}>
             <Calendar className="w-4 h-4" />
-            <span>
+            <span className="text-gray-700">
               {new Date(startDate).toLocaleDateString('pt-BR')} - {new Date(endDate).toLocaleDateString('pt-BR')}
             </span>
           </div>
           <button
             onClick={() => { setTempStartDate(startDate); setTempEndDate(endDate); setShowPeriodModal(true); }}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium text-gray-700"
             style={{fontFamily: 'Inter, sans-serif'}}
           >
-            <Filter className="w-4 h-4" />
+            <Filter className="w-4 h-4 text-gray-600" />
             <span>Alterar Período</span>
           </button>
         </div>
@@ -644,10 +658,10 @@ export default function Dashboard() {
 
         {/* Grid Principal */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          {/* 2. Ranking de Gastos (Pareto 80%) */}
+          {/* 2. Ranking de Gastos (Pareto 80/20) */}
           <div className="bg-white rounded-xl shadow-sm border p-6">
             <h3 className="text-lg font-semibold text-[#1A1A1A] mb-4" style={{fontFamily: 'Poppins, sans-serif'}}>
-              Principais Gastos (80% da despesa)
+              Pareto 80/20: Poucos gastos, maior impacto
             </h3>
             {expenseData?.pareto80?.length > 0 ? (
               <div className="space-y-3">

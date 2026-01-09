@@ -1,13 +1,13 @@
 'use client';
 
 import { useAuth } from '@/stores/auth';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/api';
 import { toast } from 'sonner';
 import EditTransactionModal from '@/components/NewTransactionModal';
 import CreateTransactionModal from '@/components/UnifiedTransactionModal';
-import { Receipt, Filter, Edit2, Trash2, Calendar, TrendingDown, TrendingUp, CheckCircle, XCircle, Clock, Plus, ArrowLeft } from 'lucide-react';
+import { Receipt, Filter, Edit2, Trash2, Calendar, TrendingDown, TrendingUp, CheckCircle, XCircle, Clock, Plus, ArrowLeft, ChevronUp, ChevronDown, Check } from 'lucide-react';
 
 interface Transaction {
   id: string;
@@ -66,6 +66,12 @@ interface BankAccount {
   name: string;
 }
 
+interface PaymentMethod {
+  id: string;
+  name: string;
+  type: string;
+}
+
 export default function TransactionsPage() {
   const router = useRouter();
   const { accessToken, isAuthenticated } = useAuth();
@@ -73,10 +79,38 @@ export default function TransactionsPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [showFilters, setShowFilters] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  
+  // Ordenação e Filtros por Coluna
+  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
+  const [columnFilters, setColumnFilters] = useState<{
+    categories: string[];
+    accounts: string[];
+    paymentMethods: string[];
+    statuses: string[];
+  }>({
+    categories: [],
+    accounts: [],
+    paymentMethods: [],
+    statuses: [],
+  });
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Fechar dropdown ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setOpenDropdown(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
   
   // Filtros
   const [filters, setFilters] = useState({
@@ -84,6 +118,7 @@ export default function TransactionsPage() {
     endDate: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().split('T')[0],
     categoryId: '',
     bankAccountId: '',
+    paymentMethodId: '',
     type: 'all' as 'all' | 'income' | 'expense',
     status: 'all' as 'all' | 'completed' | 'pending',
   });
@@ -98,6 +133,9 @@ export default function TransactionsPage() {
     const endDateParam = urlParams.get('endDate');
     
     if (dateParam || typeParam || statusParam || startDateParam || endDateParam) {
+      // Data de hoje formatada
+      const today = new Date().toISOString().split('T')[0];
+      
       setFilters(prev => ({
         ...prev,
         // Se tiver date específico, usa como start e end
@@ -107,9 +145,15 @@ export default function TransactionsPage() {
         ...(endDateParam && { endDate: endDateParam }),
         // Tipo: INCOME ou EXPENSE
         ...(typeParam && { type: typeParam.toLowerCase() as 'all' | 'income' | 'expense' }),
-        // Status: completed ou pending
-        ...(statusParam && { status: statusParam.toLowerCase() as 'all' | 'completed' | 'pending' })
+        // Status: completed ou pending (se for overdue, deixa all para filtrar por coluna)
+        ...(statusParam && statusParam !== 'overdue' && { status: statusParam.toLowerCase() as 'all' | 'completed' | 'pending' })
       }));
+      
+      // Se status for overdue, aplicar filtro de coluna
+      if (statusParam === 'overdue') {
+        setColumnFilters(prev => ({ ...prev, statuses: ['overdue'] }));
+      }
+      
       setShowFilters(true);
     }
   }, []);
@@ -133,15 +177,17 @@ export default function TransactionsPage() {
 
       if (filters.categoryId) params.categoryId = filters.categoryId;
       if (filters.bankAccountId) params.bankAccountId = filters.bankAccountId;
+      if (filters.paymentMethodId) params.paymentMethodId = filters.paymentMethodId;
       if (filters.type !== 'all') params.type = filters.type;
       if (filters.status !== 'all') params.status = filters.status;
 
       // Buscar transações realizadas + ocorrências pendentes
-      const [transactionsRes, occurrencesRes, categoriesRes, accountsRes] = await Promise.all([
+      const [transactionsRes, occurrencesRes, categoriesRes, accountsRes, paymentMethodsRes] = await Promise.all([
         api.get('/transactions', { params }),
         api.get('/recurring-bills/occurrences', { params }),
         api.get('/categories?isActive=true'),
         api.get('/bank-accounts?isActive=true'),
+        api.get('/payment-methods?isActive=true'),
       ]);
 
       // Combinar transações com ocorrências de recorrências
@@ -206,6 +252,7 @@ export default function TransactionsPage() {
       setTransactions(allTransactions);
       setCategories(categoriesRes.data.data.categories || []);
       setBankAccounts(accountsRes.data.data.accounts || []);
+      setPaymentMethods(paymentMethodsRes.data.data.paymentMethods || []);
     } catch (error: any) {
       console.error('Erro ao carregar dados:', error);
       toast.error('Erro ao carregar dados');
@@ -342,6 +389,225 @@ export default function TransactionsPage() {
 
   const totals = getTotals();
 
+  // Função para ordenar
+  const handleSort = (key: string) => {
+    let direction: 'asc' | 'desc' = 'asc';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  // Função para toggle de filtro checkbox
+  const toggleColumnFilter = (filterType: 'categories' | 'accounts' | 'paymentMethods' | 'statuses', value: string) => {
+    setColumnFilters(prev => {
+      const current = prev[filterType];
+      if (current.includes(value)) {
+        return { ...prev, [filterType]: current.filter(v => v !== value) };
+      } else {
+        return { ...prev, [filterType]: [...current, value] };
+      }
+    });
+  };
+
+  // Selecionar/Deselecionar todos
+  const toggleAllColumnFilter = (filterType: 'categories' | 'accounts' | 'paymentMethods' | 'statuses', allValues: string[]) => {
+    setColumnFilters(prev => {
+      if (prev[filterType].length === allValues.length) {
+        return { ...prev, [filterType]: [] };
+      } else {
+        return { ...prev, [filterType]: allValues };
+      }
+    });
+  };
+
+  // Limpar filtro de coluna
+  const clearColumnFilter = (filterType: 'categories' | 'accounts' | 'paymentMethods' | 'statuses') => {
+    setColumnFilters(prev => ({ ...prev, [filterType]: [] }));
+  };
+
+  // Obter valores únicos para filtros
+  const uniqueCategories = [...new Map(transactions.map(t => [t.category?.id, t.category])).values()].filter(Boolean);
+  const uniqueAccounts = [...new Map(transactions.map(t => [t.bankAccount?.id, t.bankAccount])).values()].filter(Boolean);
+  const uniquePaymentMethods = [...new Map(transactions.map(t => [t.paymentMethod?.id, t.paymentMethod])).values()].filter(Boolean);
+  const uniqueStatuses = [
+    { id: 'completed', name: 'Paga' },
+    { id: 'pending', name: 'Pendente' },
+    { id: 'overdue', name: 'Atrasado' },
+  ];
+
+  // Aplicar filtros e ordenação
+  const getFilteredAndSortedTransactions = () => {
+    let result = [...transactions];
+
+    // Aplicar filtros de checkbox
+    if (columnFilters.categories.length > 0) {
+      result = result.filter(t => columnFilters.categories.includes(t.category?.id || ''));
+    }
+    if (columnFilters.accounts.length > 0) {
+      result = result.filter(t => columnFilters.accounts.includes(t.bankAccount?.id || ''));
+    }
+    if (columnFilters.paymentMethods.length > 0) {
+      result = result.filter(t => columnFilters.paymentMethods.includes(t.paymentMethod?.id || ''));
+    }
+    if (columnFilters.statuses.length > 0) {
+      result = result.filter(t => {
+        const isOverdue = t.status !== 'completed' && 
+          new Date(t.dueDate || t.transactionDate) < new Date(new Date().setHours(0, 0, 0, 0));
+        const statusId = t.status === 'completed' ? 'completed' : (isOverdue ? 'overdue' : 'pending');
+        return columnFilters.statuses.includes(statusId);
+      });
+    }
+
+    // Aplicar ordenação
+    if (sortConfig) {
+      result.sort((a, b) => {
+        let aValue: any;
+        let bValue: any;
+
+        switch (sortConfig.key) {
+          case 'date':
+            aValue = new Date(a.dueDate || a.transactionDate).getTime();
+            bValue = new Date(b.dueDate || b.transactionDate).getTime();
+            break;
+          case 'description':
+            aValue = a.description.toLowerCase();
+            bValue = b.description.toLowerCase();
+            break;
+          case 'category':
+            aValue = a.category?.name?.toLowerCase() || '';
+            bValue = b.category?.name?.toLowerCase() || '';
+            break;
+          case 'account':
+            aValue = a.bankAccount?.name?.toLowerCase() || '';
+            bValue = b.bankAccount?.name?.toLowerCase() || '';
+            break;
+          case 'paymentMethod':
+            aValue = a.paymentMethod?.name?.toLowerCase() || '';
+            bValue = b.paymentMethod?.name?.toLowerCase() || '';
+            break;
+          case 'amount':
+            aValue = Number(a.amount);
+            bValue = Number(b.amount);
+            break;
+          case 'status':
+            aValue = a.status;
+            bValue = b.status;
+            break;
+          default:
+            return 0;
+        }
+
+        if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+
+    return result;
+  };
+
+  const filteredTransactions = getFilteredAndSortedTransactions();
+
+  // Componente de cabeçalho de coluna com ordenação e filtro
+  const ColumnHeader = ({ 
+    label, 
+    sortKey, 
+    filterType,
+    filterOptions,
+    selectedFilters,
+  }: { 
+    label: string; 
+    sortKey?: string;
+    filterType?: 'categories' | 'accounts' | 'paymentMethods' | 'statuses';
+    filterOptions?: { id: string; name: string; icon?: string; color?: string }[];
+    selectedFilters?: string[];
+  }) => {
+    const isOpen = openDropdown === (filterType || sortKey);
+    const hasActiveFilter = selectedFilters && selectedFilters.length > 0;
+
+    return (
+      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider relative">
+        <div className="flex items-center gap-1">
+          <span>{label}</span>
+          
+          {/* Botão de ordenação */}
+          {sortKey && (
+            <button
+              onClick={() => handleSort(sortKey)}
+              className="p-1 hover:bg-gray-200 rounded transition-colors"
+              title={`Ordenar por ${label}`}
+            >
+              <div className="flex flex-col">
+                <ChevronUp className={`w-3 h-3 -mb-1 ${sortConfig?.key === sortKey && sortConfig.direction === 'asc' ? 'text-blue-600' : 'text-gray-400'}`} />
+                <ChevronDown className={`w-3 h-3 ${sortConfig?.key === sortKey && sortConfig.direction === 'desc' ? 'text-blue-600' : 'text-gray-400'}`} />
+              </div>
+            </button>
+          )}
+          
+          {/* Botão de filtro */}
+          {filterType && filterOptions && (
+            <button
+              onClick={() => setOpenDropdown(isOpen ? null : filterType)}
+              className={`p-1 hover:bg-gray-200 rounded transition-colors ${hasActiveFilter ? 'text-blue-600' : 'text-gray-400'}`}
+              title={`Filtrar por ${label}`}
+            >
+              <Filter className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+
+        {/* Dropdown de filtro */}
+        {isOpen && filterType && filterOptions && (
+          <div 
+            ref={dropdownRef}
+            className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[200px] max-h-[300px] overflow-auto"
+          >
+            <div className="p-2 border-b border-gray-100">
+              <button
+                onClick={() => toggleAllColumnFilter(filterType, filterOptions.map(o => o.id))}
+                className="flex items-center gap-2 w-full px-2 py-1 text-sm hover:bg-gray-100 rounded"
+              >
+                <div className={`w-4 h-4 border rounded flex items-center justify-center ${selectedFilters?.length === filterOptions.length ? 'bg-blue-600 border-blue-600' : 'border-gray-300'}`}>
+                  {selectedFilters?.length === filterOptions.length && <Check className="w-3 h-3 text-white" />}
+                </div>
+                <span>Selecionar Todos</span>
+              </button>
+            </div>
+            <div className="p-2">
+              {filterOptions.map(option => (
+                <button
+                  key={option.id}
+                  onClick={() => toggleColumnFilter(filterType, option.id)}
+                  className="flex items-center gap-2 w-full px-2 py-1 text-sm hover:bg-gray-100 rounded"
+                >
+                  <div className={`w-4 h-4 border rounded flex items-center justify-center ${selectedFilters?.includes(option.id) ? 'bg-blue-600 border-blue-600' : 'border-gray-300'}`}>
+                    {selectedFilters?.includes(option.id) && <Check className="w-3 h-3 text-white" />}
+                  </div>
+                  {option.color && (
+                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: option.color }} />
+                  )}
+                  {option.icon && <span>{option.icon}</span>}
+                  <span className="truncate">{option.name}</span>
+                </button>
+              ))}
+            </div>
+            {selectedFilters && selectedFilters.length > 0 && (
+              <div className="p-2 border-t border-gray-100">
+                <button
+                  onClick={() => clearColumnFilter(filterType)}
+                  className="w-full px-3 py-1 text-sm text-red-600 hover:bg-red-50 rounded"
+                >
+                  Limpar Filtro
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </th>
+    );
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -371,7 +637,12 @@ export default function TransactionsPage() {
                 <Receipt className="w-8 h-8" />
                 Histórico de Transações
               </h1>
-              <p className="text-gray-600 mt-1">{transactions.length} transações encontradas</p>
+              <p className="text-gray-600 mt-1">
+                {filteredTransactions.length} de {transactions.length} transações
+                {(columnFilters.categories.length > 0 || columnFilters.accounts.length > 0 || columnFilters.paymentMethods.length > 0 || columnFilters.statuses.length > 0) && (
+                  <span className="text-blue-600 ml-2">(filtradas)</span>
+                )}
+              </p>
             </div>
           </div>
           <div className="flex gap-3">
@@ -503,6 +774,23 @@ export default function TransactionsPage() {
               </div>
 
               <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Meio de Pagamento</label>
+                <select
+                  value={filters.paymentMethodId}
+                  onChange={(e) => setFilters({ ...filters, paymentMethodId: e.target.value })}
+                  className="w-full px-4 py-2 min-h-[44px] border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white"
+                  title="Filtrar por meio de pagamento"
+                >
+                  <option value="">Todos</option>
+                  {paymentMethods.map((pm) => (
+                    <option key={pm.id} value={pm.id}>
+                      {pm.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Tipo</label>
                 <select
                   value={filters.type}
@@ -540,31 +828,44 @@ export default function TransactionsPage() {
               <table className="w-full">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Data
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Descrição
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Categoria
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Conta
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Valor
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
-                    </th>
+                    <ColumnHeader label="Data" sortKey="date" />
+                    <ColumnHeader label="Descrição" sortKey="description" />
+                    <ColumnHeader 
+                      label="Categoria" 
+                      sortKey="category" 
+                      filterType="categories"
+                      filterOptions={uniqueCategories.map(c => ({ id: c?.id || '', name: c?.name || '', icon: c?.icon, color: c?.color }))}
+                      selectedFilters={columnFilters.categories}
+                    />
+                    <ColumnHeader 
+                      label="Conta" 
+                      sortKey="account" 
+                      filterType="accounts"
+                      filterOptions={uniqueAccounts.map(a => ({ id: a?.id || '', name: a?.name || '' }))}
+                      selectedFilters={columnFilters.accounts}
+                    />
+                    <ColumnHeader 
+                      label="Meio de Pagamento" 
+                      sortKey="paymentMethod" 
+                      filterType="paymentMethods"
+                      filterOptions={uniquePaymentMethods.map(p => ({ id: p?.id || '', name: p?.name || '' }))}
+                      selectedFilters={columnFilters.paymentMethods}
+                    />
+                    <ColumnHeader label="Valor" sortKey="amount" />
+                    <ColumnHeader 
+                      label="Status" 
+                      sortKey="status" 
+                      filterType="statuses"
+                      filterOptions={uniqueStatuses}
+                      selectedFilters={columnFilters.statuses}
+                    />
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Ações
                     </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {transactions.map((transaction) => (
+                  {filteredTransactions.map((transaction) => (
                     <tr key={transaction.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                         <div className="flex items-center gap-2">
@@ -616,6 +917,9 @@ export default function TransactionsPage() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                         {transaction.bankAccount?.name || 'Não informada'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                        {transaction.paymentMethod?.name || '-'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold">
                         <span className={transaction.type === 'income' ? 'text-green-600' : 'text-red-600'}>

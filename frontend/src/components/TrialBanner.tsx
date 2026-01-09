@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Clock, Crown, X, ArrowRight } from 'lucide-react';
+import { Clock, Crown, X, ArrowRight, CheckCircle } from 'lucide-react';
 import api from '@/lib/api';
 
 interface TrialBannerProps {
@@ -15,6 +15,7 @@ interface SubscriptionStatus {
   trialEndsAt?: string;
   daysRemaining?: number;
   isActive: boolean;
+  periodEnd?: string;
 }
 
 export default function TrialBanner({ tenantId }: TrialBannerProps) {
@@ -22,47 +23,58 @@ export default function TrialBanner({ tenantId }: TrialBannerProps) {
   const [status, setStatus] = useState<SubscriptionStatus | null>(null);
   const [dismissed, setDismissed] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [showSuccess, setShowSuccess] = useState(false);
 
   useEffect(() => {
-    // Check if banner was dismissed today
-    const dismissedDate = localStorage.getItem('trialBannerDismissed');
-    if (dismissedDate === new Date().toDateString()) {
-      setDismissed(true);
-    }
-    
     fetchSubscriptionStatus();
   }, [tenantId]);
 
   const fetchSubscriptionStatus = async () => {
     try {
-      const response = await api.get('/subscription/stripe/status');
+      const response = await api.get('/subscription/current');
       if (response.data.success) {
-        setStatus(response.data.data);
+        const data = response.data.data;
+        
+        // Calcular dias restantes
+        let daysRemaining = data.daysRemaining;
+        let periodEnd = null;
+        
+        // Se tem assinatura com período definido
+        if (data.subscription?.currentPeriodEnd) {
+          periodEnd = data.subscription.currentPeriodEnd;
+          const now = new Date();
+          const endDate = new Date(periodEnd);
+          const diffTime = endDate.getTime() - now.getTime();
+          daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        }
+        
+        setStatus({
+          plan: data.currentPlan || 'trial',
+          status: data.status || 'active',
+          trialEndsAt: data.trialEndsAt,
+          daysRemaining: daysRemaining,
+          isActive: data.isActive !== false,
+          periodEnd: periodEnd,
+        });
+
+        // Se mudou de trial para plano pago, mostrar sucesso
+        const previousPlan = localStorage.getItem('lastKnownPlan');
+        if (previousPlan === 'trial' && data.currentPlan !== 'trial') {
+          setShowSuccess(true);
+          setTimeout(() => setShowSuccess(false), 5000);
+        }
+        localStorage.setItem('lastKnownPlan', data.currentPlan || 'trial');
       }
     } catch (error) {
-      // If Stripe endpoint fails, try legacy endpoint
-      try {
-        const response = await api.get('/subscription/current');
-        if (response.data.success) {
-          const data = response.data.data;
-          setStatus({
-            plan: data.currentPlan || 'trial',
-            status: data.status || 'trial',
-            trialEndsAt: data.trialEndsAt,
-            daysRemaining: data.daysRemaining,
-            isActive: data.isActive !== false,
-          });
-        }
-      } catch {
-        // Ignore errors
-      }
+      console.error('Erro ao buscar status da assinatura:', error);
     } finally {
       setLoading(false);
     }
   };
 
   const handleDismiss = () => {
-    localStorage.setItem('trialBannerDismissed', new Date().toDateString());
+    const dismissKey = `subscriptionBannerDismissed_${status?.plan}`;
+    localStorage.setItem(dismissKey, new Date().toDateString());
     setDismissed(true);
   };
 
@@ -70,25 +82,83 @@ export default function TrialBanner({ tenantId }: TrialBannerProps) {
     router.push('/dashboard/plans');
   };
 
-  // Don't show if loading, dismissed, or not in trial
-  if (loading || dismissed) return null;
-  if (!status || status.plan !== 'trial') return null;
+  if (loading) return null;
 
-  const daysRemaining = status.daysRemaining ?? 14;
+  // Banner de sucesso após assinar
+  if (showSuccess && status && status.plan !== 'trial') {
+    return (
+      <div className="relative mb-6 rounded-xl p-4 shadow-lg bg-gradient-to-r from-green-500 to-emerald-600 text-white">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-full bg-white/20">
+            <CheckCircle className="w-6 h-6" />
+          </div>
+          <div>
+            <h3 className="font-bold text-lg">🎉 Parabéns! Assinatura ativada com sucesso!</h3>
+            <p className="text-sm opacity-90">
+              Você agora tem acesso ao plano {status.plan.charAt(0).toUpperCase() + status.plan.slice(1)}. 
+              Aproveite todas as funcionalidades!
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!status) return null;
+
+  // Verificar se foi dispensado hoje
+  const dismissKey = `subscriptionBannerDismissed_${status.plan}`;
+  const wasDismissedToday = localStorage.getItem(dismissKey) === new Date().toDateString();
+  if (wasDismissedToday || dismissed) return null;
+
+  const isTrial = status.plan === 'trial';
+  const daysRemaining = status.daysRemaining ?? 30;
+  
+  // PLANO PAGO: só mostrar se faltar 7 dias ou menos para vencer
+  if (!isTrial && daysRemaining > 7) {
+    return null;
+  }
+
   const isUrgent = daysRemaining <= 3;
   const isExpired = daysRemaining <= 0;
 
+  // Configurações visuais
+  let bgClass = 'bg-gradient-to-r from-[#6C5CE7] to-purple-600 text-white';
+  let title = '';
+  let subtitle = '';
+
+  if (isTrial) {
+    if (isExpired) {
+      bgClass = 'bg-gradient-to-r from-red-500 to-red-600 text-white';
+      title = 'Seu período de teste expirou!';
+      subtitle = 'Assine agora para continuar usando todas as funcionalidades';
+    } else if (isUrgent) {
+      bgClass = 'bg-gradient-to-r from-orange-500 to-amber-500 text-white';
+      title = daysRemaining === 1 ? '⚠️ Último dia de teste!' : `⚠️ ${daysRemaining} dias restantes no seu teste gratuito`;
+      subtitle = 'Assine agora para não perder acesso às suas finanças!';
+    } else {
+      title = `🎉 ${daysRemaining} dias restantes no seu teste gratuito`;
+      subtitle = 'Aproveite todas as funcionalidades. Assine quando estiver pronto!';
+    }
+  } else {
+    const planName = status.plan.charAt(0).toUpperCase() + status.plan.slice(1);
+    if (isExpired) {
+      bgClass = 'bg-gradient-to-r from-red-500 to-red-600 text-white';
+      title = `Seu plano ${planName} venceu!`;
+      subtitle = 'Renove agora para continuar usando o sistema';
+    } else if (isUrgent) {
+      bgClass = 'bg-gradient-to-r from-orange-500 to-amber-500 text-white';
+      title = daysRemaining === 1 ? `⚠️ Seu plano ${planName} vence amanhã!` : `⚠️ Seu plano ${planName} vence em ${daysRemaining} dias`;
+      subtitle = 'Renove para garantir acesso contínuo';
+    } else {
+      bgClass = 'bg-gradient-to-r from-blue-500 to-blue-600 text-white';
+      title = `📅 Seu plano ${planName} vence em ${daysRemaining} dias`;
+      subtitle = 'Lembre-se de renovar para continuar aproveitando';
+    }
+  }
+
   return (
-    <div 
-      className={`relative mb-6 rounded-xl p-4 shadow-lg transition-all ${
-        isExpired 
-          ? 'bg-gradient-to-r from-red-500 to-red-600 text-white'
-          : isUrgent 
-            ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white'
-            : 'bg-gradient-to-r from-[#6C5CE7] to-purple-600 text-white'
-      }`}
-    >
-      {/* Close button */}
+    <div className={`relative mb-6 rounded-xl p-4 shadow-lg transition-all ${bgClass}`}>
       {!isExpired && (
         <button 
           onClick={handleDismiss}
@@ -101,66 +171,35 @@ export default function TrialBanner({ tenantId }: TrialBannerProps) {
 
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className={`p-2 rounded-full ${isExpired || isUrgent ? 'bg-white/20' : 'bg-white/20'}`}>
-            {isExpired ? (
-              <Crown className="w-6 h-6" />
-            ) : (
-              <Clock className="w-6 h-6" />
-            )}
+          <div className="p-2 rounded-full bg-white/20">
+            {isExpired ? <Crown className="w-6 h-6" /> : <Clock className="w-6 h-6" />}
           </div>
-          
           <div>
-            {isExpired ? (
-              <>
-                <h3 className="font-bold text-lg">Seu período de teste expirou!</h3>
-                <p className="text-sm opacity-90">
-                  Assine agora para continuar usando todas as funcionalidades
-                </p>
-              </>
-            ) : (
-              <>
-                <h3 className="font-bold text-lg">
-                  {isUrgent ? '⚠️ ' : '🎉 '}
-                  {daysRemaining === 1 
-                    ? 'Último dia de teste!' 
-                    : `${daysRemaining} dias restantes no seu teste gratuito`}
-                </h3>
-                <p className="text-sm opacity-90">
-                  {isUrgent 
-                    ? 'Assine agora para não perder acesso às suas finanças!'
-                    : 'Aproveite todas as funcionalidades. Assine quando estiver pronto!'}
-                </p>
-              </>
-            )}
+            <h3 className="font-bold text-lg">{title}</h3>
+            <p className="text-sm opacity-90">{subtitle}</p>
           </div>
         </div>
 
         <button
           onClick={handleUpgrade}
           className={`flex items-center gap-2 px-5 py-2.5 rounded-lg font-semibold transition-all whitespace-nowrap ${
-            isExpired || isUrgent
-              ? 'bg-white text-gray-900 hover:bg-gray-100'
-              : 'bg-white/20 hover:bg-white/30 text-white'
+            isExpired || isUrgent ? 'bg-white text-gray-900 hover:bg-gray-100' : 'bg-white/20 hover:bg-white/30 text-white'
           }`}
         >
           <Crown className="w-4 h-4" />
-          Ver Planos
+          {isTrial ? 'Ver Planos' : 'Renovar'}
           <ArrowRight className="w-4 h-4" />
         </button>
       </div>
 
-      {/* Progress bar for trial */}
-      {!isExpired && (
+      {isTrial && !isExpired && (
         <div className="mt-4">
           <div className="flex justify-between text-xs mb-1 opacity-75">
             <span>Início do trial</span>
             <span>{daysRemaining} dias restantes</span>
           </div>
           <div className="h-2 bg-white/20 rounded-full overflow-hidden">
-            <div 
-              className="h-full bg-white rounded-full transition-all duration-500"
-              style={{ width: `${Math.max(0, Math.min(100, ((14 - daysRemaining) / 14) * 100))}%` }}
-            />
+            <div className="h-full bg-white rounded-full transition-all duration-500" style={{ width: `${Math.max(0, Math.min(100, ((30 - daysRemaining) / 30) * 100))}%` }} />
           </div>
         </div>
       )}

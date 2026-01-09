@@ -930,7 +930,7 @@ function ComparisonView({ comparison }: { comparison: PeriodComparison | null })
 
 export default function EnergyReportsPage() {
   const router = useRouter();
-  const { accessToken } = useAuth();
+  const { isAuthenticated } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<'overview' | 'narrative' | 'comparison' | 'insights'>('overview');
@@ -951,10 +951,10 @@ export default function EnergyReportsPage() {
   // Carregar dados
   useEffect(() => {
     loadData();
-  }, [accessToken, period, year, comparisonPreset, activeView]);
+  }, [isAuthenticated, period, year, comparisonPreset, activeView]);
 
   async function loadData() {
-    if (!accessToken) return;
+    if (!isAuthenticated) return;
     
     setLoading(true);
     setError(null);

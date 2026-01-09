@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { X, Plus, DollarSign, Calendar, FileText, Tag, CreditCard, Wallet } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { X, Plus, DollarSign, Calendar, FileText, Tag, CreditCard, Wallet, Edit2, Trash2, AlertTriangle, ChevronDown } from 'lucide-react';
 import api from '@/lib/api';
 import { toast } from 'sonner';
 
@@ -100,6 +100,29 @@ export default function TransactionModal({
   const [showQuickPaymentMethod, setShowQuickPaymentMethod] = useState(false);
   const [quickBankAccount, setQuickBankAccount] = useState({ name: '', type: 'bank', institution: '' });
   const [quickPaymentMethod, setQuickPaymentMethod] = useState({ name: '', type: 'pix' });
+
+  // Estados para dropdown customizado de meios de pagamento
+  const [showPaymentMethodDropdown, setShowPaymentMethodDropdown] = useState(false);
+  const [hoveredPaymentMethodId, setHoveredPaymentMethodId] = useState<string | null>(null);
+  const [editingPaymentMethod, setEditingPaymentMethod] = useState<PaymentMethod | null>(null);
+  const [showEditPaymentMethodModal, setShowEditPaymentMethodModal] = useState(false);
+  const [editPaymentMethodName, setEditPaymentMethodName] = useState('');
+  const [showDeletePaymentMethodModal, setShowDeletePaymentMethodModal] = useState(false);
+  const [deletingPaymentMethod, setDeletingPaymentMethod] = useState<PaymentMethod | null>(null);
+  const [deletingPaymentMethodTransactionCount, setDeletingPaymentMethodTransactionCount] = useState(0);
+  const [paymentMethodActionLoading, setPaymentMethodActionLoading] = useState(false);
+  const paymentMethodDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Fechar dropdown ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (paymentMethodDropdownRef.current && !paymentMethodDropdownRef.current.contains(event.target as Node)) {
+        setShowPaymentMethodDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     if (isOpen) {
@@ -209,6 +232,97 @@ export default function TransactionModal({
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Erro ao criar método');
     }
+  };
+
+  // Função para abrir modal de edição de meio de pagamento
+  const handleOpenEditPaymentMethod = (e: React.MouseEvent, method: PaymentMethod) => {
+    e.stopPropagation();
+    setEditingPaymentMethod(method);
+    setEditPaymentMethodName(method.name);
+    setShowEditPaymentMethodModal(true);
+    setShowPaymentMethodDropdown(false);
+  };
+
+  // Função para salvar edição do meio de pagamento
+  const handleSaveEditPaymentMethod = async () => {
+    if (!editingPaymentMethod || !editPaymentMethodName.trim()) {
+      toast.error('Preencha o nome do meio de pagamento');
+      return;
+    }
+    setPaymentMethodActionLoading(true);
+    try {
+      await api.put(`/payment-methods/${editingPaymentMethod.id}`, {
+        name: editPaymentMethodName.trim(),
+      });
+      setPaymentMethods(prev => 
+        prev.map(m => m.id === editingPaymentMethod.id ? { ...m, name: editPaymentMethodName.trim() } : m)
+      );
+      setShowEditPaymentMethodModal(false);
+      setEditingPaymentMethod(null);
+      setEditPaymentMethodName('');
+      toast.success('Meio de pagamento atualizado!');
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Erro ao atualizar meio de pagamento');
+    } finally {
+      setPaymentMethodActionLoading(false);
+    }
+  };
+
+  // Função para abrir modal de exclusão de meio de pagamento
+  const handleOpenDeletePaymentMethod = async (e: React.MouseEvent, method: PaymentMethod) => {
+    e.stopPropagation();
+    setDeletingPaymentMethod(method);
+    setShowPaymentMethodDropdown(false);
+    setPaymentMethodActionLoading(true);
+    
+    try {
+      // Verificar quantas transações estão vinculadas
+      const response = await api.get(`/transactions?paymentMethodId=${method.id}&limit=1`);
+      const count = response.data?.data?.pagination?.total || 0;
+      setDeletingPaymentMethodTransactionCount(count);
+      setShowDeletePaymentMethodModal(true);
+    } catch (error: any) {
+      console.error('Erro ao verificar transações:', error);
+      setDeletingPaymentMethodTransactionCount(0);
+      setShowDeletePaymentMethodModal(true);
+    } finally {
+      setPaymentMethodActionLoading(false);
+    }
+  };
+
+  // Função para confirmar exclusão do meio de pagamento
+  const handleConfirmDeletePaymentMethod = async () => {
+    if (!deletingPaymentMethod) return;
+    
+    setPaymentMethodActionLoading(true);
+    try {
+      await api.delete(`/payment-methods/${deletingPaymentMethod.id}`);
+      
+      // Remover da lista e limpar seleção se necessário
+      setPaymentMethods(prev => prev.filter(m => m.id !== deletingPaymentMethod.id));
+      if (formData.paymentMethodId === deletingPaymentMethod.id) {
+        setFormData(prev => ({ ...prev, paymentMethodId: '' }));
+      }
+      
+      setShowDeletePaymentMethodModal(false);
+      setDeletingPaymentMethod(null);
+      toast.success('Meio de pagamento excluído!');
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || 'Erro ao excluir meio de pagamento';
+      if (errorMessage.includes('transações') || errorMessage.includes('Inative')) {
+        toast.error('Este meio de pagamento possui transações vinculadas. Não é possível excluí-lo.');
+      } else {
+        toast.error(errorMessage);
+      }
+    } finally {
+      setPaymentMethodActionLoading(false);
+    }
+  };
+
+  // Função para selecionar meio de pagamento
+  const handleSelectPaymentMethod = (methodId: string) => {
+    setFormData({ ...formData, paymentMethodId: methodId });
+    setShowPaymentMethodDropdown(false);
   };
 
   // Verifica se a transação é uma parcela de um parcelamento
@@ -703,24 +817,87 @@ export default function TransactionModal({
                 </div>
               )}
               
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+              <div className="relative" ref={paymentMethodDropdownRef}>
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none z-10">
                   <CreditCard className="w-5 h-5 text-[#1F4FD8]" />
                 </div>
-                <select
-                  value={formData.paymentMethodId}
-                  onChange={(e) => setFormData({ ...formData, paymentMethodId: e.target.value })}
-                  className="w-full pl-12 pr-4 py-3 min-h-[44px] border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] transition-all bg-[#F9FAFB] text-gray-900 appearance-none cursor-pointer"
-                  title="Selecione meio de pagamento"
+                {/* Botão para abrir dropdown customizado */}
+                <button
+                  type="button"
+                  onClick={() => setShowPaymentMethodDropdown(!showPaymentMethodDropdown)}
+                  className="w-full pl-12 pr-10 py-3 min-h-[44px] border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] transition-all bg-[#F9FAFB] text-gray-900 text-left cursor-pointer"
                   aria-label="Meio de Pagamento"
+                  aria-expanded={showPaymentMethodDropdown}
                 >
-                  <option value="">Selecione (opcional)</option>
-                  {paymentMethods.map((method) => (
-                    <option key={method.id} value={method.id}>
-                      {method.name}
-                    </option>
-                  ))}
-                </select>
+                  {formData.paymentMethodId 
+                    ? paymentMethods.find(m => m.id === formData.paymentMethodId)?.name || 'Selecione (opcional)'
+                    : 'Selecione (opcional)'}
+                </button>
+                <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
+                  <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${showPaymentMethodDropdown ? 'rotate-180' : ''}`} />
+                </div>
+                
+                {/* Dropdown customizado */}
+                {showPaymentMethodDropdown && (
+                  <div className="absolute z-50 w-full mt-1 bg-white border-2 border-gray-200 rounded-xl shadow-lg max-h-60 overflow-auto">
+                    {/* Opção para limpar seleção */}
+                    <div
+                      onClick={() => handleSelectPaymentMethod('')}
+                      className="px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors border-b border-gray-100"
+                    >
+                      <span className="text-gray-500">Selecione (opcional)</span>
+                    </div>
+                    
+                    {/* Lista de meios de pagamento */}
+                    {paymentMethods.map((method) => (
+                      <div
+                        key={method.id}
+                        className={`px-4 py-2.5 cursor-pointer transition-colors flex items-center justify-between ${
+                          formData.paymentMethodId === method.id ? 'bg-blue-50' : 'hover:bg-gray-50'
+                        }`}
+                      >
+                        <span 
+                          onClick={() => handleSelectPaymentMethod(method.id)}
+                          className={`flex-1 ${formData.paymentMethodId === method.id ? 'text-[#1F4FD8] font-medium' : 'text-gray-900'}`}
+                        >
+                          {method.name}
+                        </span>
+                        
+                        {/* Ícones de editar/excluir - sempre visíveis */}
+                        <div className="flex items-center gap-2 ml-3 flex-shrink-0">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenEditPaymentMethod(e, method);
+                            }}
+                            className="p-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 transition-colors"
+                            title="Editar"
+                          >
+                            <Edit2 className="w-4 h-4 text-blue-600" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenDeletePaymentMethod(e, method);
+                            }}
+                            className="p-1.5 rounded-lg bg-red-50 hover:bg-red-100 transition-colors"
+                            title="Excluir"
+                          >
+                            <Trash2 className="w-4 h-4 text-red-600" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    
+                    {paymentMethods.length === 0 && (
+                      <div className="px-4 py-3 text-gray-500 text-center">
+                        Nenhum meio de pagamento cadastrado
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -941,6 +1118,135 @@ export default function TransactionModal({
                 className="w-full px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-white transition-all font-semibold"
               >
                 Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Edição de Meio de Pagamento */}
+      {showEditPaymentMethodModal && editingPaymentMethod && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl">
+            <div className="flex items-center justify-between p-6 border-b border-gray-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
+                  <Edit2 className="w-5 h-5 text-blue-600" />
+                </div>
+                <h3 className="text-lg font-bold text-gray-900">Editar Meio de Pagamento</h3>
+              </div>
+              <button
+                onClick={() => {
+                  setShowEditPaymentMethodModal(false);
+                  setEditingPaymentMethod(null);
+                  setEditPaymentMethodName('');
+                }}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                title="Fechar"
+                aria-label="Fechar modal"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            
+            <div className="p-6">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Nome do Meio de Pagamento
+              </label>
+              <input
+                type="text"
+                value={editPaymentMethodName}
+                onChange={(e) => setEditPaymentMethodName(e.target.value)}
+                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                placeholder="Ex: PIX Nubank, Cartão Itaú..."
+                autoFocus
+              />
+            </div>
+            
+            <div className="flex gap-3 p-6 border-t border-gray-100">
+              <button
+                onClick={() => {
+                  setShowEditPaymentMethodModal(false);
+                  setEditingPaymentMethod(null);
+                  setEditPaymentMethodName('');
+                }}
+                disabled={paymentMethodActionLoading}
+                className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-all font-semibold"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSaveEditPaymentMethod}
+                disabled={paymentMethodActionLoading || !editPaymentMethodName.trim()}
+                className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {paymentMethodActionLoading ? 'Salvando...' : 'Salvar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Exclusão de Meio de Pagamento */}
+      {showDeletePaymentMethodModal && deletingPaymentMethod && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl">
+            <div className="flex items-center justify-between p-6 border-b border-gray-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-red-100 rounded-xl flex items-center justify-center">
+                  <Trash2 className="w-5 h-5 text-red-600" />
+                </div>
+                <h3 className="text-lg font-bold text-gray-900">Excluir Meio de Pagamento</h3>
+              </div>
+              <button
+                onClick={() => {
+                  setShowDeletePaymentMethodModal(false);
+                  setDeletingPaymentMethod(null);
+                }}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                title="Fechar"
+                aria-label="Fechar modal"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            
+            <div className="p-6">
+              <p className="text-gray-700 mb-4">
+                Tem certeza que deseja excluir o meio de pagamento <strong>&quot;{deletingPaymentMethod.name}&quot;</strong>?
+              </p>
+              
+              {deletingPaymentMethodTransactionCount > 0 && (
+                <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-amber-800 font-semibold">Atenção!</p>
+                    <p className="text-amber-700 text-sm mt-1">
+                      Este meio de pagamento possui <strong>{deletingPaymentMethodTransactionCount}</strong> {deletingPaymentMethodTransactionCount === 1 ? 'lançamento vinculado' : 'lançamentos vinculados'}.
+                      Não será possível excluí-lo enquanto houver transações associadas.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            <div className="flex gap-3 p-6 border-t border-gray-100">
+              <button
+                onClick={() => {
+                  setShowDeletePaymentMethodModal(false);
+                  setDeletingPaymentMethod(null);
+                }}
+                disabled={paymentMethodActionLoading}
+                className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-all font-semibold"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleConfirmDeletePaymentMethod}
+                disabled={paymentMethodActionLoading || deletingPaymentMethodTransactionCount > 0}
+                className="flex-1 px-4 py-3 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-all font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {paymentMethodActionLoading ? 'Excluindo...' : 'Excluir'}
               </button>
             </div>
           </div>

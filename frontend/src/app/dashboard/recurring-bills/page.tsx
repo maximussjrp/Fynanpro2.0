@@ -88,6 +88,22 @@ export default function RecurringBillsPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#F4F7FB] to-white p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
+        {/* Botão Nova Transação */}
+        <div className="mb-6">
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="flex items-center gap-3 p-4 bg-gradient-to-r from-[#1A1A1A] to-[#2A2A2A] border border-[#C9A962] rounded-xl hover:shadow-lg transition-all group"
+          >
+            <div className="w-12 h-12 rounded-lg bg-[#C9A962]/20 flex items-center justify-center group-hover:scale-110 transition-transform">
+              <span className="text-2xl">+</span>
+            </div>
+            <div className="text-left">
+              <p className="text-sm font-semibold text-white">Nova Transação</p>
+              <p className="text-xs text-white/80">Receita ou Despesa</p>
+            </div>
+          </button>
+        </div>
+
         {/* Banner de Migração */}
         <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl">
           <div className="flex items-center justify-between flex-wrap gap-4">
