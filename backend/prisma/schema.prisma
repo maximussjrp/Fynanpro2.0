@@ -71,7 +71,6 @@ model Tenant {
   imports             Import[]
   savedFilters        SavedFilter[]
   auditLogs           AuditLog[]
-  subscriptions       Subscription[]
 
   @@index([ownerId])
   @@index([subscriptionPlan])
@@ -689,58 +688,4 @@ model SystemAnnouncement {
 
   @@index([isActive])
   @@index([startsAt, endsAt])
-}
-
-// ==================== PAYMENT & SUBSCRIPTION ====================
-
-model Subscription {
-  id                    String    @id @default(uuid())
-  tenantId              String    @unique
-  asaasSubscriptionId   String?   @unique
-  asaasCustomerId       String?
-  plan                  String    @default("trial") // trial, basic, plus, premium, business
-  planId                String?   // ID do plano no sistema
-  status                String    @default("active") // active, inactive, pending, cancelled, overdue
-  billingType           String?   // BOLETO, CREDIT_CARD, PIX
-  billingCycle          String?   // monthly, yearly
-  value                 Float?
-  cycle                 String?   // MONTHLY, YEARLY
-  nextDueDate           DateTime?
-  currentPeriodStart    DateTime?
-  currentPeriodEnd      DateTime?
-  cancelledAt           DateTime?
-  cancellationReason    String?
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
-
-  tenant                Tenant    @relation(fields: [tenantId], references: [id])
-  payments              Payment[]
-
-  @@index([asaasSubscriptionId])
-  @@index([status])
-}
-
-model Payment {
-  id                  String    @id @default(uuid())
-  subscriptionId      String
-  asaasPaymentId      String?   @unique
-  value               Float
-  netValue            Float?
-  status              String    @default("pending") // pending, confirmed, received, overdue, refunded, cancelled
-  billingType         String?   // BOLETO, CREDIT_CARD, PIX
-  dueDate             DateTime?
-  paymentDate         DateTime?
-  paidAt              DateTime?
-  invoiceUrl          String?
-  bankSlipUrl         String?
-  pixQrCode           String?
-  pixCopiaECola       String?
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
-
-  subscription        Subscription @relation(fields: [subscriptionId], references: [id])
-
-  @@index([subscriptionId])
-  @@index([asaasPaymentId])
-  @@index([status])
 }
