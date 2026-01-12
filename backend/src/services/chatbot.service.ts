@@ -2145,6 +2145,15 @@ export class ChatbotService {
       };
     }
     
+    // Comando: criar recorrência (genérico - perguntar se é receita ou despesa)
+    if (normalized.match(/recorr[eê]ncia|recorrente|criar.*recorr|nova.*recorr|adicionar.*recorr|cadastrar.*recorr/)) {
+      return {
+        response: `🔄 **Nova Recorrência**\n\nO que você quer cadastrar?`,
+        options: ['1️⃣ Despesa fixa (conta mensal)', '2️⃣ Receita fixa (salário, renda)'],
+        quickReplies: ['Despesa fixa', 'Receita fixa'],
+      };
+    }
+    
     // Não entendeu
     return {
       response: `Não entendi "${input}".\n\nVocê pode:\n• Dizer "gastei 50 no mercado"\n• Dizer "recebi 3000"\n• Perguntar "meu saldo"\n• Dizer "ajuda" para mais opções`,
