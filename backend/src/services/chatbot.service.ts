@@ -39,6 +39,7 @@ export enum ChatState {
   ASKING_CATEGORY = 'asking_category',
   ASKING_SUBCATEGORY = 'asking_subcategory',
   CONFIRMING_SUGGESTION = 'confirming_suggestion', // Novo: confirmar sugestão de categoria
+  CHOOSING_RECURRENCE_TYPE = 'choosing_recurrence_type', // Escolhendo se é despesa ou receita fixa
   ASKING_ACCOUNT = 'asking_account',
   ASKING_PAYMENT_METHOD = 'asking_payment_method',
   ASKING_AMOUNT = 'asking_amount',
@@ -954,6 +955,10 @@ export class ChatbotService {
         
       case ChatState.CONFIRMING_SUGGESTION:
         result = await this.handleConfirmingSuggestion(session, input);
+        break;
+        
+      case ChatState.CHOOSING_RECURRENCE_TYPE:
+        result = this.handleChoosingRecurrenceType(session, input);
         break;
         
       case ChatState.ASKING_ACCOUNT:
@@ -2147,6 +2152,7 @@ export class ChatbotService {
     
     // Comando: criar recorrência (genérico - perguntar se é receita ou despesa)
     if (normalized.match(/recorr[eê]ncia|recorrente|criar.*recorr|nova.*recorr|adicionar.*recorr|cadastrar.*recorr/)) {
+      session.state = ChatState.CHOOSING_RECURRENCE_TYPE;
       return {
         response: `🔄 **Nova Recorrência**\n\nO que você quer cadastrar?`,
         options: ['1️⃣ Despesa fixa (conta mensal)', '2️⃣ Receita fixa (salário, renda)'],
@@ -2158,6 +2164,37 @@ export class ChatbotService {
     return {
       response: `Não entendi "${input}".\n\nVocê pode:\n• Dizer "gastei 50 no mercado"\n• Dizer "recebi 3000"\n• Perguntar "meu saldo"\n• Dizer "ajuda" para mais opções`,
       quickReplies: ['Novo gasto', 'Nova receita', 'Meu saldo', 'Ajuda'],
+    };
+  }
+  
+  /**
+   * Trata a escolha do tipo de recorrência (despesa ou receita fixa)
+   */
+  private handleChoosingRecurrenceType(session: ChatSession, input: string) {
+    const normalized = input.toLowerCase().trim();
+    
+    // Escolheu despesa fixa
+    if (normalized === '1' || normalized.includes('despesa') || normalized.includes('conta')) {
+      session.state = ChatState.ONBOARDING_EXPENSES;
+      return {
+        response: `📋 **Nova Despesa Fixa**\n\nQual o nome dessa despesa?\n\n_(ex: Aluguel, Internet, Luz, Netflix...)_`,
+      };
+    }
+    
+    // Escolheu receita fixa
+    if (normalized === '2' || normalized.includes('receita') || normalized.includes('salário') || normalized.includes('salario') || normalized.includes('renda')) {
+      session.state = ChatState.ONBOARDING_INCOME_TYPE;
+      return {
+        response: `💵 **Nova Receita Fixa**\n\nQual é a fonte de renda?`,
+        options: ['1️⃣ Salário CLT', '2️⃣ Pró-labore', '3️⃣ Freelance', '4️⃣ Aluguel recebido', '5️⃣ Aposentadoria', '6️⃣ Outro'],
+        quickReplies: ['Salário', 'Pró-labore', 'Freelance', 'Outro'],
+      };
+    }
+    
+    // Não entendeu, pede novamente
+    return {
+      response: `Não entendi. Escolha uma opção:\n\n1️⃣ Despesa fixa (conta mensal)\n2️⃣ Receita fixa (salário, renda)`,
+      quickReplies: ['Despesa fixa', 'Receita fixa'],
     };
   }
   
