@@ -823,49 +823,49 @@ export default function TransactionsPage() {
 
         {/* Lista de Transações */}
         <div className="bg-white rounded-lg shadow-md overflow-hidden min-h-[400px]">
-          {filteredTransactions.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <ColumnHeader label="Data" sortKey="date" />
-                    <ColumnHeader label="Descrição" sortKey="description" />
-                    <ColumnHeader 
-                      label="Categoria" 
-                      sortKey="category" 
-                      filterType="categories"
-                      filterOptions={uniqueCategories.map(c => ({ id: c?.id || '', name: c?.name || '', icon: c?.icon, color: c?.color }))}
-                      selectedFilters={columnFilters.categories}
-                    />
-                    <ColumnHeader 
-                      label="Conta" 
-                      sortKey="account" 
-                      filterType="accounts"
-                      filterOptions={uniqueAccounts.map(a => ({ id: a?.id || '', name: a?.name || '' }))}
-                      selectedFilters={columnFilters.accounts}
-                    />
-                    <ColumnHeader 
-                      label="Meio de Pagamento" 
-                      sortKey="paymentMethod" 
-                      filterType="paymentMethods"
-                      filterOptions={uniquePaymentMethods.map(p => ({ id: p?.id || '', name: p?.name || '' }))}
-                      selectedFilters={columnFilters.paymentMethods}
-                    />
-                    <ColumnHeader label="Valor" sortKey="amount" />
-                    <ColumnHeader 
-                      label="Status" 
-                      sortKey="status" 
-                      filterType="statuses"
-                      filterOptions={uniqueStatuses}
-                      selectedFilters={columnFilters.statuses}
-                    />
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Ações
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredTransactions.map((transaction) => (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <ColumnHeader label="Data" sortKey="date" />
+                  <ColumnHeader label="Descrição" sortKey="description" />
+                  <ColumnHeader 
+                    label="Categoria" 
+                    sortKey="category" 
+                    filterType="categories"
+                    filterOptions={uniqueCategories.map(c => ({ id: c?.id || '', name: c?.name || '', icon: c?.icon, color: c?.color }))}
+                    selectedFilters={columnFilters.categories}
+                  />
+                  <ColumnHeader 
+                    label="Conta" 
+                    sortKey="account" 
+                    filterType="accounts"
+                    filterOptions={uniqueAccounts.map(a => ({ id: a?.id || '', name: a?.name || '' }))}
+                    selectedFilters={columnFilters.accounts}
+                  />
+                  <ColumnHeader 
+                    label="Meio de Pagamento" 
+                    sortKey="paymentMethod" 
+                    filterType="paymentMethods"
+                    filterOptions={uniquePaymentMethods.map(p => ({ id: p?.id || '', name: p?.name || '' }))}
+                    selectedFilters={columnFilters.paymentMethods}
+                  />
+                  <ColumnHeader label="Valor" sortKey="amount" />
+                  <ColumnHeader 
+                    label="Status" 
+                    sortKey="status" 
+                    filterType="statuses"
+                    filterOptions={uniqueStatuses}
+                    selectedFilters={columnFilters.statuses}
+                  />
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Ações
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {filteredTransactions.length > 0 ? (
+                  filteredTransactions.map((transaction) => (
                     <tr key={transaction.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                         <div className="flex items-center gap-2">
@@ -993,24 +993,28 @@ export default function TransactionsPage() {
                         </div>
                       </td>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center py-16 min-h-[350px]">
-              <Receipt className="w-16 h-16 text-gray-300 mb-4" />
-              <p className="text-gray-500 text-lg">Nenhuma transação encontrada</p>
-              <p className="text-gray-400 text-sm mt-2">Ajuste os filtros ou adicione novas transações</p>
-              <button
-                onClick={handleAddNew}
-                className="mt-4 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors inline-flex items-center gap-2"
-              >
-                <Plus className="w-5 h-5" />
-                Adicionar Primeira Transação
-              </button>
-            </div>
-          )}
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={8} className="px-6 py-16 text-center">
+                      <div className="flex flex-col items-center justify-center">
+                        <Receipt className="w-16 h-16 text-gray-300 mb-4" />
+                        <p className="text-gray-500 text-lg">Nenhuma transação encontrada</p>
+                        <p className="text-gray-400 text-sm mt-2">Limpe os filtros nas colunas acima ou adicione novas transações</p>
+                        <button
+                          onClick={handleAddNew}
+                          className="mt-4 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors inline-flex items-center gap-2"
+                        >
+                          <Plus className="w-5 h-5" />
+                          Adicionar Transação
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
