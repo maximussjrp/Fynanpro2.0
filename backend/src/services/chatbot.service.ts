@@ -180,6 +180,19 @@ const EXPENSES_PATTERNS = /(?:quanto\s+gastei|meus?\s+gastos?|despesas?|extrato)
 const BILLS_PATTERNS = /(?:contas?\s+a?\s*vencer|vencimentos?|próximas?\s+contas?|boletos?)/i;
 const PLANNING_PATTERNS = /(?:planejamento|planejar|meu\s+mês|resumo|visão\s+geral|overview)/i;
 
+// ==================== HELPER DE FUSO HORÁRIO ====================
+
+/**
+ * Obtém a hora atual no fuso horário de Brasília (America/Sao_Paulo)
+ * O servidor pode estar em UTC, então convertemos para o horário local do Brasil
+ */
+function getBrazilHour(): number {
+  const now = new Date();
+  // Usar toLocaleString com timezone para obter a hora correta em Brasília
+  const brazilTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+  return brazilTime.getHours();
+}
+
 // ==================== MAPA DE SUGESTÕES DE CATEGORIAS ====================
 
 interface CategorySuggestion {
@@ -2845,7 +2858,7 @@ export class ChatbotService {
   }
   
   private greet(session: ChatSession) {
-    const hour = new Date().getHours();
+    const hour = getBrazilHour();
     let greeting = 'Olá';
     
     if (hour >= 5 && hour < 12) greeting = 'Bom dia';
@@ -2862,13 +2875,13 @@ export class ChatbotService {
    * Saudação com insights proativos e sugestões contextuais
    */
   private async greetWithInsights(session: ChatSession) {
-    const hour = new Date().getHours();
+    const hour = getBrazilHour();
     const now = new Date();
     let greeting = 'Olá';
     let contextualTip = '';
     let priorityInfo = '';
     
-    // Saudação por horário
+    // Saudação por horário (usando fuso de Brasília)
     if (hour >= 5 && hour < 12) greeting = '☀️ Bom dia';
     else if (hour >= 12 && hour < 18) greeting = '🌤️ Boa tarde';
     else greeting = '🌙 Boa noite';
