@@ -1282,7 +1282,7 @@ export default function ReportsPage() {
                                 {hasChildren && (
                                   <span className="text-gray-500">{isExpanded ? '▼' : '▶'}</span>
                                 )}
-                                <span className="pl-2 text-gray-900 font-medium">{cat.icon} {cat.name}</span>
+                                <span className="pl-2 text-gray-900 font-medium">{cat.icon} {cat.name.replace(new RegExp(`^${cat.icon}\\s*`), '')}</span>
                               </td>
                               {displayMonthIndices.map(monthIndex => {
                                 const month = getBackendMonth(monthIndex);
@@ -1311,7 +1311,7 @@ export default function ReportsPage() {
                             {hasChildren && isExpanded && cat.children.map((child) => (
                               <tr key={child.id} className="bg-gray-50/50 hover:bg-gray-100 transition text-sm">
                                 <td className="sticky left-0 bg-gray-50/50 hover:bg-gray-100 px-3 py-1 pl-8 text-gray-800">
-                                  {child.icon} {child.name}
+                                  {child.icon} {child.name.replace(new RegExp(`^${child.icon}\\s*`), '')}
                                 </td>
                                 {displayMonthIndices.map(monthIndex => {
                                   const month = getBackendMonth(monthIndex);
@@ -1384,7 +1384,7 @@ export default function ReportsPage() {
                                 {hasChildren && (
                                   <span className="text-gray-500">{isExpanded ? '▼' : '▶'}</span>
                                 )}
-                                <span className="pl-2 text-gray-900 font-medium">{cat.icon} {cat.name}</span>
+                                <span className="pl-2 text-gray-900 font-medium">{cat.icon} {cat.name.replace(new RegExp(`^${cat.icon}\\s*`), '')}</span>
                               </td>
                               {displayMonthIndices.map(monthIndex => {
                                 const month = getBackendMonth(monthIndex);
@@ -1413,7 +1413,7 @@ export default function ReportsPage() {
                             {hasChildren && isExpanded && cat.children.map((child) => (
                               <tr key={child.id} className="bg-gray-50/50 hover:bg-gray-100 transition text-sm">
                                 <td className="sticky left-0 bg-gray-50/50 hover:bg-gray-100 px-3 py-1 pl-8 text-gray-800">
-                                  {child.icon} {child.name}
+                                  {child.icon} {child.name.replace(new RegExp(`^${child.icon}\\s*`), '')}
                                 </td>
                                 {displayMonthIndices.map(monthIndex => {
                                   const month = getBackendMonth(monthIndex);
