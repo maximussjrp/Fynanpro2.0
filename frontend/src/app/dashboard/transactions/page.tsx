@@ -822,7 +822,7 @@ export default function TransactionsPage() {
         )}
 
         {/* Lista de Transações */}
-        <div className="bg-white rounded-lg shadow-md overflow-hidden">
+        <div className="bg-white rounded-lg shadow-md overflow-hidden min-h-[400px]">
           {transactions.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full">
@@ -998,8 +998,8 @@ export default function TransactionsPage() {
               </table>
             </div>
           ) : (
-            <div className="text-center py-12">
-              <Receipt className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+            <div className="flex flex-col items-center justify-center py-16 min-h-[350px]">
+              <Receipt className="w-16 h-16 text-gray-300 mb-4" />
               <p className="text-gray-500 text-lg">Nenhuma transação encontrada</p>
               <p className="text-gray-400 text-sm mt-2">Ajuste os filtros ou adicione novas transações</p>
               <button
