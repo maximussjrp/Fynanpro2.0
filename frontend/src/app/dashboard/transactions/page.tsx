@@ -823,7 +823,7 @@ export default function TransactionsPage() {
 
         {/* Lista de Transações */}
         <div className="bg-white rounded-lg shadow-md overflow-hidden min-h-[400px]">
-          {transactions.length > 0 ? (
+          {filteredTransactions.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-gray-50 border-b border-gray-200">
