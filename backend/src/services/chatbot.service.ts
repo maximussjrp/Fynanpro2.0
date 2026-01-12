@@ -38,6 +38,7 @@ export enum ChatState {
   ADDING_INCOME = 'adding_income',
   ASKING_CATEGORY = 'asking_category',
   ASKING_SUBCATEGORY = 'asking_subcategory',
+  CONFIRMING_SUGGESTION = 'confirming_suggestion', // Novo: confirmar sugestão de categoria
   ASKING_ACCOUNT = 'asking_account',
   ASKING_PAYMENT_METHOD = 'asking_payment_method',
   ASKING_AMOUNT = 'asking_amount',
@@ -66,10 +67,20 @@ export interface ChatContext {
     description?: string;
     categoryId?: string;
     categoryName?: string;
+    subcategoryId?: string;
+    subcategoryName?: string;
     bankAccountId?: string;
     paymentMethodId?: string;
     date?: Date;
   };
+  
+  // Sugestão pendente de confirmação
+  pendingSuggestion?: {
+    categoryName: string;
+    subcategoryName?: string;
+    confidence: 'high' | 'medium' | 'low';
+  };
+  
   tempAccount?: {
     institution?: string;
     type?: 'PF' | 'PJ';
@@ -91,6 +102,7 @@ export interface ChatContext {
   bankAccounts?: any[];
   paymentMethods?: any[];
   categories?: any[];
+  subcategories?: any[];
   
   // Aprendizado
   learnedPatterns?: LearnedPattern[];
@@ -167,6 +179,182 @@ const BALANCE_PATTERNS = /(?:meu\s+)?(?:saldo|quanto\s+tenho|quanto\s+tem|minhas
 const EXPENSES_PATTERNS = /(?:quanto\s+gastei|meus?\s+gastos?|despesas?|extrato)/i;
 const BILLS_PATTERNS = /(?:contas?\s+a?\s*vencer|vencimentos?|próximas?\s+contas?|boletos?)/i;
 const PLANNING_PATTERNS = /(?:planejamento|planejar|meu\s+mês|resumo|visão\s+geral|overview)/i;
+
+// ==================== MAPA DE SUGESTÕES DE CATEGORIAS ====================
+
+interface CategorySuggestion {
+  keywords: string[];          // Palavras-chave que ativam a sugestão
+  categoryName: string;        // Nome da categoria principal
+  subcategoryName?: string;    // Nome da subcategoria (opcional)
+  confidence: 'high' | 'medium' | 'low';  // Confiança na sugestão
+}
+
+// Mapa abrangente de palavras-chave para categorias (brasileiro)
+const CATEGORY_SUGGESTIONS: CategorySuggestion[] = [
+  // ========== ALIMENTAÇÃO ==========
+  // Açougue/Carnes
+  { keywords: ['carne', 'carnes', 'açougue', 'acougue', 'picanha', 'filé', 'file', 'costela', 'linguiça', 'linguica', 'frango', 'boi', 'porco', 'churrasco', 'corte', 'bovino', 'suino'], categoryName: 'Alimentação', subcategoryName: 'Açougue', confidence: 'high' },
+  // Supermercado
+  { keywords: ['mercado', 'supermercado', 'compras', 'feira', 'hortifruti', 'atacado', 'atacadao', 'assai', 'extra', 'carrefour', 'pao de acucar', 'dia', 'makro'], categoryName: 'Alimentação', subcategoryName: 'Supermercado', confidence: 'high' },
+  // Padaria
+  { keywords: ['padaria', 'pao', 'pães', 'bolo', 'confeitaria', 'doceria', 'pastel', 'sonho', 'croissant', 'cafe da manha'], categoryName: 'Alimentação', subcategoryName: 'Padaria', confidence: 'high' },
+  // Restaurantes
+  { keywords: ['restaurante', 'almoço', 'almoco', 'jantar', 'lanchonete', 'self-service', 'rodizio', 'buffet', 'pizzaria', 'churrascaria', 'japonês', 'japones', 'sushi', 'fast food', 'mcdonalds', 'burger king', 'subway', 'outback'], categoryName: 'Alimentação', subcategoryName: 'Restaurantes', confidence: 'high' },
+  // Delivery/iFood
+  { keywords: ['ifood', 'rappi', 'uber eats', 'delivery', 'entrega', 'pedido', 'app de comida'], categoryName: 'Alimentação', subcategoryName: 'Delivery', confidence: 'high' },
+  // Lanches
+  { keywords: ['lanche', 'lanches', 'hamburguer', 'hamburger', 'hot dog', 'cachorro quente', 'sanduiche', 'salgado', 'coxinha', 'empada', 'esfiha'], categoryName: 'Alimentação', subcategoryName: 'Lanches', confidence: 'high' },
+  // Bebidas
+  { keywords: ['bebida', 'refrigerante', 'cerveja', 'vinho', 'whisky', 'vodka', 'destilado', 'bar', 'boteco', 'happy hour', 'drinks'], categoryName: 'Alimentação', subcategoryName: 'Bebidas', confidence: 'high' },
+  // Café
+  { keywords: ['cafe', 'café', 'cafeteria', 'starbucks', 'expresso', 'cappuccino', 'latte'], categoryName: 'Alimentação', subcategoryName: 'Cafeteria', confidence: 'high' },
+  // Alimentação genérica
+  { keywords: ['comida', 'alimentação', 'alimentacao', 'refeição', 'refeicao', 'comer'], categoryName: 'Alimentação', confidence: 'medium' },
+  
+  // ========== TRANSPORTE ==========
+  // Combustível
+  { keywords: ['gasolina', 'alcool', 'etanol', 'diesel', 'combustivel', 'posto', 'abasteci', 'tanque', 'shell', 'ipiranga', 'petrobras', 'br'], categoryName: 'Transporte', subcategoryName: 'Combustível', confidence: 'high' },
+  // Uber/99/Táxi
+  { keywords: ['uber', '99', 'taxi', 'táxi', 'corrida', '99pop', 'cabify', 'indriver'], categoryName: 'Transporte', subcategoryName: 'Aplicativo', confidence: 'high' },
+  // Estacionamento
+  { keywords: ['estacionamento', 'parking', 'valet', 'zona azul', 'rotativo', 'estacionar'], categoryName: 'Transporte', subcategoryName: 'Estacionamento', confidence: 'high' },
+  // Manutenção carro
+  { keywords: ['mecanico', 'mecânico', 'oficina', 'conserto', 'revisao', 'revisão', 'troca de oleo', 'oleo', 'pneu', 'borracharia', 'funilaria', 'lataria', 'alignment', 'balanceamento'], categoryName: 'Transporte', subcategoryName: 'Manutenção', confidence: 'high' },
+  // Pedágio
+  { keywords: ['pedagio', 'pedágio', 'sem parar', 'conectcar', 'veloe', 'move mais'], categoryName: 'Transporte', subcategoryName: 'Pedágio', confidence: 'high' },
+  // Transporte público
+  { keywords: ['onibus', 'ônibus', 'metro', 'metrô', 'trem', 'brt', 'vlt', 'bilhete', 'passagem', 'bilhete unico'], categoryName: 'Transporte', subcategoryName: 'Transporte Público', confidence: 'high' },
+  // Seguro
+  { keywords: ['seguro carro', 'seguro auto', 'seguro veiculo', 'porto seguro', 'suhai', 'azul seguros'], categoryName: 'Transporte', subcategoryName: 'Seguro', confidence: 'high' },
+  // IPVA/Licenciamento
+  { keywords: ['ipva', 'licenciamento', 'dpvat', 'detran', 'multa transito', 'multa'], categoryName: 'Transporte', subcategoryName: 'Impostos/Taxas', confidence: 'high' },
+  
+  // ========== MORADIA ==========
+  // Aluguel
+  { keywords: ['aluguel', 'aluguer', 'arrendamento', 'mensalidade casa', 'rent'], categoryName: 'Moradia', subcategoryName: 'Aluguel', confidence: 'high' },
+  // Condomínio
+  { keywords: ['condominio', 'condomínio', 'taxa condominial', 'síndico'], categoryName: 'Moradia', subcategoryName: 'Condomínio', confidence: 'high' },
+  // Água
+  { keywords: ['agua', 'água', 'sabesp', 'copasa', 'cedae', 'sanepar', 'conta de agua'], categoryName: 'Moradia', subcategoryName: 'Água', confidence: 'high' },
+  // Luz/Energia
+  { keywords: ['luz', 'energia', 'eletricidade', 'conta de luz', 'enel', 'cpfl', 'cemig', 'eletropaulo', 'light', 'celpe', 'coelba', 'elektro'], categoryName: 'Moradia', subcategoryName: 'Energia', confidence: 'high' },
+  // Gás
+  { keywords: ['gas', 'gás', 'botijão', 'botijao', 'gas encanado', 'comgas', 'supergasbras', 'ultragaz', 'liquigas'], categoryName: 'Moradia', subcategoryName: 'Gás', confidence: 'high' },
+  // Internet/TV
+  { keywords: ['internet', 'wifi', 'banda larga', 'fibra', 'net', 'claro', 'vivo', 'tim', 'oi', 'sky', 'tv a cabo', 'streaming'], categoryName: 'Moradia', subcategoryName: 'Internet/TV', confidence: 'high' },
+  // Telefone
+  { keywords: ['telefone', 'celular', 'linha', 'plano celular', 'recarga', 'credito celular'], categoryName: 'Moradia', subcategoryName: 'Telefone', confidence: 'high' },
+  // IPTU
+  { keywords: ['iptu', 'imposto predial', 'territorial urbano'], categoryName: 'Moradia', subcategoryName: 'IPTU', confidence: 'high' },
+  // Manutenção casa
+  { keywords: ['reforma', 'obra', 'pedreiro', 'pintor', 'eletricista', 'encanador', 'marceneiro', 'conserto casa', 'manutencao casa', 'material construcao', 'telhanorte', 'leroy merlin', 'c&c', 'madeireira'], categoryName: 'Moradia', subcategoryName: 'Manutenção', confidence: 'high' },
+  // Móveis/Decoração
+  { keywords: ['movel', 'móvel', 'moveis', 'móveis', 'decoracao', 'decoração', 'tapete', 'cortina', 'colchao', 'colchão', 'cama', 'sofa', 'sofá', 'mesa', 'cadeira', 'tok stok', 'tokstok', 'etna', 'mobly'], categoryName: 'Moradia', subcategoryName: 'Móveis', confidence: 'high' },
+  // Eletrodomésticos
+  { keywords: ['geladeira', 'fogao', 'fogão', 'microondas', 'maquina de lavar', 'lava e seca', 'ar condicionado', 'ventilador', 'liquidificador', 'batedeira', 'cafeteira', 'airfryer', 'aspirador'], categoryName: 'Moradia', subcategoryName: 'Eletrodomésticos', confidence: 'high' },
+  // Faxineira/Diarista
+  { keywords: ['faxineira', 'diarista', 'empregada', 'limpeza', 'doméstica', 'domestica'], categoryName: 'Moradia', subcategoryName: 'Serviços Domésticos', confidence: 'high' },
+  
+  // ========== SAÚDE ==========
+  // Farmácia
+  { keywords: ['farmacia', 'farmácia', 'remedio', 'remédio', 'medicamento', 'droga', 'drogaria', 'drogasil', 'pacheco', 'pague menos', 'raia', 'panvel', 'nissei'], categoryName: 'Saúde', subcategoryName: 'Farmácia', confidence: 'high' },
+  // Médico/Consulta
+  { keywords: ['medico', 'médico', 'consulta', 'doutor', 'doutora', 'clinica', 'clínica', 'hospital', 'pronto socorro', 'emergencia', 'urgencia', 'exame', 'laboratorio', 'dasa', 'fleury'], categoryName: 'Saúde', subcategoryName: 'Médico', confidence: 'high' },
+  // Dentista
+  { keywords: ['dentista', 'odonto', 'ortodontia', 'aparelho dentario', 'limpeza dente', 'canal', 'extração', 'extraçao', 'obturacao', 'obturação'], categoryName: 'Saúde', subcategoryName: 'Dentista', confidence: 'high' },
+  // Plano de Saúde
+  { keywords: ['plano de saude', 'plano saúde', 'convenio', 'convênio', 'unimed', 'amil', 'bradesco saude', 'sulamerica', 'notre dame', 'hapvida', 'notredame'], categoryName: 'Saúde', subcategoryName: 'Plano de Saúde', confidence: 'high' },
+  // Academia/Esporte
+  { keywords: ['academia', 'gym', 'musculação', 'musculacao', 'smartfit', 'smart fit', 'bluefit', 'bodytech', 'personal', 'personal trainer', 'pilates', 'yoga', 'crossfit', 'natacao', 'natação'], categoryName: 'Saúde', subcategoryName: 'Academia', confidence: 'high' },
+  // Psicólogo/Terapia
+  { keywords: ['psicologo', 'psicólogo', 'psicologa', 'terapia', 'terapeuta', 'psiquiatra', 'analise', 'sessao', 'sessão'], categoryName: 'Saúde', subcategoryName: 'Terapia', confidence: 'high' },
+  // Ótica
+  { keywords: ['otica', 'óptica', 'oculos', 'óculos', 'lente', 'lentes', 'armação', 'armacao', 'oftalmologista'], categoryName: 'Saúde', subcategoryName: 'Ótica', confidence: 'high' },
+  
+  // ========== EDUCAÇÃO ==========
+  // Escola/Faculdade
+  { keywords: ['escola', 'colegio', 'colégio', 'faculdade', 'universidade', 'mensalidade escolar', 'matricula', 'matrícula', 'material escolar', 'apostila'], categoryName: 'Educação', subcategoryName: 'Mensalidade', confidence: 'high' },
+  // Cursos
+  { keywords: ['curso', 'cursos', 'workshop', 'treinamento', 'capacitacao', 'capacitação', 'udemy', 'coursera', 'alura', 'rocketseat', 'origamid'], categoryName: 'Educação', subcategoryName: 'Cursos', confidence: 'high' },
+  // Livros
+  { keywords: ['livro', 'livros', 'livraria', 'amazon livro', 'saraiva', 'cultura', 'kindle', 'ebook'], categoryName: 'Educação', subcategoryName: 'Livros', confidence: 'high' },
+  // Idiomas
+  { keywords: ['ingles', 'inglês', 'espanhol', 'idioma', 'frances', 'francês', 'wizard', 'ccaa', 'cultura inglesa', 'fisk', 'cna', 'yazigi', 'italki', 'duolingo'], categoryName: 'Educação', subcategoryName: 'Idiomas', confidence: 'high' },
+  
+  // ========== LAZER/ENTRETENIMENTO ==========
+  // Cinema/Teatro
+  { keywords: ['cinema', 'filme', 'ingresso', 'cinemark', 'cinepolis', 'uci', 'teatro', 'musical', 'show', 'espetaculo', 'espetáculo'], categoryName: 'Lazer', subcategoryName: 'Cinema/Teatro', confidence: 'high' },
+  // Streaming
+  { keywords: ['netflix', 'prime video', 'amazon prime', 'disney', 'hbo', 'max', 'globoplay', 'spotify', 'deezer', 'apple music', 'youtube premium', 'streaming', 'assinatura'], categoryName: 'Lazer', subcategoryName: 'Streaming', confidence: 'high' },
+  // Viagem
+  { keywords: ['viagem', 'passagem aerea', 'voo', 'hotel', 'pousada', 'airbnb', 'booking', 'decolar', '123milhas', 'hospedagem', 'resort', 'turismo'], categoryName: 'Lazer', subcategoryName: 'Viagem', confidence: 'high' },
+  // Jogos
+  { keywords: ['jogo', 'games', 'videogame', 'playstation', 'xbox', 'nintendo', 'steam', 'ps5', 'ps4', 'console', 'game pass'], categoryName: 'Lazer', subcategoryName: 'Jogos', confidence: 'high' },
+  // Festas/Eventos
+  { keywords: ['festa', 'balada', 'evento', 'show', 'ingresso', 'casamento', 'aniversario', 'aniversário', 'formatura', 'churrasco'], categoryName: 'Lazer', subcategoryName: 'Eventos', confidence: 'high' },
+  
+  // ========== VESTUÁRIO/BELEZA ==========
+  // Roupas
+  { keywords: ['roupa', 'roupas', 'vestido', 'calca', 'calça', 'camisa', 'camiseta', 'blusa', 'shorts', 'saia', 'loja', 'shopping', 'renner', 'riachuelo', 'cea', 'c&a', 'zara', 'hm', 'shein', 'marisa'], categoryName: 'Vestuário', subcategoryName: 'Roupas', confidence: 'high' },
+  // Calçados
+  { keywords: ['sapato', 'tênis', 'tenis', 'sandalia', 'sandália', 'chinelo', 'bota', 'sapatênis', 'havaianas', 'centauro', 'netshoes'], categoryName: 'Vestuário', subcategoryName: 'Calçados', confidence: 'high' },
+  // Beleza/Estética
+  { keywords: ['salao', 'salão', 'cabelereiro', 'cabeleireira', 'corte', 'tintura', 'manicure', 'pedicure', 'unha', 'sobrancelha', 'depilacao', 'depilação', 'maquiagem', 'estetica', 'estética', 'spa', 'massagem', 'cosmetico', 'cosmético', 'perfume', 'boticario', 'boticário', 'natura', 'avon', 'sephora'], categoryName: 'Beleza', subcategoryName: 'Salão/Estética', confidence: 'high' },
+  // Barbeiro
+  { keywords: ['barbeiro', 'barbearia', 'barba', 'cabelo masculino'], categoryName: 'Beleza', subcategoryName: 'Barbearia', confidence: 'high' },
+  
+  // ========== FAMÍLIA/FILHOS ==========
+  // Babá/Creche
+  { keywords: ['baba', 'babá', 'creche', 'berçário', 'bercario', 'escolinha'], categoryName: 'Família', subcategoryName: 'Cuidados', confidence: 'high' },
+  // Brinquedos
+  { keywords: ['brinquedo', 'brinquedos', 'ri happy', 'pbkids', 'presente filho', 'presente criança', 'presente crianca'], categoryName: 'Família', subcategoryName: 'Brinquedos', confidence: 'high' },
+  // Pet
+  { keywords: ['pet', 'petshop', 'veterinario', 'veterinário', 'ração', 'racao', 'cachorro', 'gato', 'vacina pet', 'banho tosa', 'petz', 'cobasi'], categoryName: 'Família', subcategoryName: 'Pet', confidence: 'high' },
+  // Pensão
+  { keywords: ['pensao', 'pensão', 'pensão alimentícia', 'pensao alimenticia'], categoryName: 'Família', subcategoryName: 'Pensão', confidence: 'high' },
+  
+  // ========== COMPRAS/TECNOLOGIA ==========
+  // Eletrônicos
+  { keywords: ['celular', 'smartphone', 'iphone', 'samsung', 'xiaomi', 'notebook', 'computador', 'pc', 'tablet', 'ipad', 'monitor', 'fone', 'airpods', 'headset', 'mouse', 'teclado'], categoryName: 'Compras', subcategoryName: 'Eletrônicos', confidence: 'high' },
+  // E-commerce
+  { keywords: ['amazon', 'mercado livre', 'magalu', 'magazine luiza', 'americanas', 'submarino', 'casas bahia', 'shopee', 'aliexpress'], categoryName: 'Compras', subcategoryName: 'E-commerce', confidence: 'medium' },
+  // Presentes
+  { keywords: ['presente', 'gift', 'lembrança', 'lembrancinha', 'aniversário amigo'], categoryName: 'Compras', subcategoryName: 'Presentes', confidence: 'medium' },
+  
+  // ========== FINANCEIRO ==========
+  // Investimentos
+  { keywords: ['investimento', 'aplicacao', 'aplicação', 'tesouro direto', 'cdb', 'lci', 'lca', 'fundo', 'ações', 'acoes', 'bolsa', 'btg', 'xp', 'rico', 'clear', 'nuinvest'], categoryName: 'Investimentos', confidence: 'high' },
+  // Empréstimo
+  { keywords: ['emprestimo', 'empréstimo', 'parcela emprestimo', 'financiamento', 'credito pessoal', 'crédito pessoal', 'divida', 'dívida'], categoryName: 'Financeiro', subcategoryName: 'Empréstimo', confidence: 'high' },
+  // Cartão de crédito
+  { keywords: ['fatura', 'cartao', 'cartão', 'anuidade', 'juros cartão'], categoryName: 'Financeiro', subcategoryName: 'Cartão', confidence: 'medium' },
+  // Taxas bancárias
+  { keywords: ['taxa', 'tarifa', 'iof', 'ted', 'doc', 'manutencao conta'], categoryName: 'Financeiro', subcategoryName: 'Taxas Bancárias', confidence: 'high' },
+  // Seguros
+  { keywords: ['seguro vida', 'seguro residencial', 'previdencia', 'previdência', 'aposentadoria'], categoryName: 'Financeiro', subcategoryName: 'Seguros', confidence: 'high' },
+  
+  // ========== DOAÇÕES/IMPOSTOS ==========
+  // Doações
+  { keywords: ['doacao', 'doação', 'caridade', 'ong', 'ajuda', 'contribuicao', 'contribuição', 'esmola', 'ação social'], categoryName: 'Outros', subcategoryName: 'Doações', confidence: 'high' },
+  // Impostos
+  { keywords: ['imposto', 'ir', 'imposto de renda', 'darf', 'inss', 'contribuicao', 'tributo'], categoryName: 'Impostos', confidence: 'high' },
+  
+  // ========== RECEITAS ==========
+  // Salário
+  { keywords: ['salario', 'salário', 'pagamento', 'holerite', 'contracheque', 'vencimento', 'remuneracao', 'remuneração'], categoryName: 'Receitas', subcategoryName: 'Salário', confidence: 'high' },
+  // Freelance
+  { keywords: ['freela', 'freelance', 'job', 'projeto', 'trabalho extra', 'bico', 'renda extra'], categoryName: 'Receitas', subcategoryName: 'Freelance', confidence: 'high' },
+  // Aluguel recebido
+  { keywords: ['aluguel recebido', 'recebi aluguel', 'inquilino', 'locacao', 'locação'], categoryName: 'Receitas', subcategoryName: 'Aluguel', confidence: 'high' },
+  // Dividendos
+  { keywords: ['dividendo', 'jcp', 'rendimento', 'juros', 'proventos'], categoryName: 'Receitas', subcategoryName: 'Investimentos', confidence: 'high' },
+  // Venda
+  { keywords: ['vendi', 'venda', 'vendido', 'negócio', 'negocio'], categoryName: 'Receitas', subcategoryName: 'Vendas', confidence: 'high' },
+  // Reembolso
+  { keywords: ['reembolso', 'estorno', 'devolucao', 'devolução', 'cashback'], categoryName: 'Receitas', subcategoryName: 'Reembolsos', confidence: 'high' },
+  // 13º/Férias
+  { keywords: ['decimo terceiro', '13o', '13º', 'ferias', 'férias', 'abono', 'terço de ferias'], categoryName: 'Receitas', subcategoryName: 'Benefícios', confidence: 'high' },
+];
 
 // ==================== FUNÇÕES AUXILIARES ====================
 
@@ -511,6 +699,118 @@ export class ChatbotService {
   }
   
   /**
+   * Encontrar sugestão de categoria baseada no mapa de palavras-chave
+   * Retorna a sugestão mais relevante para a descrição fornecida
+   */
+  findCategorySuggestionFromMap(description: string): CategorySuggestion | null {
+    if (!description) return null;
+    
+    const normalized = description
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '') // Remove acentos
+      .trim();
+    
+    let bestSuggestion: CategorySuggestion | null = null;
+    let bestMatchCount = 0;
+    
+    for (const suggestion of CATEGORY_SUGGESTIONS) {
+      let matchCount = 0;
+      
+      for (const keyword of suggestion.keywords) {
+        const keywordNormalized = keyword
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '');
+        
+        if (normalized.includes(keywordNormalized)) {
+          matchCount++;
+        }
+      }
+      
+      // Priorizar por quantidade de matches e depois por confiança
+      const confidenceBonus = suggestion.confidence === 'high' ? 1 : suggestion.confidence === 'medium' ? 0.5 : 0;
+      const score = matchCount + confidenceBonus;
+      
+      if (matchCount > 0 && score > bestMatchCount + (bestSuggestion?.confidence === 'high' ? 1 : 0)) {
+        bestMatchCount = matchCount;
+        bestSuggestion = suggestion;
+      }
+    }
+    
+    return bestSuggestion;
+  }
+  
+  /**
+   * Buscar categoria pelo nome no banco de dados
+   */
+  async findCategoryByName(tenantId: string, categoryName: string, subcategoryName?: string, type: 'income' | 'expense' = 'expense'): Promise<{ category: any; subcategory?: any } | null> {
+    try {
+      // Normalizar para busca
+      const normalizedCatName = categoryName
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+      
+      // Buscar categorias L1 do usuário
+      const categories = await prisma.category.findMany({
+        where: {
+          tenantId,
+          level: 1,
+          type,
+          isActive: true,
+          deletedAt: null,
+        },
+        include: {
+          children: {
+            where: {
+              isActive: true,
+              deletedAt: null,
+            },
+          },
+        },
+      });
+      
+      // Encontrar a categoria principal
+      const category = categories.find(c => {
+        const catNormalized = c.name
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/^[\W\s]+/, ''); // Remove emojis do início
+        return catNormalized.includes(normalizedCatName) || normalizedCatName.includes(catNormalized);
+      });
+      
+      if (!category) return null;
+      
+      // Se tem subcategoria, tentar encontrar
+      if (subcategoryName && category.children.length > 0) {
+        const normalizedSubName = subcategoryName
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '');
+        
+        const subcategory = category.children.find(s => {
+          const subNormalized = s.name
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/^[\W\s]+/, '');
+          return subNormalized.includes(normalizedSubName) || normalizedSubName.includes(subNormalized);
+        });
+        
+        if (subcategory) {
+          return { category, subcategory };
+        }
+      }
+      
+      return { category };
+    } catch (error) {
+      log.error('Erro ao buscar categoria por nome:', error);
+      return null;
+    }
+  }
+  
+  /**
    * Processar mensagem do usuário
    */
   async processMessage(
@@ -637,6 +937,10 @@ export class ChatbotService {
         
       case ChatState.ASKING_SUBCATEGORY:
         result = await this.handleAskingSubcategory(session, input);
+        break;
+        
+      case ChatState.CONFIRMING_SUGGESTION:
+        result = await this.handleConfirmingSuggestion(session, input);
         break;
         
       case ChatState.ASKING_ACCOUNT:
@@ -1848,79 +2152,180 @@ export class ChatbotService {
   private async suggestCategoryFromDescription(session: ChatSession) {
     const description = session.context.tempTransaction?.description || '';
     const patterns = session.context.learnedPatterns || [];
+    const type = session.context.tempTransaction?.type || 'expense';
     
-    // Tentar encontrar padrão aprendido
-    const suggested = this.findSuggestedCategory(description, patterns);
+    // 1. Primeiro, tentar encontrar padrão aprendido do histórico do usuário
+    const learnedSuggestion = this.findSuggestedCategory(description, patterns);
     
-    if (suggested) {
-      session.context.tempTransaction!.categoryId = suggested.categoryId;
-      session.context.tempTransaction!.categoryName = suggested.categoryName;
+    if (learnedSuggestion) {
+      session.context.tempTransaction!.categoryId = learnedSuggestion.categoryId;
+      session.context.tempTransaction!.categoryName = learnedSuggestion.categoryName;
       
-      // Se tiver meio de pagamento frequente, sugerir
-      if (suggested.paymentMethodId) {
-        session.context.tempTransaction!.paymentMethodId = suggested.paymentMethodId;
+      if (learnedSuggestion.paymentMethodId) {
+        session.context.tempTransaction!.paymentMethodId = learnedSuggestion.paymentMethodId;
       }
       
-      // Mesmo reconhecendo, precisa perguntar a conta
-      session.state = ChatState.ASKING_ACCOUNT;
-      
-      const amount = session.context.tempTransaction?.amount || 0;
-      const avgInfo = suggested.averageAmount 
-        ? `\n📊 _Média histórica: R$ ${formatMoney(suggested.averageAmount)}_`
-        : '';
-      
-      // Carregar contas para perguntar
-      if (!session.context.bankAccounts) {
-        session.context.bankAccounts = await prisma.bankAccount.findMany({
-          where: {
-            tenantId: session.tenantId,
-            isActive: true,
-            deletedAt: null,
-          },
-          orderBy: { name: 'asc' },
-        });
-      }
-      
-      const accounts = session.context.bankAccounts;
-      
-      // Se só tem uma conta, usar e confirmar
-      if (accounts.length === 1) {
-        session.context.tempTransaction!.bankAccountId = accounts[0].id;
-        session.state = ChatState.CONFIRMING;
-        
-        return {
-          response: `🧠 Reconheci! Baseado no seu histórico:\n\n` +
-            `📝 ${description}\n` +
-            `💰 R$ ${formatMoney(amount)}\n` +
-            `🏷️ ${suggested.categoryName}\n` +
-            `🏦 ${accounts[0].name}${avgInfo}\n\n` +
-            `Está correto?`,
-          quickReplies: ['Sim, confirmar', 'Mudar categoria', 'Cancelar'],
-        };
-      }
-      
-      // Se tem múltiplas contas, perguntar
-      const options = accounts.map((a, i) => `${i + 1}️⃣ ${a.name}`);
-      const quickReplies = accounts.slice(0, 4).map(a => a.name.split(' ')[0]);
-      
-      return {
-        response: `🧠 Reconheci! Baseado no seu histórico:\n\n` +
-          `📝 ${description}\n` +
-          `💰 R$ ${formatMoney(amount)}\n` +
-          `🏷️ ${suggested.categoryName}${avgInfo}\n\n` +
-          `De qual conta saiu o dinheiro?`,
-        options,
-        quickReplies,
-      };
+      // Ir direto para perguntar conta
+      return this.askAccountAfterCategory(session, learnedSuggestion.categoryName, learnedSuggestion.averageAmount);
     }
     
-    // Não encontrou padrão, perguntar categoria
+    // 2. Se não encontrou padrão aprendido, tentar sugestão do mapa de palavras-chave
+    const mapSuggestion = this.findCategorySuggestionFromMap(description);
+    
+    if (mapSuggestion) {
+      // Verificar se a categoria existe no banco do usuário
+      const found = await this.findCategoryByName(
+        session.tenantId, 
+        mapSuggestion.categoryName, 
+        mapSuggestion.subcategoryName,
+        type
+      );
+      
+      if (found) {
+        // Guardar sugestão pendente e perguntar se está correta
+        session.context.pendingSuggestion = {
+          categoryName: mapSuggestion.categoryName,
+          subcategoryName: mapSuggestion.subcategoryName,
+          confidence: mapSuggestion.confidence,
+        };
+        
+        // Preencher dados da categoria encontrada
+        if (found.subcategory) {
+          session.context.tempTransaction!.categoryId = found.subcategory.id;
+          session.context.tempTransaction!.categoryName = `${found.category.name} > ${found.subcategory.name}`;
+          session.context.tempTransaction!.subcategoryId = found.subcategory.id;
+          session.context.tempTransaction!.subcategoryName = found.subcategory.name;
+        } else {
+          session.context.tempTransaction!.categoryId = found.category.id;
+          session.context.tempTransaction!.categoryName = found.category.name;
+        }
+        
+        session.state = ChatState.CONFIRMING_SUGGESTION;
+        
+        const amount = session.context.tempTransaction?.amount || 0;
+        const catDisplay = found.subcategory 
+          ? `${found.category.icon || '📁'} ${found.category.name} > ${found.subcategory.icon || ''} ${found.subcategory.name}`.trim()
+          : `${found.category.icon || '📁'} ${found.category.name}`;
+        
+        const confidenceEmoji = mapSuggestion.confidence === 'high' ? '🎯' : mapSuggestion.confidence === 'medium' ? '💡' : '🤔';
+        
+        return {
+          response: `${confidenceEmoji} **Sugestão de categoria**\n\n` +
+            `📝 "${description}"\n` +
+            `💰 R$ ${formatMoney(amount)}\n\n` +
+            `Parece ser **${catDisplay}**, certo?\n`,
+          quickReplies: ['Sim, confirmar', 'Escolher outra', 'Cancelar'],
+        };
+      }
+    }
+    
+    // 3. Não encontrou nenhuma sugestão, perguntar categoria normalmente
     session.state = ChatState.ASKING_CATEGORY;
     return this.askCategory(session);
   }
   
+  /**
+   * Handler para confirmar sugestão de categoria
+   */
+  private async handleConfirmingSuggestion(session: ChatSession, input: string) {
+    const normalized = input.toLowerCase().trim();
+    
+    // Usuário confirmou a sugestão
+    if (isPositive(normalized) || normalized.includes('confirmar') || normalized.includes('correto') || normalized.includes('isso')) {
+      // Categoria já está preenchida, ir para conta
+      return this.askAccountAfterCategory(session, session.context.tempTransaction?.categoryName || '');
+    }
+    
+    // Usuário quer escolher outra categoria
+    if (normalized.includes('outra') || normalized.includes('escolher') || normalized.includes('mudar') || normalized.includes('trocar')) {
+      session.context.tempTransaction!.categoryId = undefined;
+      session.context.tempTransaction!.categoryName = undefined;
+      session.context.tempTransaction!.subcategoryId = undefined;
+      session.context.tempTransaction!.subcategoryName = undefined;
+      session.context.pendingSuggestion = undefined;
+      
+      session.state = ChatState.ASKING_CATEGORY;
+      return this.askCategory(session);
+    }
+    
+    // Cancelar
+    if (isNegative(normalized) || normalized.includes('cancelar') || normalized.includes('cancela')) {
+      session.state = ChatState.IDLE;
+      session.context.tempTransaction = undefined;
+      session.context.pendingSuggestion = undefined;
+      
+      return {
+        response: '❌ Lançamento cancelado.\n\nPosso ajudar em algo mais?',
+        quickReplies: ['Novo gasto', 'Nova receita', 'Meu saldo'],
+      };
+    }
+    
+    // Não entendeu, repetir pergunta
+    return {
+      response: `Não entendi. A categoria sugerida está correta?`,
+      quickReplies: ['Sim, confirmar', 'Escolher outra', 'Cancelar'],
+    };
+  }
+  
+  /**
+   * Continuar para perguntar conta após ter categoria definida
+   */
+  private async askAccountAfterCategory(session: ChatSession, categoryName: string, averageAmount?: number) {
+    const description = session.context.tempTransaction?.description || '';
+    const amount = session.context.tempTransaction?.amount || 0;
+    
+    const avgInfo = averageAmount 
+      ? `\n📊 _Média histórica: R$ ${formatMoney(averageAmount)}_`
+      : '';
+    
+    // Carregar contas
+    if (!session.context.bankAccounts) {
+      session.context.bankAccounts = await prisma.bankAccount.findMany({
+        where: {
+          tenantId: session.tenantId,
+          isActive: true,
+          deletedAt: null,
+        },
+        orderBy: { name: 'asc' },
+      });
+    }
+    
+    const accounts = session.context.bankAccounts;
+    session.state = ChatState.ASKING_ACCOUNT;
+    
+    // Se só tem uma conta, usar e confirmar
+    if (accounts.length === 1) {
+      session.context.tempTransaction!.bankAccountId = accounts[0].id;
+      session.state = ChatState.CONFIRMING;
+      
+      return {
+        response: `🧠 Reconheci!\n\n` +
+          `📝 ${description}\n` +
+          `💰 R$ ${formatMoney(amount)}\n` +
+          `🏷️ ${categoryName}\n` +
+          `🏦 ${accounts[0].name}${avgInfo}\n\n` +
+          `Está correto?`,
+        quickReplies: ['Sim, confirmar', 'Mudar categoria', 'Cancelar'],
+      };
+    }
+    
+    // Se tem múltiplas contas, perguntar
+    const options = accounts.map((a, i) => `${i + 1}️⃣ ${a.name}`);
+    const quickReplies = accounts.slice(0, 4).map(a => a.name.split(' ')[0]);
+    
+    return {
+      response: `📝 ${description}\n` +
+        `💰 R$ ${formatMoney(amount)}\n` +
+        `🏷️ ${categoryName}${avgInfo}\n\n` +
+        `🏦 De qual conta?`,
+      options,
+      quickReplies,
+    };
+  }
+  
   private async askCategory(session: ChatSession) {
     const type = session.context.tempTransaction?.type || 'expense';
+    const description = session.context.tempTransaction?.description || '';
     
     // Carregar categorias L1 do usuário
     if (!session.context.categories) {
@@ -1940,8 +2345,14 @@ export class ChatbotService {
     const options = categories.map((c, i) => `${i + 1}️⃣ ${c.name}`);
     const quickReplies = categories.slice(0, 4).map(c => c.name.replace(/^\W+\s*/, '')); // Remove emoji
     
+    // Adicionar dica baseada na descrição
+    let hint = '';
+    if (description) {
+      hint = `\n\n_Para "${description}"_`;
+    }
+    
     return {
-      response: `Em qual categoria?`,
+      response: `Em qual categoria?${hint}`,
       options: options.slice(0, 10),
       quickReplies,
     };
