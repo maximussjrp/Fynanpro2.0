@@ -140,7 +140,16 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   maxAge: 86400
 }));
-app.use(express.json());
+
+// Stripe webhook precisa do body raw (antes do express.json())
+// Configurar express.json() para NÃO parsear a rota do webhook
+app.use((req, res, next) => {
+  if (req.originalUrl === '/api/v1/subscription/stripe/webhook') {
+    express.raw({ type: 'application/json' })(req, res, next);
+  } else {
+    express.json()(req, res, next);
+  }
+});
 app.use(express.urlencoded({ extended: true }));
 
 // Rotas
