@@ -689,3 +689,42 @@ model SystemAnnouncement {
   @@index([isActive])
   @@index([startsAt, endsAt])
 }
+
+// ==================== CHATBOT ====================
+
+// Sessão do chatbot - persistida para manter contexto entre sessões
+model ChatSession {
+  id              String    @id @default(uuid())
+  tenantId        String
+  userId          String
+  state           String    @default("idle") // Estado atual do chatbot
+  context         String?   // JSON com contexto da sessão (tempTransaction, etc)
+  learnedPatterns String?   // JSON com padrões aprendidos do usuário
+  lastActiveAt    DateTime  @default(now())
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  messages        ChatMessage[]
+
+  @@unique([tenantId, userId])
+  @@index([tenantId])
+  @@index([userId])
+  @@index([lastActiveAt])
+}
+
+// Histórico de mensagens do chatbot
+model ChatMessage {
+  id              String    @id @default(uuid())
+  sessionId       String
+  role            String    // 'user' ou 'assistant'
+  content         String
+  options         String?   // JSON array de opções mostradas
+  quickReplies    String?   // JSON array de quick replies
+  metadata        String?   // JSON com dados extras (navigate, etc)
+  createdAt       DateTime  @default(now())
+
+  session         ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, createdAt])
+  @@index([sessionId])
+}

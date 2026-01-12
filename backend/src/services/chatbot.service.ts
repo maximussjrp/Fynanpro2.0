@@ -120,8 +120,53 @@ export interface LearnedPattern {
   lastUsed: Date;
 }
 
-// Cache de sessões em memória (em produção usar Redis)
+// Cache de sessões em memória (backup do banco)
 const sessions = new Map<string, ChatSession>();
+
+// ==================== MENSAGENS AMIGÁVEIS ====================
+
+const FRIENDLY_ERRORS = {
+  invalidAmount: '💡 Hmm, não consegui entender o valor. Pode digitar só os números?\n\nExemplos: 50, 150.00, R$ 250,00',
+  categoryNotFound: '🤔 Não encontrei essa categoria. Vamos tentar de outra forma?\n\nVocê pode digitar o número da lista ou parte do nome.',
+  accountNotFound: '🏦 Não encontrei essa conta. Escolha uma da lista ou digite o número correspondente.',
+  genericError: '😅 Ops! Algo deu errado. Que tal tentar de novo?\n\nDigite "menu" para ver as opções disponíveis.',
+  connectionError: '📡 Parece que estamos com problemas de conexão. Aguarde um momento e tente novamente.',
+  timeout: '⏰ A operação demorou mais que o esperado. Por favor, tente novamente.',
+};
+
+// ==================== PADRÕES DE LINGUAGEM EXPANDIDOS ====================
+
+const EXPENSE_PATTERNS = [
+  // Padrões existentes
+  /(?:gastei|paguei|comprei)\s+(?:R\$\s*)?(\d+[\d.,]*)/i,
+  /(?:R\$\s*)?(\d+[\d.,]*)\s+(?:em|no|na|de|para)\s+(.+)/i,
+  // Novos padrões
+  /(?:transferi|enviei)\s+(?:R\$\s*)?(\d+[\d.,]*)/i,
+  /(?:paguei|quitei)\s+(?:a\s+)?(?:conta\s+)?(?:de\s+)?(.+?)\s+(?:R\$\s*)?(\d+[\d.,]*)/i,
+  /(?:fiz\s+um\s+pix|mandei\s+um\s+pix)\s+(?:de\s+)?(?:R\$\s*)?(\d+[\d.,]*)/i,
+  /(?:saquei|retirei)\s+(?:R\$\s*)?(\d+[\d.,]*)/i,
+  /(?:dei\s+|dei\s+de\s+)(?:R\$\s*)?(\d+[\d.,]*)\s+(?:de\s+)?(.+)/i,
+  /(?:despesa|gasto)\s+(?:de\s+)?(?:R\$\s*)?(\d+[\d.,]*)\s+(?:com|em|no|na)\s+(.+)/i,
+];
+
+const INCOME_PATTERNS = [
+  // Padrões existentes
+  /(?:recebi|ganhei|entrou)\s+(?:R\$\s*)?(\d+[\d.,]*)/i,
+  /(?:R\$\s*)?(\d+[\d.,]*)\s+(?:de\s+|do\s+|da\s+)?(?:salário|salario|pagamento|freela|freelance)/i,
+  // Novos padrões
+  /(?:depositaram|caiu|entrou\s+na\s+conta)\s+(?:R\$\s*)?(\d+[\d.,]*)/i,
+  /(?:vendi|fiz\s+uma\s+venda)\s+(?:de\s+)?(?:R\$\s*)?(\d+[\d.,]*)/i,
+  /(?:recebi\s+um\s+pix|veio\s+um\s+pix)\s+(?:de\s+)?(?:R\$\s*)?(\d+[\d.,]*)/i,
+  /(?:meu\s+salário|meu\s+salario|pagamento)\s+(?:foi\s+|de\s+)?(?:R\$\s*)?(\d+[\d.,]*)/i,
+  /(?:rendimento|dividendo|juros)\s+(?:de\s+)?(?:R\$\s*)?(\d+[\d.,]*)/i,
+];
+
+const GREETING_PATTERNS = /^(oi|olá|ola|bom dia|boa tarde|boa noite|hey|hello|e ai|e aí|eae|opa|fala)/i;
+const MENU_PATTERNS = /^(menu|ajuda|help|opções|opcoes|o que você faz|comandos|\?|inicio|início)/i;
+const BALANCE_PATTERNS = /(?:meu\s+)?(?:saldo|quanto\s+tenho|quanto\s+tem|minhas?\s+contas?)/i;
+const EXPENSES_PATTERNS = /(?:quanto\s+gastei|meus?\s+gastos?|despesas?|extrato)/i;
+const BILLS_PATTERNS = /(?:contas?\s+a?\s*vencer|vencimentos?|próximas?\s+contas?|boletos?)/i;
+const PLANNING_PATTERNS = /(?:planejamento|planejar|meu\s+mês|resumo|visão\s+geral|overview)/i;
 
 // ==================== FUNÇÕES AUXILIARES ====================
 
@@ -215,46 +260,159 @@ export function calculateSimilarity(keywords1: string[], keywords2: string[]): n
 export class ChatbotService {
   
   /**
-   * Obter ou criar sessão
+   * Obter ou criar sessão - agora persiste no banco!
    */
   async getOrCreateSession(tenantId: string, userId: string): Promise<ChatSession> {
     const sessionKey = `${tenantId}:${userId}`;
     
+    // Primeiro, tentar carregar do cache em memória
     let session = sessions.get(sessionKey);
     
-    if (!session) {
-      // Verificar se usuário já fez onboarding
-      const hasAccounts = await prisma.bankAccount.count({
-        where: { tenantId, deletedAt: null }
+    if (session) {
+      return session;
+    }
+    
+    // Tentar carregar do banco de dados
+    try {
+      const dbSession = await prisma.chatSession.findUnique({
+        where: { tenantId_userId: { tenantId, userId } },
+        include: {
+          messages: {
+            orderBy: { createdAt: 'desc' },
+            take: 50, // Últimas 50 mensagens
+          }
+        }
       });
       
-      // Carregar dados do usuário
-      const user = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { fullName: true }
-      });
-      
-      // Carregar padrões aprendidos
-      const learnedPatterns = await this.loadLearnedPatterns(tenantId);
-      
-      session = {
-        id: sessionKey,
+      if (dbSession) {
+        // Restaurar sessão do banco
+        const context = dbSession.context ? JSON.parse(dbSession.context) : {};
+        const learnedPatterns = dbSession.learnedPatterns ? JSON.parse(dbSession.learnedPatterns) : [];
+        
+        session = {
+          id: dbSession.id,
+          tenantId: dbSession.tenantId,
+          userId: dbSession.userId,
+          state: dbSession.state as ChatState,
+          context: {
+            ...context,
+            learnedPatterns: learnedPatterns.length > 0 ? learnedPatterns : await this.loadLearnedPatterns(tenantId),
+          },
+          history: dbSession.messages.reverse().map(m => ({
+            role: m.role as 'user' | 'assistant',
+            content: m.content,
+            timestamp: m.createdAt,
+            options: m.options ? JSON.parse(m.options) : undefined,
+            quickReplies: m.quickReplies ? JSON.parse(m.quickReplies) : undefined,
+          })),
+          createdAt: dbSession.createdAt,
+          updatedAt: dbSession.updatedAt,
+        };
+        
+        // Atualizar lastActiveAt
+        await prisma.chatSession.update({
+          where: { id: dbSession.id },
+          data: { lastActiveAt: new Date() }
+        });
+        
+        sessions.set(sessionKey, session);
+        log.info(`Sessão do chatbot restaurada do banco: ${sessionKey}`);
+        return session;
+      }
+    } catch (error) {
+      log.warn('Erro ao carregar sessão do banco, criando nova:', error);
+    }
+    
+    // Criar nova sessão
+    const hasAccounts = await prisma.bankAccount.count({
+      where: { tenantId, deletedAt: null }
+    });
+    
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { fullName: true }
+    });
+    
+    const learnedPatterns = await this.loadLearnedPatterns(tenantId);
+    
+    // Criar no banco
+    const newDbSession = await prisma.chatSession.create({
+      data: {
         tenantId,
         userId,
         state: hasAccounts > 0 ? ChatState.IDLE : ChatState.ONBOARDING_WELCOME,
-        context: {
+        context: JSON.stringify({
           userName: user?.fullName?.split(' ')[0] || 'Usuário',
-          learnedPatterns,
-        },
-        history: [],
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-      
-      sessions.set(sessionKey, session);
-    }
+        }),
+        learnedPatterns: JSON.stringify(learnedPatterns),
+      }
+    });
+    
+    session = {
+      id: newDbSession.id,
+      tenantId,
+      userId,
+      state: hasAccounts > 0 ? ChatState.IDLE : ChatState.ONBOARDING_WELCOME,
+      context: {
+        userName: user?.fullName?.split(' ')[0] || 'Usuário',
+        learnedPatterns,
+      },
+      history: [],
+      createdAt: newDbSession.createdAt,
+      updatedAt: newDbSession.updatedAt,
+    };
+    
+    sessions.set(sessionKey, session);
+    log.info(`Nova sessão do chatbot criada: ${sessionKey}`);
     
     return session;
+  }
+  
+  /**
+   * Salvar sessão no banco (chamado após cada mensagem)
+   */
+  async saveSession(session: ChatSession): Promise<void> {
+    try {
+      const { learnedPatterns, ...contextWithoutPatterns } = session.context;
+      
+      await prisma.chatSession.update({
+        where: { id: session.id },
+        data: {
+          state: session.state,
+          context: JSON.stringify(contextWithoutPatterns),
+          learnedPatterns: JSON.stringify(learnedPatterns || []),
+          lastActiveAt: new Date(),
+          updatedAt: new Date(),
+        }
+      });
+    } catch (error) {
+      log.error('Erro ao salvar sessão do chatbot:', error);
+    }
+  }
+  
+  /**
+   * Salvar mensagem no histórico do banco
+   */
+  async saveMessage(
+    sessionId: string, 
+    role: 'user' | 'assistant', 
+    content: string,
+    options?: string[],
+    quickReplies?: string[]
+  ): Promise<void> {
+    try {
+      await prisma.chatMessage.create({
+        data: {
+          sessionId,
+          role,
+          content,
+          options: options ? JSON.stringify(options) : null,
+          quickReplies: quickReplies ? JSON.stringify(quickReplies) : null,
+        }
+      });
+    } catch (error) {
+      log.error('Erro ao salvar mensagem do chatbot:', error);
+    }
   }
   
   /**
@@ -503,7 +661,7 @@ export class ChatbotService {
         
       default:
         result = { 
-          response: 'Desculpe, algo deu errado. Digite "ajuda" para ver os comandos disponíveis.',
+          response: FRIENDLY_ERRORS.genericError,
           quickReplies: ['Ajuda', 'Novo gasto', 'Meu saldo']
         };
     }
@@ -518,6 +676,11 @@ export class ChatbotService {
     });
     
     session.updatedAt = new Date();
+    
+    // Salvar no banco de dados
+    await this.saveMessage(session.id, 'user', input);
+    await this.saveMessage(session.id, 'assistant', result.response, result.options, result.quickReplies);
+    await this.saveSession(session);
     
     return result;
   }
@@ -889,7 +1052,7 @@ export class ChatbotService {
     }
     
     return {
-      response: 'Não encontrei essa conta. Por favor, escolha uma da lista:',
+      response: '🏦 Hmm, não encontrei essa conta. Tente digitar o número da lista:',
       options: accounts.map((a, i) => `${i + 1}️⃣ ${a.name}`),
     };
   }
@@ -1200,7 +1363,7 @@ export class ChatbotService {
     }
     
     return {
-      response: 'Não encontrei essa conta. Por favor, escolha uma da lista:',
+      response: '🏦 Hmm, não encontrei essa conta. Tente digitar o número da lista:',
       options: accounts.map((a: any, i: number) => `${i + 1}️⃣ ${a.name}`),
     };
   }
@@ -1482,7 +1645,7 @@ export class ChatbotService {
     const normalized = input.toLowerCase().trim();
     
     // Comando Menu - mostrar todas as funcionalidades
-    if (normalized === 'menu' || normalized.includes('menu principal')) {
+    if (MENU_PATTERNS.test(normalized)) {
       return this.showMenu(session);
     }
     
@@ -1494,12 +1657,12 @@ export class ChatbotService {
     if (normalized === '5' || normalized === '5️⃣') {
       session.state = ChatState.ASKING_AMOUNT;
       session.context.tempTransaction = { type: 'expense' };
-      return { response: 'Qual o valor da despesa?' };
+      return { response: '💸 Qual o valor da despesa?' };
     }
     if (normalized === '6' || normalized === '6️⃣') {
       session.state = ChatState.ASKING_AMOUNT;
       session.context.tempTransaction = { type: 'income' };
-      return { response: 'Qual o valor da receita?' };
+      return { response: '💵 Qual o valor da receita?' };
     }
     if (normalized === '7' || normalized === '7️⃣' || normalized.includes('minhas contas') || normalized.includes('meus bancos')) {
       return this.queryAccounts(session);
@@ -1512,34 +1675,28 @@ export class ChatbotService {
     }
     if (normalized === '0' || normalized === '0️⃣') return this.showHelp(session);
     
-    // Comandos de ajuda
-    if (normalized.includes('ajuda') || normalized.includes('help') || normalized === '?') {
-      return this.showHelp(session);
-    }
-    
-    // Saudações
-    if (['oi', 'olá', 'ola', 'hey', 'bom dia', 'boa tarde', 'boa noite', 'e ai', 'eai'].some(g => normalized.startsWith(g))) {
-      return this.greet(session);
+    // Saudações - com sugestões contextuais por horário
+    if (GREETING_PATTERNS.test(normalized)) {
+      return this.greetWithInsights(session);
     }
     
     // Consulta de saldo
-    if (normalized.includes('saldo') || normalized.includes('quanto tenho') || normalized.includes('meu dinheiro')) {
+    if (BALANCE_PATTERNS.test(normalized)) {
       return this.queryBalance(session);
     }
     
     // Consulta de gastos
-    if (normalized.includes('quanto gastei') || normalized.includes('meus gastos') || normalized.includes('minhas despesas')) {
+    if (EXPENSES_PATTERNS.test(normalized)) {
       return this.queryExpenses(session);
     }
     
     // Contas a vencer
-    if (normalized.includes('venc') || normalized.includes('pagar') || normalized.includes('pendente')) {
+    if (BILLS_PATTERNS.test(normalized)) {
       return this.queryBills(session);
     }
     
     // Planejamento do mês
-    if (normalized.includes('planejamento') || normalized.includes('planejar') || normalized.includes('resumo do mês') || normalized.includes('visão geral')) {
-      // Se pedir planejamento anual, redirecionar para página
+    if (PLANNING_PATTERNS.test(normalized)) {
       if (normalized.includes('anual') || normalized.includes('ano') || normalized.includes('12 meses')) {
         return this.showAnnualPlanning(session);
       }
@@ -1551,53 +1708,72 @@ export class ChatbotService {
       return this.startAnnualPlanningFlow(session);
     }
     
-    // Detectar gasto
-    const expensePatterns = [
-      /gastei\s+([\d,\.]+)/i,
-      /paguei\s+([\d,\.]+)/i,
-      /comprei\s+.+\s+([\d,\.]+)/i,
-      /^([\d,\.]+)\s+(?:no|na|em|de)\s+/i,
-    ];
-    
-    for (const pattern of expensePatterns) {
-      const match = normalized.match(pattern);
+    // Detectar gasto com padrões expandidos
+    for (const pattern of EXPENSE_PATTERNS) {
+      const match = input.match(pattern);
       if (match) {
-        const amount = parseMoneyValue(match[1]);
+        // Extrair valor (pode estar em diferentes grupos)
+        let amount: number | null = null;
+        let description = '';
+        
+        for (let i = 1; i <= match.length; i++) {
+          if (match[i]) {
+            const parsed = parseMoneyValue(match[i]);
+            if (parsed) {
+              amount = parsed;
+            } else if (match[i].length > 2) {
+              description = match[i].trim();
+            }
+          }
+        }
+        
         if (amount) {
           session.context.tempTransaction = { type: 'expense', amount };
           session.state = ChatState.ADDING_EXPENSE;
           
-          // Tentar extrair descrição
-          const descMatch = input.match(/(?:no|na|em|de|com)\s+(.+?)(?:\s+[\d,\.]+)?$/i);
-          if (descMatch) {
-            session.context.tempTransaction.description = descMatch[1].trim();
+          // Tentar extrair descrição do resto do texto
+          if (!description) {
+            const descMatch = input.match(/(?:no|na|em|de|com|para)\s+(.+?)(?:\s+[\d,\.]+)?$/i);
+            if (descMatch) {
+              description = descMatch[1].trim();
+            }
+          }
+          
+          if (description) {
+            session.context.tempTransaction.description = description;
             return this.suggestCategoryFromDescription(session);
           }
           
           return {
-            response: `💸 Despesa de **R$ ${formatMoney(amount)}**\n\nOnde você gastou?`,
+            response: `💸 Despesa de **R$ ${formatMoney(amount)}**\n\n📝 Onde você gastou / qual a descrição?`,
           };
         }
       }
     }
     
-    // Detectar receita
-    const incomePatterns = [
-      /recebi\s+([\d,\.]+)/i,
-      /entrou\s+([\d,\.]+)/i,
-      /ganhei\s+([\d,\.]+)/i,
-    ];
-    
-    for (const pattern of incomePatterns) {
-      const match = normalized.match(pattern);
+    // Detectar receita com padrões expandidos
+    for (const pattern of INCOME_PATTERNS) {
+      const match = input.match(pattern);
       if (match) {
-        const amount = parseMoneyValue(match[1]);
+        let amount: number | null = null;
+        
+        for (let i = 1; i <= match.length; i++) {
+          if (match[i]) {
+            const parsed = parseMoneyValue(match[i]);
+            if (parsed) {
+              amount = parsed;
+              break;
+            }
+          }
+        }
+        
         if (amount) {
           session.context.tempTransaction = { type: 'income', amount };
           session.state = ChatState.ADDING_INCOME;
+          
           return {
-            response: `💵 Receita de **R$ ${formatMoney(amount)}**\n\nQual a origem?`,
-            quickReplies: ['Salário', 'Freelance', 'Vendas', 'Outros'],
+            response: `💵 Receita de **R$ ${formatMoney(amount)}**\n\n📝 Qual a origem dessa entrada?`,
+            quickReplies: ['Salário', 'Freelance', 'Vendas', 'Transferência', 'Outros'],
           };
         }
       }
@@ -1610,8 +1786,8 @@ export class ChatbotService {
       if (amount) {
         session.context.tempTransaction = { amount };
         return {
-          response: `Vi o valor **R$ ${formatMoney(amount)}**.\n\nIsso foi uma despesa ou receita?`,
-          options: ['1️⃣ Despesa', '2️⃣ Receita'],
+          response: `Vi o valor **R$ ${formatMoney(amount)}**.\n\n🤔 Isso foi uma despesa ou receita?`,
+          options: ['1️⃣ 💸 Despesa', '2️⃣ 💵 Receita'],
           quickReplies: ['Despesa', 'Receita'],
         };
       }
@@ -1814,7 +1990,7 @@ export class ChatbotService {
     }
     
     return {
-      response: `Não encontrei a categoria "${input}". Por favor, escolha uma da lista:`,
+      response: `🤔 Não encontrei "${input}". Escolha uma categoria pelo número ou digite parte do nome:`,
       options: categories.slice(0, 10).map((c, i) => `${i + 1}️⃣ ${c.name}`),
     };
   }
@@ -1881,7 +2057,7 @@ export class ChatbotService {
     }
     
     return {
-      response: `Não encontrei "${input}". Escolha uma subcategoria ou digite "pular":`,
+      response: `🤔 Não encontrei "${input}". Escolha pelo número ou digite "pular" para usar a categoria principal:`,
       options: subcategories.slice(0, 10).map((s: any, i: number) => `${i + 1}️⃣ ${s.icon || ''} ${s.name}`.trim()),
       quickReplies: ['Pular'],
     };
@@ -1947,7 +2123,7 @@ export class ChatbotService {
     }
     
     return {
-      response: `Não encontrei a conta "${input}". Por favor, escolha uma da lista:`,
+      response: `🏦 Não encontrei "${input}". Escolha a conta pelo número ou nome:`,
       options: accounts.map((a, i) => `${i + 1}️⃣ ${a.name}`),
     };
   }
@@ -2271,6 +2447,113 @@ export class ChatbotService {
     };
   }
   
+  /**
+   * Saudação com insights proativos e sugestões contextuais
+   */
+  private async greetWithInsights(session: ChatSession) {
+    const hour = new Date().getHours();
+    const now = new Date();
+    let greeting = 'Olá';
+    let contextualTip = '';
+    let priorityInfo = '';
+    
+    // Saudação por horário
+    if (hour >= 5 && hour < 12) greeting = '☀️ Bom dia';
+    else if (hour >= 12 && hour < 18) greeting = '🌤️ Boa tarde';
+    else greeting = '🌙 Boa noite';
+    
+    try {
+      // 1. Verificar contas a vencer nos próximos 3 dias (PRIORIDADE)
+      const in3Days = new Date();
+      in3Days.setDate(now.getDate() + 3);
+      
+      const pendingBills = await prisma.recurringBillOccurrence.findMany({
+        where: {
+          tenantId: session.tenantId,
+          status: 'pending',
+          dueDate: {
+            gte: now,
+            lte: in3Days,
+          },
+        },
+        include: { recurringBill: true },
+        orderBy: { dueDate: 'asc' },
+        take: 3,
+      });
+      
+      if (pendingBills.length > 0) {
+        const totalPending = pendingBills.reduce((sum, b) => sum + Number(b.amount), 0);
+        priorityInfo = `\n\n⚠️ **Atenção!** Você tem ${pendingBills.length} conta(s) vencendo em breve:\n`;
+        for (const bill of pendingBills) {
+          const daysUntil = Math.ceil((bill.dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+          const dayLabel = daysUntil === 0 ? '**HOJE**' : daysUntil === 1 ? 'amanhã' : `em ${daysUntil} dias`;
+          priorityInfo += `• ${bill.recurringBill.name}: R$ ${formatMoney(Number(bill.amount))} (${dayLabel})\n`;
+        }
+        priorityInfo += `\n💰 Total: R$ ${formatMoney(totalPending)}`;
+      }
+      
+      // 2. Insight de gastos (comparação com mês anterior)
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const dayOfMonth = now.getDate();
+      
+      // Gastos até hoje no mês atual
+      const currentMonthExpenses = await prisma.transaction.aggregate({
+        where: {
+          tenantId: session.tenantId,
+          type: 'expense',
+          transactionDate: { gte: startOfMonth, lte: now },
+          deletedAt: null,
+        },
+        _sum: { amount: true },
+      });
+      
+      // Mesmo período do mês passado
+      const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const lastMonthSameDay = new Date(now.getFullYear(), now.getMonth() - 1, dayOfMonth);
+      
+      const lastMonthExpenses = await prisma.transaction.aggregate({
+        where: {
+          tenantId: session.tenantId,
+          type: 'expense',
+          transactionDate: { gte: lastMonthStart, lte: lastMonthSameDay },
+          deletedAt: null,
+        },
+        _sum: { amount: true },
+      });
+      
+      const currentTotal = Number(currentMonthExpenses._sum.amount) || 0;
+      const lastTotal = Number(lastMonthExpenses._sum.amount) || 0;
+      
+      if (lastTotal > 0 && currentTotal > 0) {
+        const percentChange = ((currentTotal - lastTotal) / lastTotal) * 100;
+        
+        if (percentChange > 15) {
+          contextualTip = `\n\n📊 **Insight:** Você gastou ${percentChange.toFixed(0)}% a mais que no mesmo período do mês passado. Quer ver um detalhamento?`;
+        } else if (percentChange < -15) {
+          contextualTip = `\n\n🎉 **Parabéns!** Você está gastando ${Math.abs(percentChange).toFixed(0)}% a menos que no mês passado. Continue assim!`;
+        }
+      }
+      
+      // 3. Sugestão contextual por horário
+      let suggestion = '';
+      if (hour >= 7 && hour <= 9) {
+        suggestion = '\n\n💡 _Dica matinal: Já registrou os gastos de ontem?_';
+      } else if (hour >= 12 && hour <= 14) {
+        suggestion = '\n\n💡 _Hora do almoço! Lembre-se de registrar se comer fora._';
+      } else if (hour >= 18 && hour <= 20) {
+        suggestion = '\n\n💡 _Final do dia! Que tal conferir seus gastos de hoje?_';
+      }
+      
+    } catch (error) {
+      log.error('Erro ao gerar insights:', error);
+    }
+    
+    return {
+      response: `${greeting}, ${session.context.userName}! 👋${priorityInfo}${contextualTip}\n\nComo posso te ajudar?`,
+      quickReplies: priorityInfo ? ['Ver contas', 'Pagar conta', 'Novo gasto'] : ['Planejamento', 'Meu saldo', 'Novo gasto', 'Ajuda'],
+    };
+  }
+
   private async queryBalance(session: ChatSession) {
     const accounts = await prisma.bankAccount.findMany({
       where: {
