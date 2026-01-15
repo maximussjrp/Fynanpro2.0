@@ -1,0 +1,88 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Testing
+coverage/
+
+# Build outputs
+dist/
+dist-temp/
+.next/
+out/
+build/
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.env
+
+# Debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Prisma
+*.db
+*.db-journal
+
+# Logs
+logs/
+*.log
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Nginx logs
+nginx/logs/
+nginx/access.log
+nginx/error.log
+
+# SSL certificates (sensitive)
+ssl/
+certbot/
+
+# Backup files
+*.bak
+*.backup
+*.sql
+
+# Test files at root level (scripts de debug)
+check-*.js
+check-*.ts
+test-*.js
+test-*.ts
+fix-*.js
+fix-*.ts
+clean-*.ts
+create-*.ts
+reset-*.ts
+update-*.ts
+audit-*.ts
+verify_*.js
+seed-*.ts
+force-*.ts
+delete-*.ts
+consolidate-*.ts
+migrate_*.js
+setup-*.js
+hash.js
+
+# Docker compose backup
+*.yml.bak

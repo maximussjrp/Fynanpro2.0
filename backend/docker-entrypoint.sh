@@ -1,0 +1,11 @@
+#!/bin/sh
+set -e
+
+echo "Running Prisma migrations..."
+npx prisma migrate deploy
+
+echo "Syncing schema with database..."
+npx prisma db push --accept-data-loss
+
+echo "Starting application..."
+exec node dist/main.js
