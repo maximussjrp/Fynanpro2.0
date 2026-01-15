@@ -1042,5 +1042,276 @@ router.get('/today-summary', async (req: AuthRequest, res) => {
   }
 });
 
+// ══════════════════════════════════════════════════════════════════════════════
+// RASTREADOR DE MOVIMENTAÇÃO FISCAL (e-Financeira / PIX)
+// Ref: IN RFB 2.219/2024 - Fiscalização de movimentações financeiras
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Retorna a movimentação de ENTRADAS (receitas) do mês atual
+ * comparada com o limite da e-Financeira (R$ 5.000 para PF, R$ 15.000 para PJ)
+ * 
+ * A Receita Federal passou a monitorar movimentações via PIX, cartões e
+ * transferências a partir de janeiro/2025 (IN RFB 2.219/2024)
+ */
+router.get('/fiscal-movement', async (req: AuthRequest, res) => {
+  try {
+    const tenantId = req.tenantId!;
+    const { month, year, accountType } = req.query;
+    
+    // Determinar mês/ano (padrão: mês atual)
+    const now = new Date();
+    const targetMonth = month ? parseInt(month as string) : now.getMonth() + 1;
+    const targetYear = year ? parseInt(year as string) : now.getFullYear();
+    
+    // Primeiro e último dia do mês
+    const startOfMonth = new Date(targetYear, targetMonth - 1, 1);
+    const endOfMonth = new Date(targetYear, targetMonth, 0, 23, 59, 59, 999);
+    
+    // Limite de acordo com tipo de conta (PF ou PJ)
+    // PF: R$ 5.000/mês | PJ: R$ 15.000/mês
+    const isPJ = accountType === 'PJ';
+    const monthlyLimit = isPJ ? 15000 : 5000;
+    
+    // Cache key
+    const cacheKey = `fiscal:${tenantId}:${targetYear}-${targetMonth}:${isPJ ? 'PJ' : 'PF'}`;
+    const cached = await cacheService.get(CacheNamespace.DASHBOARD, cacheKey);
+    if (cached) {
+      return successResponse(res, cached);
+    }
+    
+    // Buscar TODAS as receitas (entradas) do mês - COMPLETED
+    const incomeTransactions = await prisma.transaction.findMany({
+      where: {
+        tenantId,
+        type: 'income',
+        status: 'completed',
+        transactionDate: {
+          gte: startOfMonth,
+          lte: endOfMonth,
+        },
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        amount: true,
+        description: true,
+        transactionDate: true,
+        categoryId: true,
+        paymentMethodId: true,
+        category: {
+          select: {
+            name: true,
+            icon: true,
+          },
+        },
+        paymentMethod: {
+          select: {
+            name: true,
+            type: true,
+          },
+        },
+      },
+      orderBy: {
+        transactionDate: 'desc',
+      },
+    });
+    
+    // Calcular totais
+    const totalIncome = incomeTransactions.reduce((sum, t) => sum + Number(t.amount), 0);
+    const transactionCount = incomeTransactions.length;
+    
+    // Calcular porcentagem do limite
+    const percentOfLimit = Math.min((totalIncome / monthlyLimit) * 100, 100);
+    const isOverLimit = totalIncome > monthlyLimit;
+    const amountOverLimit = isOverLimit ? totalIncome - monthlyLimit : 0;
+    const amountRemaining = isOverLimit ? 0 : monthlyLimit - totalIncome;
+    
+    // Determinar nível de alerta
+    let alertLevel: 'safe' | 'warning' | 'danger' | 'exceeded';
+    if (percentOfLimit >= 100) {
+      alertLevel = 'exceeded';
+    } else if (percentOfLimit >= 80) {
+      alertLevel = 'danger';
+    } else if (percentOfLimit >= 50) {
+      alertLevel = 'warning';
+    } else {
+      alertLevel = 'safe';
+    }
+    
+    // Agrupar por categoria
+    const byCategory: Record<string, { name: string; icon?: string; total: number; count: number }> = {};
+    incomeTransactions.forEach(t => {
+      const catName = t.category?.name || 'Sem categoria';
+      const catIcon = t.category?.icon || undefined;
+      if (!byCategory[catName]) {
+        byCategory[catName] = { name: catName, icon: catIcon, total: 0, count: 0 };
+      }
+      byCategory[catName].total += Number(t.amount);
+      byCategory[catName].count += 1;
+    });
+    
+    // Agrupar por método de pagamento
+    const byPaymentMethod: Record<string, { name: string; type: string; total: number; count: number }> = {};
+    incomeTransactions.forEach(t => {
+      const pmName = t.paymentMethod?.name || 'Não informado';
+      const pmType = t.paymentMethod?.type || 'other';
+      if (!byPaymentMethod[pmName]) {
+        byPaymentMethod[pmName] = { name: pmName, type: pmType, total: 0, count: 0 };
+      }
+      byPaymentMethod[pmName].total += Number(t.amount);
+      byPaymentMethod[pmName].count += 1;
+    });
+    
+    // Top 5 maiores entradas
+    const topTransactions = incomeTransactions
+      .sort((a, b) => Number(b.amount) - Number(a.amount))
+      .slice(0, 5)
+      .map(t => ({
+        id: t.id,
+        description: t.description,
+        amount: Number(t.amount),
+        date: t.transactionDate,
+        category: t.category?.name,
+        icon: t.category?.icon,
+        paymentMethod: t.paymentMethod?.name,
+      }));
+    
+    // Calcular média diária
+    const daysInMonth = endOfMonth.getDate();
+    const daysPassed = Math.min(now.getDate(), daysInMonth);
+    const dailyAverage = daysPassed > 0 ? totalIncome / daysPassed : 0;
+    const projectedMonthlyTotal = dailyAverage * daysInMonth;
+    const projectedOverLimit = projectedMonthlyTotal > monthlyLimit;
+    
+    // Histórico dos últimos 6 meses
+    const historicalData: { month: string; total: number; limit: number; percent: number }[] = [];
+    for (let i = 5; i >= 0; i--) {
+      const histDate = new Date(targetYear, targetMonth - 1 - i, 1);
+      const histStart = new Date(histDate.getFullYear(), histDate.getMonth(), 1);
+      const histEnd = new Date(histDate.getFullYear(), histDate.getMonth() + 1, 0, 23, 59, 59, 999);
+      
+      const histTransactions = await prisma.transaction.findMany({
+        where: {
+          tenantId,
+          type: 'income',
+          status: 'completed',
+          transactionDate: {
+            gte: histStart,
+            lte: histEnd,
+          },
+          deletedAt: null,
+        },
+        select: {
+          amount: true,
+        },
+      });
+      
+      const histTotal = histTransactions.reduce((sum, t) => sum + Number(t.amount), 0);
+      historicalData.push({
+        month: histDate.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' }),
+        total: histTotal,
+        limit: monthlyLimit,
+        percent: Math.min((histTotal / monthlyLimit) * 100, 150), // cap at 150% for display
+      });
+    }
+    
+    const result = {
+      period: {
+        month: targetMonth,
+        year: targetYear,
+        monthName: startOfMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }),
+        startDate: startOfMonth.toISOString(),
+        endDate: endOfMonth.toISOString(),
+      },
+      accountType: isPJ ? 'PJ' : 'PF',
+      limit: {
+        monthly: monthlyLimit,
+        description: isPJ 
+          ? 'Limite mensal para Pessoa Jurídica (IN RFB 2.219/2024)' 
+          : 'Limite mensal para Pessoa Física (IN RFB 2.219/2024)',
+      },
+      summary: {
+        totalIncome,
+        transactionCount,
+        percentOfLimit: Math.round(percentOfLimit * 10) / 10,
+        isOverLimit,
+        amountOverLimit,
+        amountRemaining,
+        alertLevel,
+        dailyAverage: Math.round(dailyAverage * 100) / 100,
+        projectedMonthlyTotal: Math.round(projectedMonthlyTotal * 100) / 100,
+        projectedOverLimit,
+      },
+      breakdown: {
+        byCategory: Object.values(byCategory).sort((a, b) => b.total - a.total),
+        byPaymentMethod: Object.values(byPaymentMethod).sort((a, b) => b.total - a.total),
+      },
+      topTransactions,
+      historicalData,
+      alerts: generateFiscalAlerts(totalIncome, monthlyLimit, percentOfLimit, projectedMonthlyTotal, isPJ),
+    };
+    
+    // Cache por 5 minutos
+    await cacheService.set(CacheNamespace.DASHBOARD, cacheKey, result, 300);
+    
+    return successResponse(res, result);
+  } catch (error: any) {
+    log.error('Fiscal movement error', { error, tenantId: req.tenantId });
+    return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao calcular movimentação fiscal', 500);
+  }
+});
+
+/**
+ * Gera alertas personalizados baseados na movimentação
+ */
+function generateFiscalAlerts(
+  totalIncome: number, 
+  limit: number, 
+  percent: number, 
+  projected: number,
+  isPJ: boolean
+): { type: 'info' | 'warning' | 'danger' | 'success'; message: string; detail?: string }[] {
+  const alerts: { type: 'info' | 'warning' | 'danger' | 'success'; message: string; detail?: string }[] = [];
+  const entityType = isPJ ? 'sua empresa' : 'você';
+  
+  if (percent >= 100) {
+    alerts.push({
+      type: 'danger',
+      message: `⚠️ Limite mensal ULTRAPASSADO!`,
+      detail: `${entityType.charAt(0).toUpperCase() + entityType.slice(1)} movimentou R$ ${totalIncome.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} de R$ ${limit.toLocaleString('pt-BR')} permitidos. A Receita Federal será informada sobre essa movimentação.`,
+    });
+  } else if (percent >= 80) {
+    alerts.push({
+      type: 'warning',
+      message: `🟡 Atenção: ${Math.round(percent)}% do limite utilizado`,
+      detail: `Faltam apenas R$ ${(limit - totalIncome).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} para atingir o limite de R$ ${limit.toLocaleString('pt-BR')}.`,
+    });
+  } else if (percent >= 50) {
+    alerts.push({
+      type: 'info',
+      message: `📊 ${Math.round(percent)}% do limite mensal utilizado`,
+      detail: `${entityType.charAt(0).toUpperCase() + entityType.slice(1)} ainda pode receber R$ ${(limit - totalIncome).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} este mês sem atingir o limite.`,
+    });
+  } else {
+    alerts.push({
+      type: 'success',
+      message: `✅ Movimentação dentro do esperado`,
+      detail: `${entityType.charAt(0).toUpperCase() + entityType.slice(1)} utilizou apenas ${Math.round(percent)}% do limite mensal.`,
+    });
+  }
+  
+  // Alerta de projeção
+  if (projected > limit && percent < 100) {
+    alerts.push({
+      type: 'warning',
+      message: `📈 Projeção: limite será ultrapassado`,
+      detail: `Mantendo a média atual, ${entityType} deve movimentar R$ ${projected.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} até o fim do mês.`,
+    });
+  }
+  
+  return alerts;
+}
+
 export default router;
 

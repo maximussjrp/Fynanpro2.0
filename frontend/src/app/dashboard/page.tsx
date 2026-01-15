@@ -91,6 +91,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState<DashboardData>({});
   const [todaySummary, setTodaySummary] = useState<any>(null);
+  const [fiscalMovement, setFiscalMovement] = useState<any>(null);
   const [showPeriodModal, setShowPeriodModal] = useState(false);
   const [showTransactionModal, setShowTransactionModal] = useState(false);
   const [showBankAccountModal, setShowBankAccountModal] = useState(false);
@@ -149,6 +150,7 @@ export default function Dashboard() {
     loadFormData();
     loadTodaySummary();
     loadEnergyCoverage();
+    loadFiscalMovement();
     
     // Verificar se é primeiro acesso para mostrar wizard de contas recorrentes
     const hasSeenWizard = localStorage.getItem('hasSeenRecurringBillsWizard');
@@ -179,6 +181,15 @@ export default function Dashboard() {
       setTodaySummary(response.data.data);
     } catch (error: any) {
       console.error('Erro ao carregar resumo do dia:', error.response?.data || error.message);
+    }
+  };
+
+  const loadFiscalMovement = async () => {
+    try {
+      const response = await api.get('/dashboard/fiscal-movement');
+      setFiscalMovement(response.data.data);
+    } catch (error: any) {
+      console.error('Erro ao carregar movimentação fiscal:', error.response?.data || error.message);
     }
   };
 
@@ -543,6 +554,127 @@ export default function Dashboard() {
               ) : (
                 <p className="mt-2 text-xs text-green-600">✅ Nenhuma despesa atrasada!</p>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Widget de Movimentação Fiscal - e-Financeira (IN RFB 2.219/2024) */}
+        {fiscalMovement && (
+          <div className="bg-white rounded-xl shadow-sm border border-l-4 p-4 mb-6" style={{
+            borderLeftColor: fiscalMovement.summary?.alertLevel === 'exceeded' ? '#DC2626' :
+                            fiscalMovement.summary?.alertLevel === 'danger' ? '#F59E0B' :
+                            fiscalMovement.summary?.alertLevel === 'warning' ? '#EAB308' : '#22C55E'
+          }}>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">🏦</span>
+                <h3 className="text-sm font-semibold text-gray-700" style={{fontFamily: 'Inter, sans-serif'}}>
+                  Monitoramento Fiscal (e-Financeira)
+                </h3>
+                <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
+                  {fiscalMovement.period?.monthName}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-400">Limite {fiscalMovement.accountType}</span>
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                  fiscalMovement.summary?.alertLevel === 'exceeded' ? 'bg-red-100 text-red-700' :
+                  fiscalMovement.summary?.alertLevel === 'danger' ? 'bg-orange-100 text-orange-700' :
+                  fiscalMovement.summary?.alertLevel === 'warning' ? 'bg-yellow-100 text-yellow-700' : 
+                  'bg-green-100 text-green-700'
+                }`}>
+                  {fiscalMovement.summary?.alertLevel === 'exceeded' ? '⚠️ EXCEDIDO' :
+                   fiscalMovement.summary?.alertLevel === 'danger' ? '🟡 ATENÇÃO' :
+                   fiscalMovement.summary?.alertLevel === 'warning' ? '📊 MONITORAR' : 
+                   '✅ OK'}
+                </span>
+              </div>
+            </div>
+
+            {/* Barra de Progresso */}
+            <div className="mb-3">
+              <div className="flex justify-between items-center mb-1">
+                <span className="text-xs text-gray-500">Movimentação de Receitas</span>
+                <span className="text-xs font-medium text-gray-700">
+                  {formatCurrency(fiscalMovement.summary?.totalIncome || 0)} de {formatCurrency(fiscalMovement.limit?.monthly || 5000)}
+                </span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                <div 
+                  className={`h-full rounded-full transition-all duration-500 ${
+                    fiscalMovement.summary?.percentOfLimit >= 100 ? 'bg-gradient-to-r from-red-500 to-red-600' :
+                    fiscalMovement.summary?.percentOfLimit >= 80 ? 'bg-gradient-to-r from-orange-400 to-orange-500' :
+                    fiscalMovement.summary?.percentOfLimit >= 50 ? 'bg-gradient-to-r from-yellow-400 to-yellow-500' :
+                    'bg-gradient-to-r from-green-400 to-green-500'
+                  }`}
+                  style={{ width: `${Math.min(fiscalMovement.summary?.percentOfLimit || 0, 100)}%` }}
+                />
+              </div>
+              <div className="flex justify-between items-center mt-1">
+                <span className="text-xs text-gray-400">
+                  {fiscalMovement.summary?.transactionCount || 0} transações
+                </span>
+                <span className={`text-xs font-semibold ${
+                  fiscalMovement.summary?.percentOfLimit >= 80 ? 'text-orange-600' : 'text-gray-600'
+                }`}>
+                  {fiscalMovement.summary?.percentOfLimit?.toFixed(1)}%
+                </span>
+              </div>
+            </div>
+
+            {/* Alertas */}
+            {fiscalMovement.alerts?.length > 0 && (
+              <div className="space-y-2 mb-3">
+                {fiscalMovement.alerts.map((alert: any, idx: number) => (
+                  <div 
+                    key={idx}
+                    className={`text-xs p-2 rounded-lg ${
+                      alert.type === 'danger' ? 'bg-red-50 text-red-700 border border-red-200' :
+                      alert.type === 'warning' ? 'bg-orange-50 text-orange-700 border border-orange-200' :
+                      alert.type === 'info' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
+                      'bg-green-50 text-green-700 border border-green-200'
+                    }`}
+                  >
+                    <p className="font-medium">{alert.message}</p>
+                    {alert.detail && <p className="text-xs opacity-80 mt-0.5">{alert.detail}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Informações Adicionais */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-3 border-t border-gray-100">
+              <div className="text-center">
+                <p className="text-xs text-gray-400">Restante</p>
+                <p className={`text-sm font-bold ${fiscalMovement.summary?.amountRemaining > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  {formatCurrency(fiscalMovement.summary?.amountRemaining || 0)}
+                </p>
+              </div>
+              <div className="text-center">
+                <p className="text-xs text-gray-400">Média/Dia</p>
+                <p className="text-sm font-bold text-gray-700">
+                  {formatCurrency(fiscalMovement.summary?.dailyAverage || 0)}
+                </p>
+              </div>
+              <div className="text-center">
+                <p className="text-xs text-gray-400">Projeção Mês</p>
+                <p className={`text-sm font-bold ${fiscalMovement.summary?.projectedOverLimit ? 'text-orange-600' : 'text-gray-700'}`}>
+                  {formatCurrency(fiscalMovement.summary?.projectedMonthlyTotal || 0)}
+                </p>
+              </div>
+              <div className="text-center">
+                <p className="text-xs text-gray-400">Limite Mensal</p>
+                <p className="text-sm font-bold text-gray-700">
+                  {formatCurrency(fiscalMovement.limit?.monthly || 5000)}
+                </p>
+              </div>
+            </div>
+
+            {/* Footer informativo */}
+            <div className="mt-3 pt-2 border-t border-gray-100">
+              <p className="text-[10px] text-gray-400 text-center">
+                📋 Referência: IN RFB 2.219/2024 - A Receita Federal monitora movimentações financeiras acima de R$ 5.000/mês (PF) ou R$ 15.000/mês (PJ) via e-Financeira
+              </p>
             </div>
           </div>
         )}

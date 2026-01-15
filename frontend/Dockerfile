@@ -27,19 +27,17 @@ FROM node:18-alpine AS production
 
 WORKDIR /app
 
-# Copy package files for production deps
-COPY package*.json ./
-
-# Install production dependencies only
-RUN npm ci --only=production
-
-# Copy built files from builder
-COPY --from=builder /app/.next ./.next
+# Copy standalone build (inclui node_modules necessários)
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
-COPY --from=builder /app/next.config.js ./
+
+# Set environment
+ENV NODE_ENV=production
+ENV PORT=3001
 
 # Expose port
 EXPOSE 3001
 
-# Start command
-CMD ["npm", "start"]
+# Start standalone server
+CMD ["node", "server.js"]

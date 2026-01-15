@@ -54,7 +54,7 @@ DATABASE_URL="postgresql://utop_user:SENHA@localhost:5433/utop?schema=public"
 ```bash
 scp arquivo root@91.99.16.145:/opt/utop/frontend/caminho/arquivo
 
-ssh root@91.99.16.145 "cd /opt/utop/frontend && docker build --build-arg NEXT_PUBLIC_API_URL=https://api.utopsistema.com.br/api/v1 -t utop-frontend:latest . && docker rm -f utop-frontend && docker run -d --name utop-frontend --network utop_utop_net -p 3001:3000 utop-frontend:latest"
+ssh root@91.99.16.145 "cd /opt/utop/frontend && docker build --build-arg NEXT_PUBLIC_API_URL=https://api.utopsistema.com.br/api/v1 -t utop-frontend:latest . && docker rm -f utop-frontend && docker run -d --name utop-frontend --network utop_utop_net -p 3001:3001 utop-frontend:latest"
 ```
 
 ### Deploy do Backend:
