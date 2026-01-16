@@ -152,15 +152,14 @@ export default function Dashboard() {
     loadEnergyCoverage();
     loadFiscalMovement();
     
-    // Verificar se é primeiro acesso para mostrar wizard de contas recorrentes
-    const hasSeenWizard = localStorage.getItem('hasSeenRecurringBillsWizard');
-    if (!hasSeenWizard) {
-      // Aguardar 1 segundo para dashboard carregar antes de mostrar wizard
-      const timer = setTimeout(() => {
-        setShowOnboardingRecurring(true);
-      }, 1000);
-      return () => clearTimeout(timer);
-    }
+    // DESABILITADO: Wizard de contas recorrentes não é mais utilizado
+    // const hasSeenWizard = localStorage.getItem('hasSeenRecurringBillsWizard');
+    // if (!hasSeenWizard) {
+    //   const timer = setTimeout(() => {
+    //     setShowOnboardingRecurring(true);
+    //   }, 1000);
+    //   return () => clearTimeout(timer);
+    // }
   }, [startDate, endDate, isAuthenticated]);
 
   const loadEnergyCoverage = async () => {
