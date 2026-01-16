@@ -42,6 +42,7 @@ export enum ChatState {
   CHOOSING_RECURRENCE_TYPE = 'choosing_recurrence_type', // Escolhendo se é despesa ou receita fixa
   ASKING_ACCOUNT = 'asking_account',
   ASKING_PAYMENT_METHOD = 'asking_payment_method',
+  ASKING_PROFILE = 'asking_profile', // NOVO: perguntar perfil (CPF/CNPJ)
   ASKING_AMOUNT = 'asking_amount',
   ASKING_DESCRIPTION = 'asking_description',
   ASKING_DATE = 'asking_date',
@@ -71,7 +72,11 @@ export interface ChatContext {
     subcategoryId?: string;
     subcategoryName?: string;
     bankAccountId?: string;
+    bankAccountName?: string;
     paymentMethodId?: string;
+    paymentMethodName?: string;
+    userProfileId?: string;
+    userProfileName?: string;
     date?: Date;
   };
   
@@ -104,6 +109,18 @@ export interface ChatContext {
   paymentMethods?: any[];
   categories?: any[];
   subcategories?: any[];
+  userProfiles?: any[]; // Perfis do usuário (CPF/CNPJ)
+  activeProfileId?: string; // Perfil ativo na sessão
+  
+  // Cache de categorias do usuário para sugestões
+  userCategorySuggestions?: Array<{
+    keywords: string[];
+    categoryId: string;
+    categoryName: string;
+    subcategoryId?: string;
+    subcategoryName?: string;
+    icon?: string;
+  }>;
   
   // Aprendizado
   learnedPatterns?: LearnedPattern[];
@@ -713,6 +730,155 @@ export class ChatbotService {
   }
   
   /**
+   * Construir sugestões de categorias a partir das categorias do usuário
+   * Isso permite que categorias criadas pelo usuário sejam reconhecidas automaticamente
+   */
+  async buildUserCategorySuggestions(tenantId: string, type: 'income' | 'expense'): Promise<Array<{
+    keywords: string[];
+    categoryId: string;
+    categoryName: string;
+    subcategoryId?: string;
+    subcategoryName?: string;
+    icon?: string;
+    confidence: 'high' | 'medium' | 'low';
+  }>> {
+    try {
+      // Buscar todas as categorias do usuário (L1 e L2)
+      const categories = await prisma.category.findMany({
+        where: {
+          tenantId,
+          type,
+          isActive: true,
+          deletedAt: null,
+        },
+        include: {
+          children: {
+            where: {
+              isActive: true,
+              deletedAt: null,
+            },
+          },
+        },
+        orderBy: { name: 'asc' },
+      });
+      
+      const suggestions: Array<{
+        keywords: string[];
+        categoryId: string;
+        categoryName: string;
+        subcategoryId?: string;
+        subcategoryName?: string;
+        icon?: string;
+        confidence: 'high' | 'medium' | 'low';
+      }> = [];
+      
+      for (const category of categories) {
+        // Extrair keywords do nome da categoria (sem emoji)
+        const catNameClean = category.name
+          .replace(/^[\p{Emoji}\s]+/gu, '') // Remove emoji do início
+          .trim()
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '');
+        
+        // Adicionar a categoria principal como sugestão
+        const catKeywords = catNameClean.split(/\s+/).filter(w => w.length > 2);
+        
+        if (catKeywords.length > 0) {
+          suggestions.push({
+            keywords: catKeywords,
+            categoryId: category.id,
+            categoryName: category.name,
+            icon: category.icon || undefined,
+            confidence: 'medium', // Confiança média para match por nome
+          });
+        }
+        
+        // Adicionar subcategorias
+        for (const sub of category.children || []) {
+          const subNameClean = sub.name
+            .replace(/^[\p{Emoji}\s]+/gu, '')
+            .trim()
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '');
+          
+          const subKeywords = subNameClean.split(/\s+/).filter(w => w.length > 2);
+          
+          if (subKeywords.length > 0) {
+            suggestions.push({
+              keywords: subKeywords,
+              categoryId: category.id,
+              categoryName: category.name,
+              subcategoryId: sub.id,
+              subcategoryName: sub.name,
+              icon: sub.icon || category.icon || undefined,
+              confidence: 'high', // Subcategoria é mais específica
+            });
+          }
+        }
+      }
+      
+      return suggestions;
+    } catch (error) {
+      log.error('Erro ao construir sugestões de categorias do usuário:', error);
+      return [];
+    }
+  }
+  
+  /**
+   * Encontrar sugestão de categoria baseada nas categorias do usuário
+   * Prioriza categorias criadas pelo usuário antes do mapa estático
+   */
+  async findCategoryFromUserCategories(
+    tenantId: string,
+    description: string,
+    type: 'income' | 'expense'
+  ): Promise<{ 
+    categoryId: string; 
+    categoryName: string; 
+    subcategoryId?: string; 
+    subcategoryName?: string;
+    icon?: string;
+    confidence: 'high' | 'medium' | 'low';
+  } | null> {
+    const suggestions = await this.buildUserCategorySuggestions(tenantId, type);
+    
+    if (suggestions.length === 0) return null;
+    
+    const normalized = description
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim();
+    
+    let bestSuggestion: typeof suggestions[0] | null = null;
+    let bestMatchCount = 0;
+    
+    for (const suggestion of suggestions) {
+      let matchCount = 0;
+      
+      for (const keyword of suggestion.keywords) {
+        if (normalized.includes(keyword) || keyword.includes(normalized.split(' ')[0])) {
+          matchCount++;
+        }
+      }
+      
+      // Priorizar subcategorias (mais específicas)
+      const hasSubcategory = suggestion.subcategoryId ? 1 : 0;
+      const confidenceBonus = suggestion.confidence === 'high' ? 1 : suggestion.confidence === 'medium' ? 0.5 : 0;
+      const score = matchCount + confidenceBonus + hasSubcategory;
+      
+      if (matchCount > 0 && score > bestMatchCount) {
+        bestMatchCount = score;
+        bestSuggestion = suggestion;
+      }
+    }
+    
+    return bestSuggestion;
+  }
+  
+  /**
    * Encontrar sugestão de categoria baseada no mapa de palavras-chave
    * Retorna a sugestão mais relevante para a descrição fornecida
    */
@@ -967,6 +1133,10 @@ export class ChatbotService {
         
       case ChatState.ASKING_PAYMENT_METHOD:
         result = await this.handleAskingPaymentMethod(session, input);
+        break;
+        
+      case ChatState.ASKING_PROFILE:
+        result = await this.handleAskingProfile(session, input);
         break;
         
       case ChatState.ASKING_AMOUNT:
@@ -2228,7 +2398,52 @@ export class ChatbotService {
       return this.askAccountAfterCategory(session, learnedSuggestion.categoryName, learnedSuggestion.averageAmount);
     }
     
-    // 2. Se não encontrou padrão aprendido, tentar sugestão do mapa de palavras-chave
+    // 2. NOVO: Tentar encontrar nas categorias do próprio usuário (incluindo personalizadas)
+    const userCategorySuggestion = await this.findCategoryFromUserCategories(
+      session.tenantId,
+      description,
+      type
+    );
+    
+    if (userCategorySuggestion) {
+      // Guardar sugestão pendente
+      session.context.pendingSuggestion = {
+        categoryName: userCategorySuggestion.categoryName,
+        subcategoryName: userCategorySuggestion.subcategoryName,
+        confidence: userCategorySuggestion.confidence,
+      };
+      
+      // Preencher dados
+      if (userCategorySuggestion.subcategoryId) {
+        session.context.tempTransaction!.categoryId = userCategorySuggestion.subcategoryId;
+        session.context.tempTransaction!.categoryName = `${userCategorySuggestion.categoryName} > ${userCategorySuggestion.subcategoryName}`;
+        session.context.tempTransaction!.subcategoryId = userCategorySuggestion.subcategoryId;
+        session.context.tempTransaction!.subcategoryName = userCategorySuggestion.subcategoryName;
+      } else {
+        session.context.tempTransaction!.categoryId = userCategorySuggestion.categoryId;
+        session.context.tempTransaction!.categoryName = userCategorySuggestion.categoryName;
+      }
+      
+      session.state = ChatState.CONFIRMING_SUGGESTION;
+      
+      const amount = session.context.tempTransaction?.amount || 0;
+      const icon = userCategorySuggestion.icon || '📁';
+      const catDisplay = userCategorySuggestion.subcategoryName
+        ? `${icon} ${userCategorySuggestion.categoryName} > ${userCategorySuggestion.subcategoryName}`
+        : `${icon} ${userCategorySuggestion.categoryName}`;
+      
+      const confidenceEmoji = userCategorySuggestion.confidence === 'high' ? '🎯' : '💡';
+      
+      return {
+        response: `${confidenceEmoji} **Encontrei uma categoria sua!**\n\n` +
+          `📝 "${description}"\n` +
+          `💰 R$ ${formatMoney(amount)}\n\n` +
+          `Parece ser **${catDisplay}**, certo?\n`,
+        quickReplies: ['Sim, confirmar', 'Escolher outra', 'Cancelar'],
+      };
+    }
+    
+    // 3. Se não encontrou nas categorias do usuário, tentar sugestão do mapa de palavras-chave estático
     const mapSuggestion = this.findCategorySuggestionFromMap(description);
     
     if (mapSuggestion) {
@@ -2697,8 +2912,104 @@ export class ChatbotService {
     }
     
     session.context.tempTransaction!.paymentMethodId = paymentMethod.id;
+    session.context.tempTransaction!.paymentMethodName = paymentMethod.name;
     
-    return this.confirmTransaction(session);
+    // Verificar se precisa perguntar perfil (CPF/CNPJ)
+    return this.askProfileOrConfirm(session);
+  }
+  
+  /**
+   * Carregar perfis do usuário e decidir se precisa perguntar
+   */
+  private async askProfileOrConfirm(session: ChatSession) {
+    // Carregar perfis se ainda não carregou
+    if (!session.context.userProfiles) {
+      session.context.userProfiles = await prisma.userProfile.findMany({
+        where: {
+          tenantId: session.tenantId,
+          isActive: true,
+        },
+        orderBy: { name: 'asc' },
+      });
+    }
+    
+    const profiles = session.context.userProfiles;
+    
+    // Se não tem perfis ou tem só um, ir direto para confirmação
+    if (profiles.length <= 1) {
+      if (profiles.length === 1) {
+        session.context.tempTransaction!.userProfileId = profiles[0].id;
+        session.context.tempTransaction!.userProfileName = profiles[0].name;
+      }
+      return this.confirmTransaction(session);
+    }
+    
+    // Se a conta bancária selecionada tem perfil vinculado, usar esse
+    const bankAccountId = session.context.tempTransaction?.bankAccountId;
+    if (bankAccountId) {
+      const account = session.context.bankAccounts?.find((a: any) => a.id === bankAccountId);
+      if (account?.userProfileId) {
+        const linkedProfile = profiles.find(p => p.id === account.userProfileId);
+        if (linkedProfile) {
+          session.context.tempTransaction!.userProfileId = linkedProfile.id;
+          session.context.tempTransaction!.userProfileName = linkedProfile.name;
+          return this.confirmTransaction(session);
+        }
+      }
+    }
+    
+    // Perguntar qual perfil usar
+    session.state = ChatState.ASKING_PROFILE;
+    
+    const options = profiles.map((p: any, i: number) => {
+      const emoji = p.documentType === 'CNPJ' ? '🏢' : '👤';
+      return `${i + 1}️⃣ ${emoji} ${p.name}`;
+    });
+    
+    const quickReplies = profiles.slice(0, 4).map((p: any) => p.name.split(' ')[0]);
+    
+    return {
+      response: `👤 **Para qual perfil é esse lançamento?**\n\n` +
+        `_Isso é importante para a declaração e-Financeira._`,
+      options,
+      quickReplies,
+    };
+  }
+  
+  /**
+   * Handler para seleção de perfil
+   */
+  private async handleAskingProfile(session: ChatSession, input: string) {
+    const profiles = session.context.userProfiles || [];
+    const normalized = input.toLowerCase().trim();
+    
+    // Tentar encontrar por número
+    const num = parseInt(normalized);
+    if (!isNaN(num) && num >= 1 && num <= profiles.length) {
+      session.context.tempTransaction!.userProfileId = profiles[num - 1].id;
+      session.context.tempTransaction!.userProfileName = profiles[num - 1].name;
+      return this.confirmTransaction(session);
+    }
+    
+    // Tentar encontrar por nome
+    const found = profiles.find((p: any) => 
+      p.name.toLowerCase().includes(normalized) ||
+      p.document?.includes(normalized)
+    );
+    
+    if (found) {
+      session.context.tempTransaction!.userProfileId = found.id;
+      session.context.tempTransaction!.userProfileName = found.name;
+      return this.confirmTransaction(session);
+    }
+    
+    return {
+      response: `👤 Não encontrei "${input}". Escolha o perfil pelo número ou nome:`,
+      options: profiles.map((p: any, i: number) => {
+        const emoji = p.documentType === 'CNPJ' ? '🏢' : '👤';
+        return `${i + 1}️⃣ ${emoji} ${p.name}`;
+      }),
+    };
   }
 
   private async handleAskingAmount(session: ChatSession, input: string) {
@@ -2731,6 +3042,7 @@ export class ChatbotService {
     const type = tx.type === 'income' ? '💵 Receita' : '💸 Despesa';
     const account = session.context.bankAccounts?.find(a => a.id === tx.bankAccountId);
     const paymentMethod = session.context.paymentMethods?.find((p: any) => p.id === tx.paymentMethodId);
+    const profile = session.context.userProfiles?.find((p: any) => p.id === tx.userProfileId);
     
     session.state = ChatState.CONFIRMING;
     
@@ -2739,10 +3051,15 @@ export class ChatbotService {
       `📝 ${tx.description}\n` +
       `💰 R$ ${formatMoney(tx.amount!)}\n` +
       `🏷️ ${tx.categoryName}\n` +
-      `🏦 ${account?.name || 'Não definido'}`;
+      `🏦 ${account?.name || tx.bankAccountName || 'Não definido'}`;
     
     if (paymentMethod) {
       confirmMessage += `\n💳 ${paymentMethod.name}`;
+    }
+    
+    if (profile) {
+      const profileEmoji = profile.documentType === 'CNPJ' ? '🏢' : '👤';
+      confirmMessage += `\n${profileEmoji} ${profile.name}`;
     }
     
     return {
@@ -2781,6 +3098,7 @@ export class ChatbotService {
           categoryId: tx.categoryId,
           bankAccountId: tx.bankAccountId,
           paymentMethodId: tx.paymentMethodId,
+          userProfileId: tx.userProfileId || null, // Perfil para e-Financeira
           amount: tx.amount!,
           description: tx.description,
           transactionDate: new Date(),
@@ -2838,10 +3156,22 @@ export class ChatbotService {
       
       const emoji = tx.type === 'income' ? '🎉' : '✅';
       
-      return {
-        response: `${emoji} **Lançamento registrado!**\n\n` +
+      // Verificar limites e-Financeira para o perfil
+      let eFinanceiraWarning = '';
+      if (tx.userProfileId) {
+        eFinanceiraWarning = await this.checkEFinanceiraLimit(session.tenantId, tx.userProfileId, tx.amount!);
+      }
+      
+      let responseMessage = `${emoji} **Lançamento registrado!**\n\n` +
           `${tx.type === 'income' ? '💵' : '💸'} ${tx.description}: R$ ${formatMoney(tx.amount!)}\n\n` +
-          `_Dica: Na próxima vez que você mencionar "${tx.description}", vou sugerir a mesma categoria automaticamente!_ 🧠`,
+          `_Dica: Na próxima vez que você mencionar "${tx.description}", vou sugerir a mesma categoria automaticamente!_ 🧠`;
+      
+      if (eFinanceiraWarning) {
+        responseMessage += `\n\n${eFinanceiraWarning}`;
+      }
+      
+      return {
+        response: responseMessage,
         quickReplies: ['Novo gasto', 'Meu saldo', 'Quanto gastei'],
       };
     }
@@ -2851,6 +3181,73 @@ export class ChatbotService {
       options: ['✅ Confirmar', '❌ Cancelar', '✏️ Mudar categoria'],
       quickReplies: ['Confirmar', 'Cancelar'],
     };
+  }
+  
+  /**
+   * Verificar limites e-Financeira para o perfil
+   * PF: R$ 5.000/mês | PJ: R$ 15.000/mês
+   * Retorna mensagem de aviso se estiver próximo ou acima do limite
+   */
+  private async checkEFinanceiraLimit(tenantId: string, userProfileId: string, newAmount: number): Promise<string> {
+    try {
+      // Buscar perfil para saber se é PF ou PJ
+      const profile = await prisma.userProfile.findUnique({
+        where: { id: userProfileId },
+      });
+      
+      if (!profile) return '';
+      
+      // Limites e-Financeira (mensal)
+      const limitePF = 5000;  // R$ 5.000 para CPF
+      const limitePJ = 15000; // R$ 15.000 para CNPJ
+      const limite = profile.documentType === 'CNPJ' ? limitePJ : limitePF;
+      
+      // Calcular total do mês atual para esse perfil
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+      
+      const totalResult = await prisma.transaction.aggregate({
+        where: {
+          tenantId,
+          userProfileId,
+          transactionDate: {
+            gte: startOfMonth,
+            lte: endOfMonth,
+          },
+          status: { not: 'cancelled' },
+        },
+        _sum: {
+          amount: true,
+        },
+      });
+      
+      const totalMes = (totalResult._sum.amount || 0) + newAmount;
+      
+      // Verificar níveis de alerta
+      const percentual = (totalMes / limite) * 100;
+      const tipoDoc = profile.documentType === 'CNPJ' ? 'PJ' : 'PF';
+      const profileName = profile.name.split(' ')[0];
+      
+      if (totalMes >= limite) {
+        // Acima do limite - alerta crítico
+        return `\n⚠️ **ATENÇÃO e-Financeira!**\n` +
+          `O perfil **${profileName}** (${tipoDoc}) ultrapassou o limite mensal de R$ ${formatMoney(limite)}.\n` +
+          `📊 Total do mês: R$ ${formatMoney(totalMes)}\n` +
+          `_Lançamentos acima deste valor são reportados à Receita Federal._`;
+      } else if (percentual >= 80) {
+        // Próximo do limite - alerta
+        const faltando = limite - totalMes;
+        return `\n💡 **Alerta e-Financeira:**\n` +
+          `${profileName} (${tipoDoc}) está a R$ ${formatMoney(faltando)} do limite mensal de R$ ${formatMoney(limite)}.\n` +
+          `📊 Total do mês: R$ ${formatMoney(totalMes)} (${percentual.toFixed(0)}%)`;
+      }
+      
+      return '';
+    } catch (error) {
+      log.error('Erro ao verificar limite e-Financeira:', error);
+      return '';
+    }
   }
   
   // ==================== CONSULTAS ====================
