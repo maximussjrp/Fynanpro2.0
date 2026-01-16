@@ -140,6 +140,17 @@ export class AuthService {
           },
         });
 
+        // Cria perfil padrão para o usuário (para controle e-Financeira)
+        await tx.userProfile.create({
+          data: {
+            tenantId: tenant.id,
+            name: user.fullName,
+            documentType: 'PF',
+            isDefault: true,
+            color: '#1F4FD8', // Cor padrão azul
+          },
+        });
+
         // Cria categorias padrão com hierarquia completa (3 níveis)
         // IMPORTANTE: Passar tx para usar a mesma transação
         const { createDefaultCategories } = await import('../utils/default-categories');
