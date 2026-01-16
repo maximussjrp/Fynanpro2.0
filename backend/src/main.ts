@@ -21,6 +21,7 @@ import adminRoutes from './routes/admin';
 import planningRoutes from './routes/planning';
 import subscriptionRoutes from './routes/subscription';
 import energyGovernanceRoutes from './routes/energy-governance';
+import userProfileRoutes from './routes/user-profiles';
 import { createDefaultCategories } from './utils/default-categories';
 import { env } from './config/env';
 import { swaggerSpec } from './config/swagger';
@@ -262,6 +263,9 @@ apiRouter.use('/planning', planningRoutes);
 
 // Subscription routes (planos e pagamentos)
 apiRouter.use('/subscription', subscriptionRoutes);
+
+// User Profile routes (perfis de usuário - CPF/CNPJ)
+apiRouter.use('/profiles', userProfileRoutes);
 
 // Auth routes com rate limiting
 

@@ -19,6 +19,7 @@ import importRoutes from './routes/import';
 import adminRoutes from './routes/admin';
 import lgpdRoutes from './routes/lgpd.routes';
 import planningRoutes from './routes/planning';
+import userProfileRoutes from './routes/user-profiles';
 
 dotenv.config();
 
@@ -88,6 +89,7 @@ apiRouter.use('/import', importRoutes);
 apiRouter.use('/admin', adminRoutes);
 apiRouter.use('/lgpd', lgpdRoutes);
 apiRouter.use('/planning', planningRoutes);
+apiRouter.use('/profiles', userProfileRoutes);
 
 app.use('/api/v1', apiRouter);
 

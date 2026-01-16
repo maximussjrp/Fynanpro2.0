@@ -9,6 +9,7 @@ import api from '@/lib/api';
 import {
   Settings,
   User,
+  Users,
   Bell,
   Shield,
   Palette,
@@ -186,6 +187,7 @@ export default function SettingsPage() {
 
   const tabs = [
     { id: 'profile', label: 'Perfil', icon: User },
+    { id: 'fiscal-profiles', label: 'Perfis Fiscais', icon: Users, href: '/dashboard/settings/profiles' },
     { id: 'tenant', label: 'Empresa', icon: Building2 },
     { id: 'notifications', label: 'Notificações', icon: Bell },
     { id: 'security', label: 'Segurança', icon: Shield },
@@ -224,7 +226,13 @@ export default function SettingsPage() {
                 return (
                   <button
                     key={tab.id}
-                    onClick={() => setActiveTab(tab.id as any)}
+                    onClick={() => {
+                      if ('href' in tab && tab.href) {
+                        router.push(tab.href);
+                      } else {
+                        setActiveTab(tab.id as any);
+                      }
+                    }}
                     className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
                       activeTab === tab.id
                         ? 'bg-[#EFF6FF] text-[#1A44BF] border-l-4 border-[#1F4FD8]'

@@ -71,6 +71,7 @@ model Tenant {
   imports             Import[]
   savedFilters        SavedFilter[]
   auditLogs           AuditLog[]
+  userProfiles        UserProfile[]
 
   @@index([ownerId])
   @@index([subscriptionPlan])
@@ -193,6 +194,7 @@ model BankAccount {
   paymentMethods  PaymentMethod[]
   recurringBills  RecurringBill[]
   installments    Installment[]
+  owners          BankAccountOwner[]
 
   @@index([tenantId, isActive])
   @@index([tenantId, type])
@@ -229,6 +231,7 @@ model Transaction {
   id              String    @id @default(uuid())
   tenantId        String
   userId          String
+  userProfileId   String?   // Perfil associado (para monitoramento fiscal por CPF)
   type            String    // income, expense, transfer
   transactionType String    @default("single") // single, recurring, installment
   categoryId      String?
@@ -324,6 +327,7 @@ model Transaction {
   // Relações
   tenant          Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   user            User         @relation(fields: [userId], references: [id])
+  userProfile     UserProfile? @relation("TransactionProfile", fields: [userProfileId], references: [id])
   category        Category?    @relation(fields: [categoryId], references: [id])
   bankAccount     BankAccount? @relation(fields: [bankAccountId], references: [id])
   paymentMethod   PaymentMethod? @relation(fields: [paymentMethodId], references: [id])
@@ -334,6 +338,7 @@ model Transaction {
   @@index([categoryId])
   @@index([type, status])
   @@index([userId])
+  @@index([userProfileId])
   @@index([tenantId, type, transactionDate])
   @@index([tenantId, status, transactionDate])
   @@index([tenantId, categoryId, transactionDate])
@@ -728,3 +733,50 @@ model ChatMessage {
   @@index([sessionId, createdAt])
   @@index([sessionId])
 }
+
+// ==================== PERFIS DE USUÁRIO (Multi-CPF) ====================
+
+// UserProfile - Perfis dentro de um tenant (ex: marido, esposa)
+// Permite rastrear movimentação fiscal separada por CPF
+model UserProfile {
+  id              String    @id @default(uuid())
+  tenantId        String
+  name            String    // Nome do perfil (João, Maria)
+  document        String?   // CPF ou CNPJ
+  documentType    String    @default("PF") // PF, PJ
+  isDefault       Boolean   @default(false) // Perfil padrão (selecionado automaticamente)
+  avatar          String?   // Emoji ou URL do avatar
+  color           String?   // Cor do perfil para identificação visual
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  bankAccountOwners BankAccountOwner[]
+  transactions    Transaction[] @relation("TransactionProfile")
+
+  @@index([tenantId, isActive])
+  @@index([tenantId, document])
+  @@index([tenantId, isDefault])
+}
+
+// BankAccountOwner - Vínculo entre conta bancária e perfil/titular
+// Suporta contas individuais e conjuntas com percentual de propriedade
+model BankAccountOwner {
+  id                String    @id @default(uuid())
+  bankAccountId     String
+  userProfileId     String
+  ownershipPercent  Decimal   @default(100) @db.Decimal(5, 2) // 100% individual, 50% conjunta, etc
+  isPrimaryOwner    Boolean   @default(true) // Primeiro titular da conta
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  bankAccount       BankAccount   @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
+  userProfile       UserProfile   @relation(fields: [userProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([bankAccountId, userProfileId])
+  @@index([bankAccountId])
+  @@index([userProfileId])
+}
+

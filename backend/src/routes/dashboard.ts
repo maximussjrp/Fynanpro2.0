@@ -1057,7 +1057,7 @@ router.get('/today-summary', async (req: AuthRequest, res) => {
 router.get('/fiscal-movement', async (req: AuthRequest, res) => {
   try {
     const tenantId = req.tenantId!;
-    const { month, year, accountType } = req.query;
+    const { month, year, accountType, profileId } = req.query;
     
     // Determinar mês/ano (padrão: mês atual)
     const now = new Date();
@@ -1068,30 +1068,60 @@ router.get('/fiscal-movement', async (req: AuthRequest, res) => {
     const startOfMonth = new Date(targetYear, targetMonth - 1, 1);
     const endOfMonth = new Date(targetYear, targetMonth, 0, 23, 59, 59, 999);
     
+    // Se profileId informado, buscar o perfil para determinar tipo de documento
+    let isPJ = accountType === 'PJ';
+    let profileName: string | null = null;
+    let profileDocument: string | null = null;
+    
+    if (profileId) {
+      try {
+        const profile = await prisma.userProfile.findFirst({
+          where: { id: profileId as string, tenantId, deletedAt: null },
+          select: { name: true, document: true, documentType: true },
+        });
+        if (profile) {
+          isPJ = profile.documentType === 'PJ';
+          profileName = profile.name;
+          profileDocument = profile.document;
+        }
+      } catch (e) {
+        // UserProfile pode não existir ainda (migration não aplicada)
+        // Continuar sem filtro de perfil
+      }
+    }
+    
     // Limite de acordo com tipo de conta (PF ou PJ)
     // PF: R$ 5.000/mês | PJ: R$ 15.000/mês
-    const isPJ = accountType === 'PJ';
+    // isPJ já foi definido acima baseado no perfil ou accountType
     const monthlyLimit = isPJ ? 15000 : 5000;
     
-    // Cache key
-    const cacheKey = `fiscal:${tenantId}:${targetYear}-${targetMonth}:${isPJ ? 'PJ' : 'PF'}`;
+    // Cache key - incluir profileId se informado
+    const cacheKey = `fiscal:${tenantId}:${targetYear}-${targetMonth}:${isPJ ? 'PJ' : 'PF'}:${profileId || 'all'}`;
     const cached = await cacheService.get(CacheNamespace.DASHBOARD, cacheKey);
     if (cached) {
       return successResponse(res, cached);
     }
     
+    // Construir where clause
+    const whereClause: any = {
+      tenantId,
+      type: 'income',
+      status: 'completed',
+      transactionDate: {
+        gte: startOfMonth,
+        lte: endOfMonth,
+      },
+      deletedAt: null,
+    };
+    
+    // Adicionar filtro de perfil se informado
+    if (profileId) {
+      whereClause.userProfileId = profileId as string;
+    }
+    
     // Buscar TODAS as receitas (entradas) do mês - COMPLETED
     const incomeTransactions = await prisma.transaction.findMany({
-      where: {
-        tenantId,
-        type: 'income',
-        status: 'completed',
-        transactionDate: {
-          gte: startOfMonth,
-          lte: endOfMonth,
-        },
-        deletedAt: null,
-      },
+      where: whereClause,
       select: {
         id: true,
         amount: true,
@@ -1191,17 +1221,23 @@ router.get('/fiscal-movement', async (req: AuthRequest, res) => {
       const histStart = new Date(histDate.getFullYear(), histDate.getMonth(), 1);
       const histEnd = new Date(histDate.getFullYear(), histDate.getMonth() + 1, 0, 23, 59, 59, 999);
       
-      const histTransactions = await prisma.transaction.findMany({
-        where: {
-          tenantId,
-          type: 'income',
-          status: 'completed',
-          transactionDate: {
-            gte: histStart,
-            lte: histEnd,
-          },
-          deletedAt: null,
+      // Construir where clause para histórico (mesmo filtro de perfil)
+      const histWhereClause: any = {
+        tenantId,
+        type: 'income',
+        status: 'completed',
+        transactionDate: {
+          gte: histStart,
+          lte: histEnd,
         },
+        deletedAt: null,
+      };
+      if (profileId) {
+        histWhereClause.userProfileId = profileId as string;
+      }
+      
+      const histTransactions = await prisma.transaction.findMany({
+        where: histWhereClause,
         select: {
           amount: true,
         },
@@ -1225,6 +1261,13 @@ router.get('/fiscal-movement', async (req: AuthRequest, res) => {
         endDate: endOfMonth.toISOString(),
       },
       accountType: isPJ ? 'PJ' : 'PF',
+      // Informações do perfil selecionado (se aplicável)
+      profile: profileId ? {
+        id: profileId,
+        name: profileName,
+        document: profileDocument,
+        documentType: isPJ ? 'PJ' : 'PF',
+      } : null,
       limit: {
         monthly: monthlyLimit,
         description: isPJ 
