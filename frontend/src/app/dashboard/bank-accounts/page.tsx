@@ -5,9 +5,23 @@ import { toast } from 'sonner';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/api';
-import { Wallet, Plus, Edit2, Trash2, ArrowLeftRight, Building2, X, DollarSign, AlertTriangle } from 'lucide-react';
+import { Wallet, Plus, Edit2, Trash2, ArrowLeftRight, Building2, X, DollarSign, AlertTriangle, User } from 'lucide-react';
 
+// Interface para perfis de usuário (CPF/CNPJ)
+interface UserProfile {
+  id: string;
+  name: string;
+  document?: string;
+  documentType: 'PF' | 'PJ';
+  color?: string;
+}
 
+interface BankAccountOwner {
+  id: string;
+  userProfile: UserProfile;
+  ownershipPercent: number;
+  isPrimaryOwner: boolean;
+}
 
 interface BankAccount {
   id: string;
@@ -17,6 +31,7 @@ interface BankAccount {
   currentBalance: string;
   isActive: boolean;
   createdAt: string;
+  owners?: BankAccountOwner[];
 }
 
 interface AccountForm {
@@ -24,6 +39,7 @@ interface AccountForm {
   type: string;
   institution: string;
   initialBalance: string;
+  userProfileId: string;
 }
 
 interface TransferForm {
@@ -44,6 +60,7 @@ export default function BankAccountsPage() {
   const { accessToken } = useAuth();
   const [loading, setLoading] = useState(true);
   const [accounts, setAccounts] = useState<BankAccount[]>([]);
+  const [profiles, setProfiles] = useState<UserProfile[]>([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
@@ -56,6 +73,7 @@ export default function BankAccountsPage() {
     type: 'bank',
     institution: '',
     initialBalance: '0',
+    userProfileId: '',
   });
 
   const [transferForm, setTransferForm] = useState<TransferForm>({
@@ -78,11 +96,24 @@ export default function BankAccountsPage() {
       return;
     }
     loadAccounts();
+    loadProfiles();
   }, []);
+
+  // Carregar perfis de usuário (CPF/CNPJ) para vincular às contas
+  const loadProfiles = async () => {
+    try {
+      const response = await api.get('/profiles');
+      const data = response.data.data || response.data;
+      const profilesList = data.profiles || data || [];
+      setProfiles(Array.isArray(profilesList) ? profilesList : []);
+    } catch (error: any) {
+      console.error('Erro ao carregar perfis:', error.response?.data || error.message);
+    }
+  };
 
   const loadAccounts = async () => {
     try {
-      const response = await api.get('/bank-accounts?isActive=true');
+      const response = await api.get('/bank-accounts?isActive=true&includeOwners=true');
       const data = response.data.data || response.data;
       const accountsList = data.accounts || data || [];
       setAccounts(Array.isArray(accountsList) ? accountsList : []);
@@ -102,14 +133,33 @@ export default function BankAccountsPage() {
     setSubmitting(true);
 
     try {
-      await api.post('/bank-accounts', {
-        ...accountForm,
+      // Criar conta bancária
+      const response = await api.post('/bank-accounts', {
+        name: accountForm.name,
+        type: accountForm.type,
+        institution: accountForm.institution,
         initialBalance: parseFloat(accountForm.initialBalance) || 0,
       });
       
+      const newAccountId = response.data.data?.bankAccount?.id || response.data.data?.id;
+      
+      // Se selecionou um perfil, vincular à conta
+      if (accountForm.userProfileId && newAccountId) {
+        try {
+          await api.post(`/profiles/${accountForm.userProfileId}/bank-accounts`, {
+            bankAccountId: newAccountId,
+            ownershipPercent: 100,
+            isPrimaryOwner: true,
+          });
+        } catch (linkError: any) {
+          console.error('Erro ao vincular perfil:', linkError);
+          // Não falhar a criação por causa do vínculo
+        }
+      }
+      
       toast.success('Conta bancária criada com sucesso!');
       setShowCreateModal(false);
-      setAccountForm({ name: '', type: 'bank', institution: '', initialBalance: '0' });
+      setAccountForm({ name: '', type: 'bank', institution: '', initialBalance: '0', userProfileId: '' });
       
       // Aguardar um momento e recarregar as contas
       setTimeout(() => {
@@ -130,12 +180,35 @@ export default function BankAccountsPage() {
     setSubmitting(true);
 
     try {
-      await api.put(`/bank-accounts/${editingAccount.id}`, accountForm);
+      await api.put(`/bank-accounts/${editingAccount.id}`, {
+        name: accountForm.name,
+        type: accountForm.type,
+        institution: accountForm.institution,
+      });
+      
+      // Atualizar vínculo de perfil se necessário
+      const currentOwnerId = editingAccount.owners?.[0]?.userProfile?.id;
+      if (accountForm.userProfileId !== currentOwnerId) {
+        // Remover vínculo antigo se existir
+        if (currentOwnerId) {
+          try {
+            await api.delete(`/profiles/${currentOwnerId}/bank-accounts/${editingAccount.id}`);
+          } catch (e) { /* ignore */ }
+        }
+        // Criar novo vínculo se selecionou um perfil
+        if (accountForm.userProfileId) {
+          await api.post(`/profiles/${accountForm.userProfileId}/bank-accounts`, {
+            bankAccountId: editingAccount.id,
+            ownershipPercent: 100,
+            isPrimaryOwner: true,
+          });
+        }
+      }
       
       toast.success('Conta bancária atualizada!');
       setShowEditModal(false);
       setEditingAccount(null);
-      setAccountForm({ name: '', type: 'bank', institution: '', initialBalance: '0' });
+      setAccountForm({ name: '', type: 'bank', institution: '', initialBalance: '0', userProfileId: '' });
       loadAccounts();
     } catch (error: any) {
       console.error('Erro ao editar conta:', error.response?.data || error.message);
@@ -220,6 +293,7 @@ export default function BankAccountsPage() {
       type: account.type,
       institution: account.institution,
       initialBalance: account.currentBalance,
+      userProfileId: account.owners?.[0]?.userProfile?.id || '',
     });
     setShowEditModal(true);
   };
@@ -324,6 +398,23 @@ export default function BankAccountsPage() {
                 </p>
               </div>
 
+              {/* Exibir titular vinculado (CPF/CNPJ) */}
+              {account.owners && account.owners.length > 0 && (
+                <div className="mb-4 p-2 bg-blue-50 rounded-lg border border-blue-100">
+                  <div className="flex items-center gap-2 text-sm">
+                    <User className="w-4 h-4 text-blue-600" />
+                    <span className="text-blue-800 font-medium">
+                      {account.owners[0].userProfile.name}
+                    </span>
+                    {account.owners[0].userProfile.document && (
+                      <span className="text-blue-600 text-xs">
+                        ({account.owners[0].userProfile.documentType}: {account.owners[0].userProfile.document})
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
               <div className="flex gap-2 pt-4 border-t border-gray-200">
                 <button
                   onClick={() => openEditModal(account)}
@@ -423,6 +514,30 @@ export default function BankAccountsPage() {
                 />
               </div>
 
+              {/* Seleção de Perfil (CPF/CNPJ) para controle e-Financeira */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <User className="w-4 h-4 inline mr-1" />
+                  Titular (CPF/CNPJ)
+                </label>
+                <select
+                  value={accountForm.userProfileId}
+                  onChange={(e) => setAccountForm({ ...accountForm, userProfileId: e.target.value })}
+                  aria-label="Titular da conta"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
+                >
+                  <option value="">Selecione o titular...</option>
+                  {profiles.map((profile) => (
+                    <option key={profile.id} value={profile.id}>
+                      {profile.name} {profile.document ? `(${profile.documentType}: ${profile.document})` : ''}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Vincule a conta ao CPF/CNPJ para controle do e-Financeira
+                </p>
+              </div>
+
               <div className="flex gap-3 pt-4">
                 <button
                   type="button"
@@ -487,15 +602,39 @@ export default function BankAccountsPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Saldo Inicial *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Instituição</label>
                 <input
                   type="text"
                   value={accountForm.institution}
                   onChange={(e) => setAccountForm({ ...accountForm, institution: e.target.value })}
-                  aria-label="Saldo Inicial"
-                  placeholder="Digite o saldo inicial"
+                  aria-label="Instituição"
+                  placeholder="Ex: Nubank, Banco Inter..."
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
                 />
+              </div>
+
+              {/* Seleção de Perfil (CPF/CNPJ) para controle e-Financeira */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <User className="w-4 h-4 inline mr-1" />
+                  Titular (CPF/CNPJ)
+                </label>
+                <select
+                  value={accountForm.userProfileId}
+                  onChange={(e) => setAccountForm({ ...accountForm, userProfileId: e.target.value })}
+                  aria-label="Titular da conta"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
+                >
+                  <option value="">Nenhum titular vinculado</option>
+                  {profiles.map((profile) => (
+                    <option key={profile.id} value={profile.id}>
+                      {profile.name} {profile.document ? `(${profile.documentType}: ${profile.document})` : ''}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Vincule a conta ao CPF/CNPJ para controle do e-Financeira
+                </p>
               </div>
 
               <div className="flex gap-3 pt-4">

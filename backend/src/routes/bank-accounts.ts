@@ -44,6 +44,23 @@ router.get('/', async (req: AuthRequest, res: Response) => {
         order: true,
         createdAt: true,
         updatedAt: true,
+        // Incluir donos/titulares da conta (para controle e-Financeira)
+        owners: {
+          select: {
+            id: true,
+            ownershipPercent: true,
+            isPrimaryOwner: true,
+            userProfile: {
+              select: {
+                id: true,
+                name: true,
+                document: true,
+                documentType: true,
+                color: true,
+              },
+            },
+          },
+        },
         _count: {
           select: {
             transactions: {
