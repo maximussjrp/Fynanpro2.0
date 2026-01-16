@@ -63,7 +63,7 @@ export function useUserProfiles() {
       setIsLoading(true);
       setError(null);
 
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
       if (!token) {
         setIsLoading(false);
         return;
@@ -130,7 +130,7 @@ export function useUserProfiles() {
   // Criar novo perfil
   const createProfile = useCallback(async (data: Partial<UserProfile>) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/profiles`, {
         method: 'POST',
         headers: {
@@ -160,7 +160,7 @@ export function useUserProfiles() {
   // Atualizar perfil
   const updateProfile = useCallback(async (profileId: string, data: Partial<UserProfile>) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/profiles/${profileId}`, {
         method: 'PUT',
         headers: {
@@ -190,7 +190,7 @@ export function useUserProfiles() {
   // Deletar perfil
   const deleteProfile = useCallback(async (profileId: string) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/profiles/${profileId}`, {
         method: 'DELETE',
         headers: {
@@ -220,7 +220,7 @@ export function useUserProfiles() {
   // Definir perfil como padrão
   const setDefaultProfile = useCallback(async (profileId: string) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/profiles/${profileId}/set-default`, {
         method: 'POST',
         headers: {
@@ -249,7 +249,7 @@ export function useUserProfiles() {
     isPrimaryOwner: boolean = true
   ) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/profiles/${profileId}/bank-accounts`, {
         method: 'POST',
         headers: {
@@ -275,7 +275,7 @@ export function useUserProfiles() {
   // Desvincular conta bancária
   const unlinkBankAccount = useCallback(async (profileId: string, bankAccountId: string) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/profiles/${profileId}/bank-accounts/${bankAccountId}`, {
         method: 'DELETE',
         headers: {
