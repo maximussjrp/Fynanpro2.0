@@ -281,9 +281,9 @@ import { stripeService, PLANS as STRIPE_PLANS } from '../services/stripe.service
  *     summary: Listar planos Stripe disponíveis
  *     tags: [Subscription - Stripe]
  */
-router.get('/stripe/plans', (req: Request, res: Response) => {
+router.get('/stripe/plans', async (req: Request, res: Response) => {
   try {
-    const plans = stripeService.getPlans();
+    const plans = await stripeService.getPlans();
     res.json({
       success: true,
       data: { plans }
@@ -496,6 +496,31 @@ router.post('/stripe/webhook', async (req: Request, res: Response) => {
     res.status(400).json({
       success: false,
       error: { code: 'WEBHOOK_ERROR', message: error.message }
+    });
+  }
+});
+
+
+
+/**
+ * @swagger
+ * /subscription/stripe/founder-slots:
+ *   get:
+ *     summary: Verificar vagas disponiveis de Fundador
+ *     tags: [Subscription - Stripe]
+ */
+router.get('/stripe/founder-slots', async (req: Request, res: Response) => {
+  try {
+    const slots = await stripeService.hasFounderSlots();
+    res.json({
+      success: true,
+      data: slots
+    });
+  } catch (error: any) {
+    log.error('Erro ao verificar vagas de fundador', { error: error.message });
+    res.status(500).json({
+      success: false,
+      error: { code: 'SLOTS_ERROR', message: 'Erro ao verificar vagas' }
     });
   }
 });

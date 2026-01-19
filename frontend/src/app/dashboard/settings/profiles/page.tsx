@@ -19,6 +19,8 @@ import {
 } from 'lucide-react';
 import { useUserProfiles } from '@/hooks/useUserProfiles';
 import { cn } from '@/lib/utils';
+import AvatarUpload from '@/components/AvatarUpload';
+import { toast } from 'sonner';
 
 const AVATAR_COLORS = [
   { value: 'bg-blue-500', label: 'Azul', color: '#3b82f6' },
@@ -69,6 +71,8 @@ export default function ProfilesPage() {
     deleteProfile,
     setDefaultProfile,
     selectProfile,
+    uploadAvatar,
+    removeAvatar,
   } = useUserProfiles();
 
   const [showForm, setShowForm] = useState(false);
@@ -80,6 +84,7 @@ export default function ProfilesPage() {
     documentType: 'PF' as 'PF' | 'PJ',
     color: 'bg-blue-500',
     isDefault: false,
+    avatar: '' as string | null,
   });
   const [isSaving, setIsSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -91,6 +96,7 @@ export default function ProfilesPage() {
       documentType: 'PF',
       color: 'bg-blue-500',
       isDefault: false,
+      avatar: null,
     });
     setEditingProfile(null);
     setFormError(null);
@@ -103,6 +109,7 @@ export default function ProfilesPage() {
       documentType: profile.documentType,
       color: profile.color || 'bg-blue-500',
       isDefault: profile.isDefault,
+      avatar: profile.avatar || null,
     });
     setEditingProfile(profile);
     setShowForm(true);
@@ -114,10 +121,16 @@ export default function ProfilesPage() {
     setIsSaving(true);
 
     try {
+      // Preparar dados para envio (converter null para undefined)
+      const submitData = {
+        ...formData,
+        avatar: formData.avatar || undefined,
+      };
+      
       if (editingProfile) {
-        await updateProfile(editingProfile.id, formData);
+        await updateProfile(editingProfile.id, submitData);
       } else {
-        await createProfile(formData);
+        await createProfile(submitData);
       }
       setShowForm(false);
       resetForm();
@@ -525,6 +538,31 @@ export default function ProfilesPage() {
                       : 'Limite PIX monitorado: R$ 15.000/mês'}
                   </p>
                 </div>
+
+                {/* Foto de Perfil */}
+                {editingProfile && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Foto de Perfil
+                    </label>
+                    <AvatarUpload
+                      currentAvatar={formData.avatar}
+                      name={formData.name || 'Perfil'}
+                      color={AVATAR_COLORS.find(c => c.value === formData.color)?.color || '#3b82f6'}
+                      onUpload={async (base64) => {
+                        await uploadAvatar(editingProfile.id, base64);
+                        setFormData({ ...formData, avatar: base64 });
+                        toast.success('Foto atualizada!');
+                      }}
+                      onRemove={async () => {
+                        await removeAvatar(editingProfile.id);
+                        setFormData({ ...formData, avatar: null });
+                        toast.success('Foto removida!');
+                      }}
+                      size="lg"
+                    />
+                  </div>
+                )}
 
                 {/* Cor */}
                 <div>

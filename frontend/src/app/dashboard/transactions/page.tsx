@@ -7,7 +7,16 @@ import api from '@/lib/api';
 import { toast } from 'sonner';
 import EditTransactionModal from '@/components/NewTransactionModal';
 import CreateTransactionModal from '@/components/UnifiedTransactionModal';
-import { Receipt, Filter, Edit2, Trash2, Calendar, TrendingDown, TrendingUp, CheckCircle, XCircle, Clock, Plus, ArrowLeft, ChevronUp, ChevronDown, Check } from 'lucide-react';
+import { Receipt, Filter, Edit2, Trash2, Calendar, TrendingDown, TrendingUp, CheckCircle, XCircle, Clock, Plus, ArrowLeft, ChevronUp, ChevronDown, Check, User, Search } from 'lucide-react';
+
+interface UserProfile {
+  id: string;
+  name: string;
+  document?: string;
+  documentType: 'PF' | 'PJ';
+  avatar?: string;
+  color?: string;
+}
 
 interface Transaction {
   id: string;
@@ -25,6 +34,7 @@ interface Transaction {
   categoryId: string;
   bankAccountId: string;
   paymentMethodId?: string;
+  userProfileId?: string;
   isRecurringOccurrence?: boolean; // Flag para identificar ocorrências
   recurringBillId?: string;
   parentId?: string; // ID do template pai (para transações filhas de recorrentes/parcelamentos)
@@ -51,6 +61,7 @@ interface Transaction {
     name: string;
     type: string;
   };
+  userProfile?: UserProfile;
   createdAt: string;
 }
 
@@ -92,13 +103,22 @@ export default function TransactionsPage() {
     accounts: string[];
     paymentMethods: string[];
     statuses: string[];
+    profiles: string[];
   }>({
     categories: [],
     accounts: [],
     paymentMethods: [],
     statuses: [],
+    profiles: [],
   });
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const [filterSearchTerms, setFilterSearchTerms] = useState<{ [key: string]: string }>({});
+  const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'week' | 'month' | 'custom' | 'specific' | 'dayOfMonth' | 'year'>('all');
+  const [customDateRange, setCustomDateRange] = useState({ start: '', end: '' });
+  const [specificDate, setSpecificDate] = useState('');
+  const [dayOfMonth, setDayOfMonth] = useState('');
+  const [yearFilter, setYearFilter] = useState('');
+  const [descriptionSearch, setDescriptionSearch] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Fechar dropdown ao clicar fora
@@ -183,7 +203,7 @@ export default function TransactionsPage() {
 
       // Buscar transações realizadas + ocorrências pendentes
       const [transactionsRes, occurrencesRes, categoriesRes, accountsRes, paymentMethodsRes] = await Promise.all([
-        api.get('/transactions', { params }),
+        api.get('/transactions', { params: { ...params, limit: 1000 } }),
         api.get('/recurring-bills/occurrences', { params }),
         api.get('/categories?isActive=true'),
         api.get('/bank-accounts?isActive=true'),
@@ -399,7 +419,7 @@ export default function TransactionsPage() {
   };
 
   // Função para toggle de filtro checkbox
-  const toggleColumnFilter = (filterType: 'categories' | 'accounts' | 'paymentMethods' | 'statuses', value: string) => {
+  const toggleColumnFilter = (filterType: 'categories' | 'accounts' | 'paymentMethods' | 'statuses' | 'profiles', value: string) => {
     setColumnFilters(prev => {
       const current = prev[filterType];
       if (current.includes(value)) {
@@ -411,7 +431,7 @@ export default function TransactionsPage() {
   };
 
   // Selecionar/Deselecionar todos
-  const toggleAllColumnFilter = (filterType: 'categories' | 'accounts' | 'paymentMethods' | 'statuses', allValues: string[]) => {
+  const toggleAllColumnFilter = (filterType: 'categories' | 'accounts' | 'paymentMethods' | 'statuses' | 'profiles', allValues: string[]) => {
     setColumnFilters(prev => {
       if (prev[filterType].length === allValues.length) {
         return { ...prev, [filterType]: [] };
@@ -422,7 +442,7 @@ export default function TransactionsPage() {
   };
 
   // Limpar filtro de coluna
-  const clearColumnFilter = (filterType: 'categories' | 'accounts' | 'paymentMethods' | 'statuses') => {
+  const clearColumnFilter = (filterType: 'categories' | 'accounts' | 'paymentMethods' | 'statuses' | 'profiles') => {
     setColumnFilters(prev => ({ ...prev, [filterType]: [] }));
   };
 
@@ -435,6 +455,7 @@ export default function TransactionsPage() {
     { id: 'pending', name: 'Pendente' },
     { id: 'overdue', name: 'Atrasado' },
   ];
+  const uniqueProfiles = [...new Map(transactions.filter(t => t.userProfile).map(t => [t.userProfile?.id, t.userProfile])).values()].filter(Boolean);
 
   // Aplicar filtros e ordenação
   const getFilteredAndSortedTransactions = () => {
@@ -457,6 +478,65 @@ export default function TransactionsPage() {
         const statusId = t.status === 'completed' ? 'completed' : (isOverdue ? 'overdue' : 'pending');
         return columnFilters.statuses.includes(statusId);
       });
+    }
+
+    // Filtro de data
+    if (dateFilter !== 'all') {
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      
+      result = result.filter(t => {
+        const transDate = new Date(t.dueDate || t.transactionDate);
+        const transDateOnly = new Date(transDate.getFullYear(), transDate.getMonth(), transDate.getDate());
+        
+        switch (dateFilter) {
+          case 'today':
+            return transDateOnly.getTime() === today.getTime();
+          case 'week':
+            const weekAgo = new Date(today);
+            weekAgo.setDate(weekAgo.getDate() - 7);
+            return transDateOnly >= weekAgo && transDateOnly <= today;
+          case 'month':
+            const monthAgo = new Date(today);
+            monthAgo.setMonth(monthAgo.getMonth() - 1);
+            return transDateOnly >= monthAgo && transDateOnly <= today;
+          case 'custom':
+            if (customDateRange.start && customDateRange.end) {
+              const start = new Date(customDateRange.start);
+              const end = new Date(customDateRange.end);
+              end.setHours(23, 59, 59, 999);
+              return transDateOnly >= start && transDateOnly <= end;
+            }
+            return true;
+          case 'specific':
+            if (specificDate) {
+              const specDate = new Date(specificDate);
+              const specDateOnly = new Date(specDate.getFullYear(), specDate.getMonth(), specDate.getDate());
+              return transDateOnly.getTime() === specDateOnly.getTime();
+            }
+            return true;
+          case 'dayOfMonth':
+            if (dayOfMonth) {
+              const day = parseInt(dayOfMonth);
+              return transDate.getDate() === day;
+            }
+            return true;
+          case 'year':
+            if (yearFilter) {
+              const year = parseInt(yearFilter);
+              return transDate.getFullYear() === year;
+            }
+            return true;
+          default:
+            return true;
+        }
+      });
+    }
+    
+    // Filtro de descricao por palavra-chave
+    if (descriptionSearch.trim()) {
+      const searchLower = descriptionSearch.toLowerCase().trim();
+      result = result.filter(t => t.description.toLowerCase().includes(searchLower));
     }
 
     // Aplicar ordenação
@@ -516,14 +596,23 @@ export default function TransactionsPage() {
     filterType,
     filterOptions,
     selectedFilters,
+    isDateColumn,
+    isDescriptionColumn,
   }: { 
     label: string; 
     sortKey?: string;
-    filterType?: 'categories' | 'accounts' | 'paymentMethods' | 'statuses';
+    filterType?: 'categories' | 'accounts' | 'paymentMethods' | 'statuses' | 'profiles';
     filterOptions?: { id: string; name: string; icon?: string; color?: string }[];
     selectedFilters?: string[];
+    isDateColumn?: boolean;
+    isDescriptionColumn?: boolean;
   }) => {
-    const isOpen = openDropdown === (filterType || sortKey);
+    const isOpen = openDropdown === (filterType || sortKey || (isDateColumn ? 'date' : null) || (isDescriptionColumn ? 'description' : null));
+    const searchTerm = filterSearchTerms[filterType || ''] || '';
+    
+    const filteredOptions = filterOptions?.filter(opt => 
+      opt.name.toLowerCase().includes(searchTerm.toLowerCase())
+    ) || filterOptions;
     const hasActiveFilter = selectedFilters && selectedFilters.length > 0;
 
     return (
@@ -555,15 +644,124 @@ export default function TransactionsPage() {
               <Filter className="w-3 h-3" />
             </button>
           )}
+          
+          {/* Botao de filtro para coluna de data */}
+          {isDateColumn && (
+            <button
+              onClick={() => setOpenDropdown(isOpen ? null : 'date')}
+              className={`p-1 hover:bg-gray-200 rounded transition-colors ${dateFilter !== 'all' ? 'text-blue-600' : 'text-gray-400'}`}
+              title="Filtrar por data"
+            >
+              <Filter className="w-3 h-3" />
+            </button>
+          )}
+          
+          {/* Botao de busca para coluna de descricao */}
+          {isDescriptionColumn && (
+            <button
+              onClick={() => setOpenDropdown(isOpen ? null : 'description')}
+              className={`p-1 hover:bg-gray-200 rounded transition-colors ${descriptionSearch ? 'text-blue-600' : 'text-gray-400'}`}
+              title="Buscar por descricao"
+            >
+              <Search className="w-3 h-3" />
+            </button>
+          )}
         </div>
+
+        {/* Dropdown de busca por DESCRICAO */}
+        {isOpen && isDescriptionColumn && (
+          <div ref={dropdownRef} className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[280px]" onClick={(e) => e.stopPropagation()}>
+            <div className="p-3 space-y-2">
+              <div className="text-sm font-medium text-gray-700 mb-2">Buscar por palavra-chave</div>
+              <div className="relative">
+                <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Digite para buscar..."
+                  value={descriptionSearch}
+                  onClick={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onChange={(e) => setDescriptionSearch(e.target.value)}
+                  className="w-full pl-8 pr-3 py-2 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500"
+                  autoFocus
+                />
+              </div>
+              {descriptionSearch && (
+                <p className="text-xs text-gray-500">Mostrando transacoes com "{descriptionSearch}" na descricao</p>
+              )}
+              <div className="flex gap-2 pt-2 border-t border-gray-100">
+                <button onClick={() => { setDescriptionSearch(''); setOpenDropdown(null); }} className="flex-1 px-3 py-1 text-sm text-gray-600 border border-gray-300 rounded hover:bg-gray-100">Limpar</button>
+                <button onClick={() => setOpenDropdown(null)} className="flex-1 px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">OK</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Dropdown de filtro de DATA */}
+        {isOpen && isDateColumn && (
+          <div ref={dropdownRef} className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[250px]">
+            <div className="p-3 space-y-2">
+              <div className="text-sm font-medium text-gray-700 mb-2">Filtrar por periodo</div>
+              {[
+                { value: 'all', label: 'Todas as datas' },
+                { value: 'today', label: 'Hoje' },
+                { value: 'week', label: 'Esta semana' },
+                { value: 'month', label: 'Este mes' },
+                { value: 'custom', label: 'Periodo personalizado' },
+              ].map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => { setDateFilter(opt.value as any); if (opt.value !== 'custom') setOpenDropdown(null); }}
+                  className={`flex items-center gap-2 w-full px-3 py-2 text-sm rounded hover:bg-gray-100 ${dateFilter === opt.value ? 'bg-blue-50 text-blue-600' : ''}`}
+                >
+                  <div className={`w-4 h-4 border rounded-full flex items-center justify-center ${dateFilter === opt.value ? 'border-blue-600' : 'border-gray-300'}`}>
+                    {dateFilter === opt.value && <div className="w-2 h-2 bg-blue-600 rounded-full" />}
+                  </div>
+                  {opt.label}
+                </button>
+              ))}
+              {dateFilter === 'custom' && (
+                <div className="pt-2 border-t border-gray-100 space-y-2">
+                  <div>
+                    <label className="text-xs text-gray-500">Data inicial</label>
+                    <input type="date" value={customDateRange.start} onChange={(e) => setCustomDateRange(prev => ({ ...prev, start: e.target.value }))} className="w-full px-2 py-1 text-sm border border-gray-300 rounded" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500">Data final</label>
+                    <input type="date" value={customDateRange.end} onChange={(e) => setCustomDateRange(prev => ({ ...prev, end: e.target.value }))} className="w-full px-2 py-1 text-sm border border-gray-300 rounded" />
+                  </div>
+                  <button onClick={() => setOpenDropdown(null)} className="w-full px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">Aplicar</button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Dropdown de filtro */}
         {isOpen && filterType && filterOptions && (
           <div 
             ref={dropdownRef}
             className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[200px] max-h-[300px] overflow-auto"
+            onClick={(e) => e.stopPropagation()}
           >
             <div className="p-2 border-b border-gray-100">
+              <div className="relative mb-2" onClick={(e) => e.stopPropagation()}>
+                <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Buscar..."
+                  value={searchTerm}
+                  onClick={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onKeyDown={(e) => e.stopPropagation()}
+                  onChange={(e) => {
+                    e.stopPropagation();
+                    setFilterSearchTerms(prev => ({ ...prev, [filterType || '']: e.target.value }));
+                  }}
+                  className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500"
+                  autoFocus
+                />
+              </div>
               <button
                 onClick={() => toggleAllColumnFilter(filterType, filterOptions.map(o => o.id))}
                 className="flex items-center gap-2 w-full px-2 py-1 text-sm hover:bg-gray-100 rounded"
@@ -574,8 +772,8 @@ export default function TransactionsPage() {
                 <span>Selecionar Todos</span>
               </button>
             </div>
-            <div className="p-2">
-              {filterOptions.map(option => (
+            <div className="p-2 max-h-[200px] overflow-auto">
+              {(filteredOptions || []).map(option => (
                 <button
                   key={option.id}
                   onClick={() => toggleColumnFilter(filterType, option.id)}
@@ -822,13 +1020,13 @@ export default function TransactionsPage() {
         )}
 
         {/* Lista de Transações */}
-        <div className="bg-white rounded-lg shadow-md overflow-hidden min-h-[400px]">
-          <div className="overflow-x-auto">
+        <div className="bg-white rounded-lg shadow-md overflow-hidden flex flex-col" style={{ maxHeight: "calc(100vh - 280px)" }}>
+          <div className="overflow-auto flex-1">
             <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
+              <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
                 <tr>
-                  <ColumnHeader label="Data" sortKey="date" />
-                  <ColumnHeader label="Descrição" sortKey="description" />
+                  <ColumnHeader label="Data" sortKey="date" isDateColumn />
+                  <ColumnHeader label="Descrição" sortKey="description" isDescriptionColumn />
                   <ColumnHeader 
                     label="Categoria" 
                     sortKey="category" 
@@ -842,6 +1040,12 @@ export default function TransactionsPage() {
                     filterType="accounts"
                     filterOptions={uniqueAccounts.map(a => ({ id: a?.id || '', name: a?.name || '' }))}
                     selectedFilters={columnFilters.accounts}
+                  />
+                  <ColumnHeader
+                    label="Perfil"
+                    filterType="profiles"
+                    filterOptions={uniqueProfiles.map(p => ({ id: p?.id || '', name: p?.name || '' }))}
+                    selectedFilters={columnFilters.profiles}
                   />
                   <ColumnHeader 
                     label="Meio de Pagamento" 
@@ -917,6 +1121,29 @@ export default function TransactionsPage() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                         {transaction.bankAccount?.name || 'Não informada'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        {transaction.userProfile ? (
+                          <div className="flex items-center gap-2">
+                            {transaction.userProfile.avatar ? (
+                              <img 
+                                src={transaction.userProfile.avatar} 
+                                alt={transaction.userProfile.name}
+                                className="w-6 h-6 rounded-full object-cover"
+                              />
+                            ) : (
+                              <div 
+                                className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-medium"
+                                style={{ backgroundColor: transaction.userProfile.color || '#1F4FD8' }}
+                              >
+                                {transaction.userProfile.name.charAt(0).toUpperCase()}
+                              </div>
+                            )}
+                            <span className="text-gray-700">{transaction.userProfile.name}</span>
+                          </div>
+                        ) : (
+                          <span className="text-gray-400 italic">-</span>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                         {transaction.paymentMethod?.name || '-'}

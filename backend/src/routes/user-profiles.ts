@@ -492,4 +492,102 @@ router.get('/session/active', async (req: AuthRequest, res) => {
   }
 });
 
+// ══════════════════════════════════════════════════════════════════
+// UPLOAD DE AVATAR (base64 ou URL)
+// ══════════════════════════════════════════════════════════════════
+router.put('/:id/avatar', async (req: AuthRequest, res) => {
+  try {
+    const tenantId = req.tenantId!;
+    const { id } = req.params;
+    const { avatar } = req.body;
+
+    if (!avatar || typeof avatar !== 'string') {
+      return errorResponse(res, 'VALIDATION_ERROR', 'Avatar é obrigatório (base64 ou URL)', 400);
+    }
+
+    // Validar tamanho máximo (1MB para base64)
+    if (avatar.startsWith('data:') && avatar.length > 1024 * 1024) {
+      return errorResponse(res, 'VALIDATION_ERROR', 'Imagem muito grande. Máximo 1MB.', 400);
+    }
+
+    // Verificar se perfil existe e pertence ao tenant
+    const profile = await prisma.userProfile.findFirst({
+      where: {
+        id,
+        tenantId,
+        deletedAt: null,
+      },
+    });
+
+    if (!profile) {
+      return errorResponse(res, 'NOT_FOUND', 'Perfil não encontrado', 404);
+    }
+
+    // Atualizar avatar
+    const updatedProfile = await prisma.userProfile.update({
+      where: { id },
+      data: { avatar },
+      select: {
+        id: true,
+        name: true,
+        avatar: true,
+        color: true,
+      },
+    });
+
+    log.info('Profile avatar updated', { profileId: id, tenantId });
+
+    return successResponse(res, {
+      profile: updatedProfile,
+    }, 'Avatar atualizado com sucesso');
+  } catch (error: any) {
+    log.error('Upload avatar error', { error, tenantId: req.tenantId });
+    return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao atualizar avatar', 500);
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════
+// REMOVER AVATAR
+// ══════════════════════════════════════════════════════════════════
+router.delete('/:id/avatar', async (req: AuthRequest, res) => {
+  try {
+    const tenantId = req.tenantId!;
+    const { id } = req.params;
+
+    // Verificar se perfil existe e pertence ao tenant
+    const profile = await prisma.userProfile.findFirst({
+      where: {
+        id,
+        tenantId,
+        deletedAt: null,
+      },
+    });
+
+    if (!profile) {
+      return errorResponse(res, 'NOT_FOUND', 'Perfil não encontrado', 404);
+    }
+
+    // Remover avatar
+    const updatedProfile = await prisma.userProfile.update({
+      where: { id },
+      data: { avatar: null },
+      select: {
+        id: true,
+        name: true,
+        avatar: true,
+        color: true,
+      },
+    });
+
+    log.info('Profile avatar removed', { profileId: id, tenantId });
+
+    return successResponse(res, {
+      profile: updatedProfile,
+    }, 'Avatar removido com sucesso');
+  } catch (error: any) {
+    log.error('Remove avatar error', { error, tenantId: req.tenantId });
+    return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao remover avatar', 500);
+  }
+});
+
 export default router;

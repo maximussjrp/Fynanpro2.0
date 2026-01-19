@@ -1,5 +1,7 @@
 'use client';
 
+import { FounderCard } from '@/components/FounderUrgency';
+
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Check, Loader2, Crown, Zap, ExternalLink, AlertCircle, CheckCircle2, Sparkles, Calendar, Clock } from 'lucide-react';
@@ -214,6 +216,11 @@ export default function PlansPage() {
             <span>{message.text}</span>
           </div>
         )}
+
+        {/* Plano Fundador em Destaque */}
+        <div className="mb-8">
+          <FounderCard onSelect={() => handleSelectPlan("founder")} isProcessing={processing && selectedPlan === "founder"} />
+        </div>
 
         {/* Grid de Planos */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

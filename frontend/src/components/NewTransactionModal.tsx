@@ -34,7 +34,7 @@ interface Transaction {
   id: string;
   amount: string;
   description: string;
-  type?: 'income' | 'expense'; // Tipo direto da transação
+  type?: 'income' | 'expense' | 'transfer'; // Tipo direto da transação
   transactionDate: string;
   status: string;
   notes?: string;

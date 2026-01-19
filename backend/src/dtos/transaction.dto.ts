@@ -9,7 +9,7 @@ import { z } from 'zod';
 export const CreateTransactionSchema = z.object({
   type: z.enum(['income', 'expense', 'transfer']),
   amount: z.number().positive('Valor deve ser maior que zero'),
-  description: z.string().min(1, 'Descrição é obrigatória').max(500, 'Descrição muito longa'),
+  description: z.string().max(500, 'Descrição muito longa').optional(),
   transactionDate: z.string().min(1, 'Data é obrigatória').or(z.date()),
   categoryId: z.string().uuid('ID de categoria inválido').optional(),
   bankAccountId: z.string().uuid('ID de conta bancária inválido').optional(),

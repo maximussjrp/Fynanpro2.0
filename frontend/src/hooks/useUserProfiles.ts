@@ -296,6 +296,60 @@ export function useUserProfiles() {
     }
   }, [fetchProfiles]);
 
+  // Upload de avatar
+  const uploadAvatar = useCallback(async (profileId: string, avatarBase64: string) => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/profiles/${profileId}/avatar`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ avatar: avatarBase64 }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error?.message || 'Erro ao atualizar avatar');
+      }
+
+      const result = await response.json();
+      
+      // Recarregar lista de perfis
+      await fetchProfiles();
+      
+      return result.data?.profile;
+    } catch (err: any) {
+      console.error('Erro ao fazer upload de avatar:', err);
+      throw err;
+    }
+  }, [fetchProfiles]);
+
+  // Remover avatar
+  const removeAvatar = useCallback(async (profileId: string) => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/profiles/${profileId}/avatar`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error?.message || 'Erro ao remover avatar');
+      }
+
+      // Recarregar lista
+      await fetchProfiles();
+    } catch (err: any) {
+      console.error('Erro ao remover avatar:', err);
+      throw err;
+    }
+  }, [fetchProfiles]);
+
   // Carregar perfis ao montar
   useEffect(() => {
     fetchProfiles();
@@ -323,6 +377,8 @@ export function useUserProfiles() {
     setDefaultProfile,
     linkBankAccount,
     unlinkBankAccount,
+    uploadAvatar,
+    removeAvatar,
     fetchProfiles,
     goToProfileManagement,
     

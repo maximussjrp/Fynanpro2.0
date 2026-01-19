@@ -9,6 +9,8 @@ import CreateTransactionModal from '@/components/UnifiedTransactionModal';
 import DashboardLayoutWrapper from '@/components/DashboardLayoutWrapper';
 import QuickActions from '@/components/QuickActions';
 import OnboardingRecurringBills from '@/components/OnboardingRecurringBills';
+import ProfileSelectorModal from '@/components/ProfileSelectorModal';
+import { useUserProfiles } from '@/hooks/useUserProfiles';
 import { 
   DashboardMetricsSkeleton, 
   ChartSkeleton, 
@@ -98,8 +100,18 @@ export default function Dashboard() {
   const [energyCoverage, setEnergyCoverage] = useState<CoverageData | null>(null);
   const [showPaymentMethodModal, setShowPaymentMethodModal] = useState(false);
   const [showOnboardingRecurring, setShowOnboardingRecurring] = useState(false);
+  const [showProfileSelector, setShowProfileSelector] = useState(false);
   const [transactionType, setTransactionType] = useState<'income' | 'expense'>('expense');
   const [submitting, setSubmitting] = useState(false);
+  
+  // Hook de perfis
+  const { 
+    profiles, 
+    needsSelection, 
+    selectProfile, 
+    activeProfile,
+    isLoading: profilesLoading 
+  } = useUserProfiles();
   
   // Dados para formulário
   const [categories, setCategories] = useState<Category[]>([]);
@@ -140,6 +152,13 @@ export default function Dashboard() {
   // Estados temporários para o modal de período (evita filtrar enquanto navega no calendário)
   const [tempStartDate, setTempStartDate] = useState(startDate);
   const [tempEndDate, setTempEndDate] = useState(endDate);
+
+  // Mostrar modal de seleção de perfil quando necessário
+  useEffect(() => {
+    if (!profilesLoading && needsSelection && profiles.length > 1) {
+      setShowProfileSelector(true);
+    }
+  }, [profilesLoading, needsSelection, profiles.length]);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -1337,6 +1356,19 @@ export default function Dashboard() {
           // Recarregar dashboard para mostrar novas contas
           loadDashboardData();
         }}
+      />
+
+      {/* Modal de Seleção de Perfil (estilo Netflix) */}
+      <ProfileSelectorModal
+        isOpen={showProfileSelector}
+        onClose={() => setShowProfileSelector(false)}
+        onSelectProfile={(profileId) => {
+          selectProfile(profileId);
+          setShowProfileSelector(false);
+          toast.success('Perfil selecionado!');
+        }}
+        profiles={profiles}
+        isLoading={profilesLoading}
       />
       </div>
     </DashboardLayoutWrapper>

@@ -20,7 +20,11 @@ export const STRIPE_PRICE_IDS = {
   quarterly: process.env.STRIPE_PRICE_QUARTERLY || 'price_1SgSqVK3zpTQHcWwLnVsgLAN',
   semiannual: process.env.STRIPE_PRICE_SEMIANNUAL || 'price_1SgSrQK3zpTQHcWw5iHI65zs',
   yearly: process.env.STRIPE_PRICE_YEARLY || 'price_1SgSsXK3zpTQHcWwZifoNlOD',
+  founder: process.env.STRIPE_PRICE_FOUNDER || 'price_1SqMKZK3zpTQHcWwQTZWCLoI',
 };
+
+// Limite de fundadores
+export const FOUNDER_LIMIT = parseInt(process.env.FOUNDER_LIMIT || '26', 10);
 
 // Planos disponíveis
 export const PLANS = {
@@ -42,6 +46,37 @@ export const PLANS = {
       hasAdvancedReports: true,
       hasBudget: true,
       hasImport: true,
+    }
+  },
+  founder: {
+    id: 'founder',
+    name: 'Fundador Vitalício',
+    price: 197.00,
+    period: 'lifetime',
+    periodLabel: 'pagamento único',
+    stripePriceId: STRIPE_PRICE_IDS.founder,
+    popular: true,
+    limited: true,
+    maxUsers: FOUNDER_LIMIT,
+    features: [
+      '🏆 Membro Fundador',
+      '♾️ Acesso VITALÍCIO',
+      'Nunca mais pague mensalidade',
+      'Contas bancárias ilimitadas',
+      'Transações ilimitadas',
+      'Relatórios avançados',
+      'Suporte prioritário VIP',
+      'Todas as futuras atualizações',
+    ],
+    limits: {
+      users: 10,
+      bankAccounts: -1,
+      hasAdvancedReports: true,
+      hasBudget: true,
+      hasImport: true,
+      importLimit: -1,
+      hasTriggerControl: true,
+      hasAI: true,
     }
   },
   monthly: {
@@ -125,10 +160,8 @@ export const PLANS = {
     period: 'year',
     periodLabel: 'por ano',
     savings: 'Economize R$ 144',
-    popular: true,
     stripePriceId: STRIPE_PRICE_IDS.yearly,
     features: [
-      '🔥 Melhor custo-benefício',
       'Economize R$ 144 no ano',
       'Acesso completo ao sistema',
       'Contas bancárias ilimitadas',
@@ -151,10 +184,35 @@ export const PLANS = {
 
 export class StripeService {
   /**
+   * Contar quantos fundadores já existem
+   */
+  async countFounders(): Promise<number> {
+    const count = await prisma.tenant.count({
+      where: {
+        subscriptionPlan: 'founder',
+        subscriptionStatus: 'active',
+      }
+    });
+    return count;
+  }
+
+  /**
+   * Verificar se ainda há vagas de fundador
+   */
+  async hasFounderSlots(): Promise<{ available: boolean; remaining: number; total: number }> {
+    const count = await this.countFounders();
+    const remaining = FOUNDER_LIMIT - count;
+    return {
+      available: remaining > 0,
+      remaining: Math.max(0, remaining),
+      total: FOUNDER_LIMIT,
+    };
+  }
+
+  /**
    * Criar ou recuperar cliente Stripe
    */
   async getOrCreateCustomer(tenantId: string, email: string, name: string): Promise<string> {
-    // Buscar tenant para verificar se já tem customerId
     const tenant = await prisma.tenant.findUnique({
       where: { id: tenantId }
     });
@@ -163,7 +221,6 @@ export class StripeService {
       return tenant.stripeCustomerId;
     }
 
-    // Criar novo cliente no Stripe
     const customer = await stripe.customers.create({
       email,
       name,
@@ -172,7 +229,6 @@ export class StripeService {
       },
     });
 
-    // Salvar customerId no tenant
     await prisma.tenant.update({
       where: { id: tenantId },
       data: { stripeCustomerId: customer.id },
@@ -196,26 +252,32 @@ export class StripeService {
   }): Promise<{ sessionId: string; url: string }> {
     const { tenantId, userId, email, name, planId, successUrl, cancelUrl } = params;
 
-    // Validar plano
     const plan = PLANS[planId as keyof typeof PLANS];
     if (!plan || planId === 'trial') {
       throw new Error('Plano inválido');
     }
 
-    // Obter price ID do Stripe (cada plano já tem seu próprio priceId)
-    const priceId = (plan as any).stripePriceId;
+    // Verificar limite de fundadores
+    if (planId === 'founder') {
+      const slots = await this.hasFounderSlots();
+      if (!slots.available) {
+        throw new Error('Desculpe! Todas as vagas de Fundador foram preenchidas. O plano Fundador Vitalício está esgotado.');
+      }
+    }
 
+    const priceId = (plan as any).stripePriceId;
     if (!priceId) {
       throw new Error('Price ID não configurado para este plano');
     }
 
-    // Obter ou criar cliente
     const customerId = await this.getOrCreateCustomer(tenantId, email, name);
 
-    // Criar sessão de checkout
-    const session = await stripe.checkout.sessions.create({
+    // Para plano fundador (lifetime), usar mode 'payment' ao invés de 'subscription'
+    const isLifetime = planId === 'founder';
+
+    const sessionConfig: Stripe.Checkout.SessionCreateParams = {
       customer: customerId,
-      mode: 'subscription',
+      mode: isLifetime ? 'payment' : 'subscription',
       payment_method_types: ['card'],
       line_items: [
         {
@@ -230,22 +292,28 @@ export class StripeService {
         userId,
         planId,
       },
-      subscription_data: {
-        metadata: {
-          tenantId,
-          userId,
-          planId,
-        },
-      },
       allow_promotion_codes: true,
       billing_address_collection: 'required',
       customer_update: {
         address: 'auto',
         name: 'auto',
       },
-    });
+    };
 
-    log.info(`Checkout session criada: ${session.id} para tenant ${tenantId}`);
+    // Adicionar metadata na subscription apenas se não for lifetime
+    if (!isLifetime) {
+      sessionConfig.subscription_data = {
+        metadata: {
+          tenantId,
+          userId,
+          planId,
+        },
+      };
+    }
+
+    const session = await stripe.checkout.sessions.create(sessionConfig);
+
+    log.info(`Checkout session criada: ${session.id} para tenant ${tenantId}, plano ${planId}`);
 
     return {
       sessionId: session.id,
@@ -331,13 +399,34 @@ export class StripeService {
       return;
     }
 
-    const subscriptionId = session.subscription as string;
+    // Para plano Fundador (lifetime/payment), tratar diferente
+    if (planId === 'founder') {
+      // Verificar novamente se há vagas (proteção contra race condition)
+      const slots = await this.hasFounderSlots();
+      if (!slots.available) {
+        log.error(`Tentativa de ativar founder sem vagas disponíveis para tenant ${tenantId}`);
+        // TODO: Processar reembolso automático
+        return;
+      }
 
-    // Buscar subscription para obter price ID
+      await prisma.tenant.update({
+        where: { id: tenantId },
+        data: {
+          subscriptionPlan: 'founder',
+          subscriptionStatus: 'active',
+          stripeCurrentPeriodEnd: null, // Lifetime não tem data de expiração
+        },
+      });
+
+      log.info(`🏆 Fundador Vitalício ativado para tenant ${tenantId}! Vagas restantes: ${slots.remaining - 1}`);
+      return;
+    }
+
+    // Para assinaturas normais
+    const subscriptionId = session.subscription as string;
     const subscription = await stripe.subscriptions.retrieve(subscriptionId);
     const priceId = subscription.items.data[0]?.price?.id;
 
-    // Atualizar tenant com informações da assinatura
     await prisma.tenant.update({
       where: { id: tenantId },
       data: {
@@ -360,7 +449,6 @@ export class StripeService {
 
     if (!subscriptionId) return;
 
-    // Buscar subscription para obter metadata
     const subscription = await stripe.subscriptions.retrieve(subscriptionId);
     const tenantId = subscription.metadata?.tenantId;
 
@@ -369,7 +457,6 @@ export class StripeService {
       return;
     }
 
-    // Atualizar data de vencimento
     await prisma.tenant.update({
       where: { id: tenantId },
       data: {
@@ -402,7 +489,6 @@ export class StripeService {
     });
 
     log.warn(`Pagamento falhou para tenant ${tenantId}`);
-    // TODO: Enviar email de notificação
   }
 
   /**
@@ -413,7 +499,7 @@ export class StripeService {
 
     if (!tenantId) return;
 
-    const status = subscription.status === 'active' ? 'active' 
+    const status = subscription.status === 'active' ? 'active'
                   : subscription.status === 'past_due' ? 'past_due'
                   : subscription.status === 'canceled' ? 'canceled'
                   : subscription.status;
@@ -436,11 +522,18 @@ export class StripeService {
 
     if (!tenantId) return;
 
+    // Não rebaixar Fundadores - eles são vitalícios
+    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+    if (tenant?.subscriptionPlan === 'founder') {
+      log.info(`Ignorando cancelamento de subscription para Fundador ${tenantId}`);
+      return;
+    }
+
     await prisma.tenant.update({
       where: { id: tenantId },
       data: {
         subscriptionStatus: 'cancelled',
-        subscriptionPlan: 'trial', // Voltar para trial
+        subscriptionPlan: 'trial',
         stripeSubscriptionId: null,
         stripePriceId: null,
         stripeCurrentPeriodEnd: null,
@@ -448,19 +541,6 @@ export class StripeService {
     });
 
     log.info(`Assinatura cancelada para tenant ${tenantId}`);
-  }
-
-  /**
-   * Calcular data de término da assinatura
-   */
-  private calculateEndDate(billingPeriod: string): Date {
-    const now = new Date();
-    if (billingPeriod === 'yearly') {
-      now.setFullYear(now.getFullYear() + 1);
-    } else {
-      now.setMonth(now.getMonth() + 1);
-    }
-    return now;
   }
 
   /**
@@ -474,6 +554,8 @@ export class StripeService {
     trialEndsAt?: Date | null;
     daysRemaining?: number;
     isActive: boolean;
+    isFounder?: boolean;
+    isLifetime?: boolean;
   }> {
     const tenant = await prisma.tenant.findUnique({
       where: { id: tenantId }
@@ -485,33 +567,33 @@ export class StripeService {
 
     const plan = tenant.subscriptionPlan || 'trial';
     const status = tenant.subscriptionStatus || 'active';
-    
-    // Calculate trial days remaining
+    const isFounder = plan === 'founder';
+
     let trialEndsAt: Date | null = null;
     let daysRemaining: number | undefined = undefined;
-    
+
     if (plan === 'trial') {
-      // Trial period is 14 days from account creation
       const trialDays = 14;
       trialEndsAt = new Date(tenant.createdAt);
       trialEndsAt.setDate(trialEndsAt.getDate() + trialDays);
-      
+
       const now = new Date();
       const diffTime = trialEndsAt.getTime() - now.getTime();
       daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      
-      // Ensure at least 0 days
+
       if (daysRemaining < 0) daysRemaining = 0;
     }
 
     return {
       plan,
       status,
-      endDate: tenant.stripeCurrentPeriodEnd,
-      canUpgrade: plan === 'trial' || plan !== 'yearly',
+      endDate: isFounder ? null : tenant.stripeCurrentPeriodEnd,
+      canUpgrade: plan === 'trial',
       trialEndsAt,
       daysRemaining,
       isActive: status === 'active' && (plan !== 'trial' || (daysRemaining !== undefined && daysRemaining > 0)),
+      isFounder,
+      isLifetime: isFounder,
     };
   }
 
@@ -522,6 +604,11 @@ export class StripeService {
     const tenant = await prisma.tenant.findUnique({
       where: { id: tenantId }
     });
+
+    // Fundadores não podem cancelar - é vitalício!
+    if (tenant?.subscriptionPlan === 'founder') {
+      throw new Error('Plano Fundador Vitalício não pode ser cancelado. Você tem acesso para sempre!');
+    }
 
     if (!tenant?.stripeSubscriptionId) {
       throw new Error('Tenant não possui assinatura ativa');
@@ -535,7 +622,9 @@ export class StripeService {
   /**
    * Listar planos disponíveis
    */
-  getPlans() {
+  async getPlans() {
+    const founderSlots = await this.hasFounderSlots();
+    
     return Object.values(PLANS).map(plan => ({
       id: plan.id,
       name: plan.name,
@@ -547,6 +636,13 @@ export class StripeService {
       popular: (plan as any).popular,
       features: plan.features,
       limits: plan.limits,
+      // Infos específicas do plano fundador
+      ...(plan.id === 'founder' ? {
+        limited: true,
+        maxUsers: FOUNDER_LIMIT,
+        remainingSlots: founderSlots.remaining,
+        soldOut: !founderSlots.available,
+      } : {}),
     }));
   }
 }
