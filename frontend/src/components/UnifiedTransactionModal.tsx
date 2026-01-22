@@ -4,7 +4,8 @@ import { useState, useEffect, useRef } from 'react';
 import { 
   X, DollarSign, Calendar, Tag, CreditCard, Wallet,
   Repeat, CreditCard as CardIcon, ArrowRight, RefreshCw,
-  Plus, Edit2, Trash2, ChevronDown
+  Plus, Edit2, Trash2, ChevronDown, Sparkles, Loader2,
+  Lock, Unlock, Layers
 } from 'lucide-react';
 import api from '@/lib/api';
 import { toast } from 'sonner';
@@ -108,6 +109,17 @@ export default function UnifiedTransactionModal({
 
   const [categorySearch, setCategorySearch] = useState('');
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
+  const categoryDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Estados para sugestão de categoria com IA
+  const [aiSuggesting, setAiSuggesting] = useState(false);
+  const [aiSuggestion, setAiSuggestion] = useState<{
+    categoryId: string;
+    categoryName: string;
+    confidence: number;
+    reasoning: string;
+  } | null>(null);
+  const [aiAvailable, setAiAvailable] = useState<boolean | null>(null);
 
   // Estados para criação rápida de conta bancária e meio de pagamento
   const [showQuickBankAccount, setShowQuickBankAccount] = useState(false);
@@ -125,11 +137,33 @@ export default function UnifiedTransactionModal({
   const [paymentMethodActionLoading, setPaymentMethodActionLoading] = useState(false);
   const paymentMethodDropdownRef = useRef<HTMLDivElement>(null);
 
+  // Estados para modo Múltiplos Lançamentos
+  const [multipleModeEnabled, setMultipleModeEnabled] = useState(false);
+  const [lockedFields, setLockedFields] = useState<{
+    type: boolean;
+    transactionDate: boolean;
+    categoryId: boolean;
+    bankAccountId: boolean;
+    paymentMethodId: boolean;
+    status: boolean;
+  }>({
+    type: false,
+    transactionDate: false,
+    categoryId: false,
+    bankAccountId: false,
+    paymentMethodId: false,
+    status: false,
+  });
+  const [transactionCount, setTransactionCount] = useState(0);
+
   // Fechar dropdown ao clicar fora
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (paymentMethodDropdownRef.current && !paymentMethodDropdownRef.current.contains(event.target as Node)) {
         setShowPaymentMethodDropdown(false);
+      }
+      if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(event.target as Node)) {
+        setShowCategoryDropdown(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -139,7 +173,8 @@ export default function UnifiedTransactionModal({
   useEffect(() => {
     if (isOpen) {
       loadFormData();
-      resetForm();
+      resetForm(false);
+      setTransactionCount(0); // Reset contador ao abrir
       // Atualizar tab quando initialTab mudar
       if (initialTab) {
         setTransactionType(initialTab);
@@ -147,18 +182,63 @@ export default function UnifiedTransactionModal({
     }
   }, [isOpen, initialTab]);
 
-  const resetForm = () => {
-    setFormData({
-      type: defaultType,
-      amount: '',
-      description: '',
-      transactionDate: new Date().toISOString().split('T')[0],
-      categoryId: '',
-      bankAccountId: '',
-      paymentMethodId: '',
-      status: transactionType === 'single' ? 'completed' : 'pending',
-      notes: '',
-    });
+  // Função para alternar bloqueio de campo
+  const toggleFieldLock = (field: keyof typeof lockedFields) => {
+    setLockedFields(prev => ({ ...prev, [field]: !prev[field] }));
+  };
+
+  // Componente de botão de bloqueio
+  const LockButton = ({ field, className = '' }: { field: keyof typeof lockedFields; className?: string }) => {
+    if (!multipleModeEnabled) return null;
+    const isLocked = lockedFields[field];
+    return (
+      <button
+        type="button"
+        onClick={() => toggleFieldLock(field)}
+        className={`p-1.5 rounded-lg transition-all ${
+          isLocked 
+            ? 'bg-amber-100 text-amber-600 hover:bg-amber-200' 
+            : 'bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600'
+        } ${className}`}
+        title={isLocked ? 'Desbloquear campo (será limpo após salvar)' : 'Bloquear campo (será mantido após salvar)'}
+      >
+        {isLocked ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
+      </button>
+    );
+  };
+
+  const resetForm = (preserveLocked: boolean = false) => {
+    if (preserveLocked && multipleModeEnabled) {
+      // Preservar campos bloqueados
+      setFormData(prev => ({
+        type: lockedFields.type ? prev.type : defaultType,
+        amount: '',
+        description: '',
+        transactionDate: lockedFields.transactionDate ? prev.transactionDate : new Date().toISOString().split('T')[0],
+        categoryId: lockedFields.categoryId ? prev.categoryId : '',
+        bankAccountId: lockedFields.bankAccountId ? prev.bankAccountId : '',
+        paymentMethodId: lockedFields.paymentMethodId ? prev.paymentMethodId : '',
+        status: lockedFields.status ? prev.status : (transactionType === 'single' ? 'completed' : 'pending'),
+        notes: '',
+      }));
+      // Preservar busca de categoria se bloqueada
+      if (!lockedFields.categoryId) {
+        setCategorySearch('');
+      }
+    } else {
+      setFormData({
+        type: defaultType,
+        amount: '',
+        description: '',
+        transactionDate: new Date().toISOString().split('T')[0],
+        categoryId: '',
+        bankAccountId: '',
+        paymentMethodId: '',
+        status: transactionType === 'single' ? 'completed' : 'pending',
+        notes: '',
+      });
+      setCategorySearch('');
+    }
     setRecurringData({
       frequency: 'monthly',
       frequencyInterval: 1,
@@ -171,8 +251,9 @@ export default function UnifiedTransactionModal({
       hasDownPayment: false,
       downPaymentAmount: '',
     });
-    setCategorySearch('');
-    setTransactionType(defaultTransactionType);
+    if (!preserveLocked) {
+      setTransactionType(defaultTransactionType);
+    }
   };
 
   const loadFormData = async () => {
@@ -186,9 +267,61 @@ export default function UnifiedTransactionModal({
       setCategories(categoriesRes.data.data.categories || []);
       setBankAccounts(accountsRes.data.data.accounts || []);
       setPaymentMethods(paymentsRes.data.data.methods || []);
+
+      // Verificar se IA está disponível
+      try {
+        const aiStatusRes = await api.get('/transactions/ai-status');
+        setAiAvailable(aiStatusRes.data.data?.available || false);
+      } catch {
+        setAiAvailable(false);
+      }
     } catch (error: any) {
       console.error('Erro ao carregar dados do formulário:', error);
       toast.error('Erro ao carregar dados do formulário');
+    }
+  };
+
+  // Função para sugerir categoria com IA
+  const handleAiSuggestCategory = async () => {
+    if (!formData.description || formData.description.trim().length < 3) {
+      toast.error('Digite uma descrição para sugerir categoria');
+      return;
+    }
+
+    setAiSuggesting(true);
+    setAiSuggestion(null);
+
+    try {
+      const response = await api.post('/transactions/suggest-category', {
+        description: formData.description,
+        amount: formData.amount ? parseFloat(formData.amount.replace(',', '.')) : 0,
+        type: formData.type,
+      });
+
+      const suggestion = response.data.data?.suggestion;
+      if (suggestion) {
+        setAiSuggestion(suggestion);
+        // Auto-aplicar se confiança alta
+        if (suggestion.confidence >= 0.7) {
+          setFormData(prev => ({ ...prev, categoryId: suggestion.categoryId }));
+          setCategorySearch(suggestion.categoryName);
+          toast.success(`Categoria sugerida: ${suggestion.categoryName}`);
+        } else {
+          toast.info(`Sugestão: ${suggestion.categoryName} (${Math.round(suggestion.confidence * 100)}% confiança)`);
+        }
+      } else {
+        toast.warning('Não foi possível sugerir uma categoria');
+      }
+    } catch (error: any) {
+      console.error('Erro ao sugerir categoria:', error);
+      if (error.response?.status === 503) {
+        toast.error('Serviço de IA não configurado');
+        setAiAvailable(false);
+      } else {
+        toast.error('Erro ao sugerir categoria');
+      }
+    } finally {
+      setAiSuggesting(false);
     }
   };
 
@@ -338,7 +471,7 @@ export default function UnifiedTransactionModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.amount || !formData.description || !formData.categoryId || !formData.bankAccountId) {
+    if (!formData.amount || !formData.categoryId || !formData.bankAccountId) {
       toast.error('Preencha todos os campos obrigatórios');
       return;
     }
@@ -399,6 +532,9 @@ export default function UnifiedTransactionModal({
       console.log('📤 Enviando payload:', { endpoint, payload });
       const response = await api.post(endpoint, payload);
 
+      // Incrementar contador de transações
+      setTransactionCount(prev => prev + 1);
+
       if (transactionType === 'recurring') {
         toast.success('Transação recorrente criada! Continue lançando...');
       } else if (transactionType === 'installment') {
@@ -408,7 +544,7 @@ export default function UnifiedTransactionModal({
       }
 
       onSuccess();
-      resetForm();
+      resetForm(true); // Preservar campos bloqueados
       // Modal permanece aberto para continuar lançando
     } catch (error: any) {
       console.error('Erro ao salvar transação:', error);
@@ -496,21 +632,74 @@ export default function UnifiedTransactionModal({
       <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[85vh] sm:max-h-[90vh] overflow-hidden flex flex-col animate-in slide-in-from-bottom-4 duration-300">
         {/* Header */}
         <div className="bg-gradient-to-r from-[#1F4FD8] to-[#1A44BF] px-6 py-5 flex items-center justify-between">
-          <h2 className="text-2xl font-bold text-white flex items-center gap-3 font-poppins">
-            <div className="bg-white/20 p-2 rounded-lg backdrop-blur-sm">
-              <DollarSign className="w-6 h-6" />
-            </div>
-            Nova Transação
-          </h2>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-white/20 rounded-lg transition-all text-white"
-            aria-label="Fechar modal"
-            title="Fechar"
-          >
-            <X className="w-6 h-6" />
-          </button>
+          <div className="flex items-center gap-4">
+            <h2 className="text-2xl font-bold text-white flex items-center gap-3 font-poppins">
+              <div className="bg-white/20 p-2 rounded-lg backdrop-blur-sm">
+                <DollarSign className="w-6 h-6" />
+              </div>
+              Nova Transação
+            </h2>
+            {transactionCount > 0 && (
+              <span className="bg-white/20 backdrop-blur-sm px-3 py-1 rounded-full text-sm font-medium text-white">
+                {transactionCount} criada{transactionCount > 1 ? 's' : ''}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            {/* Toggle Múltiplos Lançamentos */}
+            <button
+              type="button"
+              onClick={() => {
+                setMultipleModeEnabled(!multipleModeEnabled);
+                if (multipleModeEnabled) {
+                  // Ao desativar, limpar todos os bloqueios
+                  setLockedFields({
+                    type: false,
+                    transactionDate: false,
+                    categoryId: false,
+                    bankAccountId: false,
+                    paymentMethodId: false,
+                    status: false,
+                  });
+                }
+              }}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all text-sm font-medium ${
+                multipleModeEnabled
+                  ? 'bg-amber-500 text-white shadow-lg'
+                  : 'bg-white/20 text-white hover:bg-white/30'
+              }`}
+              title={multipleModeEnabled 
+                ? 'Modo Múltiplos Lançamentos ATIVO - Clique nos cadeados para bloquear campos' 
+                : 'Ativar Modo Múltiplos Lançamentos'}
+            >
+              <Layers className="w-4 h-4" />
+              <span className="hidden sm:inline">Múltiplos</span>
+            </button>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-white/20 rounded-lg transition-all text-white"
+              aria-label="Fechar modal"
+              title="Fechar"
+            >
+              <X className="w-6 h-6" />
+            </button>
+          </div>
         </div>
+
+        {/* Banner de Múltiplos Lançamentos */}
+        {multipleModeEnabled && (
+          <div className="bg-amber-50 border-b border-amber-200 px-6 py-3">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 text-amber-700">
+                <Layers className="w-5 h-5" />
+                <span className="font-semibold text-sm">Modo Múltiplos Lançamentos</span>
+              </div>
+              <span className="text-amber-600 text-sm">
+                Clique nos <Lock className="w-3.5 h-3.5 inline mx-0.5" /> ao lado dos campos para mantê-los nas próximas transações
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* Tabs de Tipo */}
         <div className="border-b border-gray-200 bg-[#F9FAFB] text-gray-900 px-6">
@@ -566,29 +755,34 @@ export default function UnifiedTransactionModal({
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-5 overflow-y-auto flex-1 font-inter">
           {/* Toggle Receita/Despesa */}
-          <div className="flex bg-gray-100 p-1 rounded-xl">
-            <button
-              type="button"
-              onClick={() => setFormData({ ...formData, type: 'income', categoryId: '' })}
-              className={`flex-1 py-2.5 px-4 rounded-lg font-semibold transition-all ${
-                formData.type === 'income'
-                  ? 'bg-[#2ECC9A] text-white shadow-md'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              💰 Receita
-            </button>
-            <button
-              type="button"
-              onClick={() => setFormData({ ...formData, type: 'expense', categoryId: '' })}
-              className={`flex-1 py-2.5 px-4 rounded-lg font-semibold transition-all ${
-                formData.type === 'expense'
-                  ? 'bg-[#EF4444] text-white shadow-md'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              💸 Despesa
-            </button>
+          <div className="flex items-center gap-2">
+            <div className="flex bg-gray-100 p-1 rounded-xl flex-1">
+              <button
+                type="button"
+                onClick={() => !lockedFields.type && setFormData({ ...formData, type: 'income', categoryId: '' })}
+                className={`flex-1 py-2.5 px-4 rounded-lg font-semibold transition-all ${
+                  formData.type === 'income'
+                    ? 'bg-[#2ECC9A] text-white shadow-md'
+                    : 'text-gray-500 hover:text-gray-700'
+                } ${lockedFields.type ? 'opacity-75 cursor-not-allowed' : ''}`}
+                disabled={lockedFields.type}
+              >
+                💰 Receita
+              </button>
+              <button
+                type="button"
+                onClick={() => !lockedFields.type && setFormData({ ...formData, type: 'expense', categoryId: '' })}
+                className={`flex-1 py-2.5 px-4 rounded-lg font-semibold transition-all ${
+                  formData.type === 'expense'
+                    ? 'bg-[#EF4444] text-white shadow-md'
+                    : 'text-gray-500 hover:text-gray-700'
+                } ${lockedFields.type ? 'opacity-75 cursor-not-allowed' : ''}`}
+                disabled={lockedFields.type}
+              >
+                💸 Despesa
+              </button>
+            </div>
+            <LockButton field="type" />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -615,9 +809,12 @@ export default function UnifiedTransactionModal({
 
             {/* Data */}
             <div>
-              <label className="block text-sm font-semibold text-[#1A1A1A] mb-2">
-                {transactionType === 'recurring' ? 'Data Início *' : transactionType === 'installment' ? 'Primeira Parcela *' : 'Data *'}
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-semibold text-[#1A1A1A]">
+                  {transactionType === 'recurring' ? 'Data Início *' : transactionType === 'installment' ? 'Primeira Parcela *' : 'Data *'}
+                </label>
+                <LockButton field="transactionDate" />
+              </div>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                   <Calendar className="w-5 h-5 text-[#1F4FD8]" />
@@ -625,12 +822,15 @@ export default function UnifiedTransactionModal({
                 <input
                   type="date"
                   value={formData.transactionDate}
-                  onChange={(e) => setFormData({ ...formData, transactionDate: e.target.value })}
-                  className="w-full pl-12 pr-4 py-3 min-h-[44px] border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] transition-all bg-[#F9FAFB] text-gray-900 appearance-none"
+                  onChange={(e) => !lockedFields.transactionDate && setFormData({ ...formData, transactionDate: e.target.value })}
+                  className={`w-full pl-12 pr-4 py-3 min-h-[44px] border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] transition-all bg-[#F9FAFB] text-gray-900 appearance-none ${
+                    lockedFields.transactionDate ? 'bg-amber-50 border-amber-200' : ''
+                  }`}
                   style={{ colorScheme: 'light' }}
                   required
                   title="Data da transação"
                   aria-label="Data da transação"
+                  disabled={lockedFields.transactionDate}
                 />
               </div>
             </div>
@@ -638,17 +838,75 @@ export default function UnifiedTransactionModal({
 
           {/* Descrição */}
           <div>
-            <label className="block text-sm font-semibold text-[#1A1A1A] mb-2">
-              Descrição *
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-semibold text-[#1A1A1A]">
+                Descrição
+              </label>
+              {aiAvailable && (
+                <button
+                  type="button"
+                  onClick={handleAiSuggestCategory}
+                  disabled={aiSuggesting || !formData.description || formData.description.length < 3}
+                  className="flex items-center gap-1.5 text-xs font-medium text-purple-600 hover:text-purple-800 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors"
+                  title="Sugerir categoria com IA"
+                >
+                  {aiSuggesting ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-3.5 h-3.5" />
+                  )}
+                  {aiSuggesting ? 'Analisando...' : 'Sugerir categoria'}
+                </button>
+              )}
+            </div>
             <input
               type="text"
               value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              onChange={(e) => {
+                setFormData({ ...formData, description: e.target.value });
+                setAiSuggestion(null); // Limpar sugestão ao mudar descrição
+              }}
               className="w-full px-4 py-3 min-h-[44px] border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] transition-all bg-[#F9FAFB] text-gray-900 placeholder:text-gray-400"
-              placeholder="Ex: Salário, Aluguel, Compras..."
-              required
+              placeholder="Ex: Salário, Aluguel, Compras... (opcional)"
             />
+            {/* Mostrar sugestão da IA */}
+            {aiSuggestion && (
+              <div className="mt-2 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                <div className="flex items-start gap-2">
+                  <Sparkles className="w-4 h-4 text-purple-600 mt-0.5 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-medium text-purple-800">
+                        {aiSuggestion.categoryName}
+                      </span>
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${
+                        aiSuggestion.confidence >= 0.8 
+                          ? 'bg-green-100 text-green-700' 
+                          : aiSuggestion.confidence >= 0.5 
+                            ? 'bg-yellow-100 text-yellow-700'
+                            : 'bg-red-100 text-red-700'
+                      }`}>
+                        {Math.round(aiSuggestion.confidence * 100)}% confiança
+                      </span>
+                    </div>
+                    <p className="text-xs text-purple-600 mt-1">{aiSuggestion.reasoning}</p>
+                    {formData.categoryId !== aiSuggestion.categoryId && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormData(prev => ({ ...prev, categoryId: aiSuggestion.categoryId }));
+                          setCategorySearch(aiSuggestion.categoryName);
+                          toast.success('Categoria aplicada!');
+                        }}
+                        className="mt-2 text-xs font-medium text-purple-700 hover:text-purple-900 underline"
+                      >
+                        Aplicar esta categoria
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* === CAMPOS ESPECÍFICOS RECORRENTE === */}
@@ -815,10 +1073,13 @@ export default function UnifiedTransactionModal({
 
           {/* Categoria */}
           <div>
-            <label className="block text-sm font-semibold text-[#1A1A1A] mb-2">
-              Categoria *
-            </label>
-            <div className="relative">
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-semibold text-[#1A1A1A]">
+                Categoria *
+              </label>
+              <LockButton field="categoryId" />
+            </div>
+            <div className="relative" ref={categoryDropdownRef}>
               <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                 <Tag className="w-5 h-5 text-[#1F4FD8]" />
               </div>
@@ -826,13 +1087,18 @@ export default function UnifiedTransactionModal({
                 type="text"
                 value={categorySearch}
                 onChange={(e) => {
-                  setCategorySearch(e.target.value);
-                  setShowCategoryDropdown(true);
+                  if (!lockedFields.categoryId) {
+                    setCategorySearch(e.target.value);
+                    setShowCategoryDropdown(true);
+                  }
                 }}
-                onFocus={() => setShowCategoryDropdown(true)}
-                className="w-full pl-12 pr-4 py-3 min-h-[44px] border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] transition-all bg-[#F9FAFB] text-gray-900 placeholder:text-gray-400"
+                onFocus={() => !lockedFields.categoryId && setShowCategoryDropdown(true)}
+                className={`w-full pl-12 pr-4 py-3 min-h-[44px] border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] transition-all bg-[#F9FAFB] text-gray-900 placeholder:text-gray-400 ${
+                  lockedFields.categoryId ? 'bg-amber-50 border-amber-200 cursor-not-allowed' : ''
+                }`}
                 placeholder="Buscar categoria..."
                 required
+                disabled={lockedFields.categoryId}
               />
               
               {showCategoryDropdown && filteredCategories.length > 0 && (
@@ -869,9 +1135,12 @@ export default function UnifiedTransactionModal({
             {/* Conta Bancária */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-semibold text-[#1A1A1A]">
-                  Conta Bancária *
-                </label>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-semibold text-[#1A1A1A]">
+                    Conta Bancária *
+                  </label>
+                  <LockButton field="bankAccountId" />
+                </div>
                 <button
                   type="button"
                   onClick={() => setShowQuickBankAccount(!showQuickBankAccount)}
@@ -934,10 +1203,13 @@ export default function UnifiedTransactionModal({
                 </div>
                 <select
                   value={formData.bankAccountId}
-                  onChange={(e) => setFormData({ ...formData, bankAccountId: e.target.value })}
-                  className="w-full pl-12 pr-4 py-3 min-h-[44px] border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] transition-all bg-[#F9FAFB] text-gray-900 appearance-none cursor-pointer"
+                  onChange={(e) => !lockedFields.bankAccountId && setFormData({ ...formData, bankAccountId: e.target.value })}
+                  className={`w-full pl-12 pr-4 py-3 min-h-[44px] border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] transition-all bg-[#F9FAFB] text-gray-900 appearance-none cursor-pointer ${
+                    lockedFields.bankAccountId ? 'bg-amber-50 border-amber-200 cursor-not-allowed' : ''
+                  }`}
                   required
                   title="Selecione a conta bancária"
+                  disabled={lockedFields.bankAccountId}
                 >
                   <option value="">Selecione uma conta</option>
                   {bankAccounts.map((account) => (
@@ -952,9 +1224,12 @@ export default function UnifiedTransactionModal({
             {/* Meio de Pagamento */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-semibold text-[#1A1A1A]">
-                  Meio de Pagamento <span className="text-gray-400 font-normal">(opcional)</span>
-                </label>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-semibold text-[#1A1A1A]">
+                    Meio de Pagamento <span className="text-gray-400 font-normal">(opcional)</span>
+                  </label>
+                  <LockButton field="paymentMethodId" />
+                </div>
                 <button
                   type="button"
                   onClick={() => setShowQuickPaymentMethod(!showQuickPaymentMethod)}
@@ -1000,10 +1275,13 @@ export default function UnifiedTransactionModal({
                 {/* Botão para abrir dropdown customizado */}
                 <button
                   type="button"
-                  onClick={() => setShowPaymentMethodDropdown(!showPaymentMethodDropdown)}
-                  className="w-full pl-12 pr-10 py-3 min-h-[44px] border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] transition-all bg-[#F9FAFB] text-gray-900 text-left cursor-pointer"
+                  onClick={() => !lockedFields.paymentMethodId && setShowPaymentMethodDropdown(!showPaymentMethodDropdown)}
+                  className={`w-full pl-12 pr-10 py-3 min-h-[44px] border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] transition-all bg-[#F9FAFB] text-gray-900 text-left cursor-pointer ${
+                    lockedFields.paymentMethodId ? 'bg-amber-50 border-amber-200 cursor-not-allowed' : ''
+                  }`}
                   aria-label="Meio de Pagamento"
                   aria-expanded={showPaymentMethodDropdown}
+                  disabled={lockedFields.paymentMethodId}
                 >
                   {formData.paymentMethodId 
                     ? paymentMethods.find(m => m.id === formData.paymentMethodId)?.name || 'Selecione (opcional)'
@@ -1075,35 +1353,40 @@ export default function UnifiedTransactionModal({
           {/* Status - apenas para transação única */}
           {transactionType === 'single' && (
             <div>
-              <label className="block text-sm font-semibold text-[#1A1A1A] mb-2">
-                Status
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-semibold text-[#1A1A1A]">
+                  Status
+                </label>
+                <LockButton field="status" />
+              </div>
               <div className="flex gap-3">
-                <label className={`flex-1 flex items-center gap-3 p-4 border-2 rounded-xl cursor-pointer transition-all hover:shadow-md ${
+                <label className={`flex-1 flex items-center gap-3 p-4 border-2 rounded-xl transition-all hover:shadow-md ${
                   formData.status === 'completed'
                     ? 'border-[#2ECC9A] bg-[#DCFCE7]'
                     : 'border-gray-200 bg-white hover:border-gray-300'
-                }`}>
+                } ${lockedFields.status ? 'cursor-not-allowed opacity-75' : 'cursor-pointer'}`}>
                   <input
                     type="radio"
                     value="completed"
                     checked={formData.status === 'completed'}
-                    onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                    onChange={(e) => !lockedFields.status && setFormData({ ...formData, status: e.target.value })}
                     className="w-5 h-5 text-[#2ECC9A] focus:ring-[#2ECC9A]"
+                    disabled={lockedFields.status}
                   />
                   <span className={`font-semibold ${formData.status === 'completed' ? 'text-[#2ECC9A]' : 'text-gray-700'}`}>Pago</span>
                 </label>
-                <label className={`flex-1 flex items-center gap-3 p-4 border-2 rounded-xl cursor-pointer transition-all hover:shadow-md ${
+                <label className={`flex-1 flex items-center gap-3 p-4 border-2 rounded-xl transition-all hover:shadow-md ${
                   formData.status === 'pending'
                     ? 'border-[#F59E0B] bg-[#FEF3C7]'
                     : 'border-gray-200 bg-white hover:border-gray-300'
-                }`}>
+                } ${lockedFields.status ? 'cursor-not-allowed opacity-75' : 'cursor-pointer'}`}>
                   <input
                     type="radio"
                     value="pending"
                     checked={formData.status === 'pending'}
-                    onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                    onChange={(e) => !lockedFields.status && setFormData({ ...formData, status: e.target.value })}
                     className="w-5 h-5 text-[#F59E0B] focus:ring-[#F59E0B]"
+                    disabled={lockedFields.status}
                   />
                   <span className={`font-semibold ${formData.status === 'pending' ? 'text-[#F59E0B]' : 'text-gray-700'}`}>Pendente</span>
                 </label>
