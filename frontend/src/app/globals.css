@@ -75,3 +75,58 @@ body {
   white-space: nowrap;
   border-width: 0;
 }
+
+/* ==================== MOBILE REPORTS - RESPONSIVIDADE ==================== */
+
+/* Ocultar scrollbar mas manter funcionalidade */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Snap scroll para tabs mobile */
+.snap-x {
+  scroll-snap-type: x mandatory;
+}
+.snap-start {
+  scroll-snap-align: start;
+}
+.snap-mandatory {
+  scroll-snap-type: x mandatory;
+}
+
+/* Breakpoint customizado xs (360px) */
+@media (min-width: 360px) {
+  .xs\:grid-cols-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* Touch targets - mínimo 44px para mobile */
+@media (max-width: 640px) {
+  button, 
+  [role="button"],
+  input[type="checkbox"],
+  select {
+    min-height: 44px;
+  }
+  
+  /* Melhorar legibilidade de valores monetários */
+  .currency-value {
+    letter-spacing: -0.02em;
+  }
+}
+
+/* Active states para mobile */
+@media (hover: none) {
+  .active\:scale-95:active {
+    transform: scale(0.95);
+  }
+  
+  .active\:bg-gray-100:active {
+    background-color: rgb(243 244 246);
+  }
+}
