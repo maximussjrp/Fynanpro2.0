@@ -973,8 +973,17 @@ export default function ReportsPage() {
                           cx="50%"
                           cy="50%"
                           labelLine={false}
-                          label={({ icon, percentage }: any) => `${icon || ''} ${percentage?.toFixed(0) || 0}%`}
-                          labelStyle={{ fill: '#1f2937', fontSize: '12px', fontWeight: 500 }}
+                          label={({ cx, cy, midAngle, innerRadius, outerRadius, icon, percentage }: any) => {
+                            const RADIAN = Math.PI / 180;
+                            const radius = innerRadius + (outerRadius - innerRadius) * 1.4;
+                            const x = cx + radius * Math.cos(-midAngle * RADIAN);
+                            const y = cy + radius * Math.sin(-midAngle * RADIAN);
+                            return (
+                              <text x={x} y={y} fill="#1f2937" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontSize={12} fontWeight={500}>
+                                {`${icon || ''} ${percentage?.toFixed(0) || 0}%`}
+                              </text>
+                            );
+                          }}
                           outerRadius={80}
                           fill="#8884d8"
                           dataKey="total"
