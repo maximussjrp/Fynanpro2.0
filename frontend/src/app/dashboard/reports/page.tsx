@@ -973,7 +973,8 @@ export default function ReportsPage() {
                           cx="50%"
                           cy="50%"
                           labelLine={false}
-                          label={(entry: any) => `${entry.icon || ''} ${entry.percentage?.toFixed(0) || 0}%`}
+                          label={({ icon, percentage }: any) => `${icon || ''} ${percentage?.toFixed(0) || 0}%`}
+                          labelStyle={{ fill: '#1f2937', fontSize: '12px', fontWeight: 500 }}
                           outerRadius={80}
                           fill="#8884d8"
                           dataKey="total"
@@ -988,13 +989,13 @@ export default function ReportsPage() {
 
                     <div className="space-y-2">
                       {categoryData.categories.slice(0, 8).map((cat, index) => (
-                        <div key={cat.id} className="flex items-center gap-2 text-sm">
+                        <div key={cat.id} className="flex items-center gap-2 text-sm text-gray-900">
                           <div 
                             className="w-3 h-3 rounded-full flex-shrink-0" 
                             style={{ backgroundColor: COLORS[index % COLORS.length] }}
                           />
-                          <span className="flex-1 truncate">{cat.icon} {cat.name}</span>
-                          <span className="font-medium">{formatCurrency(cat.total)}</span>
+                          <span className="flex-1 truncate text-gray-800">{cat.icon} {cat.name}</span>
+                          <span className="font-medium text-gray-900">{formatCurrency(cat.total)}</span>
                         </div>
                       ))}
                     </div>
@@ -1354,8 +1355,7 @@ export default function ReportsPage() {
                               <th className="px-1 py-1 text-right bg-teal-800">AV%</th>
                             </>
                           )}
-                        )}
-                      </tr>
+                        </tr>
                     </thead>
                     <tbody>
                       {/* Linha RECEITA/FATURAMENTO */}
