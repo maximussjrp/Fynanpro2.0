@@ -963,7 +963,7 @@ export default function ReportsPage() {
 
               {/* Gráfico de Pizza - Mantido para visualização rápida */}
               {categoryData && (
-                <div className="mt-8 pt-6 border-t border-gray-200">
+                <div className="mt-8 pt-6 border-t border-gray-200 pie-chart-mobile">
                   <h4 className="text-base sm:text-lg font-semibold text-gray-900 mb-4">📊 Top 8 Categorias de Despesa</h4>
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <ResponsiveContainer width="100%" height={280}>
@@ -979,7 +979,16 @@ export default function ReportsPage() {
                             const x = cx + radius * Math.cos(-midAngle * RADIAN);
                             const y = cy + radius * Math.sin(-midAngle * RADIAN);
                             return (
-                              <text x={x} y={y} fill="#1f2937" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontSize={12} fontWeight={500}>
+                              <text 
+                                x={x} 
+                                y={y} 
+                                fill="#1f2937" 
+                                textAnchor={x > cx ? 'start' : 'end'} 
+                                dominantBaseline="central" 
+                                fontSize={12} 
+                                fontWeight={500}
+                                style={{ fill: '#1f2937' }}
+                              >
                                 {`${icon || ''} ${percentage?.toFixed(0) || 0}%`}
                               </text>
                             );
@@ -992,19 +1001,31 @@ export default function ReportsPage() {
                             <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                           ))}
                         </Pie>
-                        <Tooltip formatter={(value) => formatCurrency(Number(value))} />
+                        <Tooltip 
+                          formatter={(value) => formatCurrency(Number(value))} 
+                          contentStyle={{ 
+                            backgroundColor: '#ffffff', 
+                            border: '1px solid #e5e7eb', 
+                            borderRadius: '8px',
+                            color: '#1f2937',
+                            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                          }}
+                          labelStyle={{ color: '#1f2937', fontWeight: 600 }}
+                          itemStyle={{ color: '#1f2937' }}
+                        />
                       </RePieChart>
                     </ResponsiveContainer>
 
+                    {/* Legenda do gráfico - cores explícitas para mobile */}
                     <div className="space-y-2">
                       {categoryData.categories.slice(0, 8).map((cat, index) => (
-                        <div key={cat.id} className="flex items-center gap-2 text-sm text-gray-900">
+                        <div key={cat.id} className="flex items-center gap-2 text-sm" style={{ color: '#1f2937' }}>
                           <div 
                             className="w-3 h-3 rounded-full flex-shrink-0" 
                             style={{ backgroundColor: COLORS[index % COLORS.length] }}
                           />
-                          <span className="flex-1 truncate text-gray-800">{cat.icon} {cat.name}</span>
-                          <span className="font-medium text-gray-900">{formatCurrency(cat.total)}</span>
+                          <span className="flex-1 truncate" style={{ color: '#374151' }}>{cat.icon} {cat.name}</span>
+                          <span className="font-medium" style={{ color: '#111827' }}>{formatCurrency(cat.total)}</span>
                         </div>
                       ))}
                     </div>

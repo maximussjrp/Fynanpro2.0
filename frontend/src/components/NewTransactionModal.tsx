@@ -94,6 +94,7 @@ export default function TransactionModal({
 
   const [categorySearch, setCategorySearch] = useState('');
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
+  const categoryDropdownRef = useRef<HTMLDivElement>(null);
 
   // Estados para criação rápida
   const [showQuickBankAccount, setShowQuickBankAccount] = useState(false);
@@ -119,6 +120,9 @@ export default function TransactionModal({
       if (paymentMethodDropdownRef.current && !paymentMethodDropdownRef.current.contains(event.target as Node)) {
         setShowPaymentMethodDropdown(false);
       }
+      if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(event.target as Node)) {
+        setShowCategoryDropdown(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -128,8 +132,10 @@ export default function TransactionModal({
     if (isOpen) {
       loadFormData();
       if (transaction) {
+        // Determinar tipo: usar transaction.type direto se existir, senão inferir da categoria
+        const transactionTypeValue = transaction.type || transaction.category?.type || defaultType;
         setFormData({
-          type: (transaction.category?.type || transaction.type || defaultType) as 'income' | 'expense',
+          type: transactionTypeValue as 'income' | 'expense',
           amount: transaction.amount,
           description: transaction.description,
           transactionDate: transaction.transactionDate.split('T')[0],
@@ -629,7 +635,7 @@ export default function TransactionModal({
             <label className="block text-sm font-semibold text-[#1A1A1A] mb-2">
               Categoria *
             </label>
-            <div className="relative">
+            <div className="relative" ref={categoryDropdownRef}>
               <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                 <Tag className="w-5 h-5 text-[#1F4FD8]" />
               </div>

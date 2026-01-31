@@ -47,6 +47,7 @@ interface TransferForm {
   toAccountId: string;
   amount: string;
   description: string;
+  transactionDate: string;
 }
 
 interface AdjustmentForm {
@@ -81,6 +82,7 @@ export default function BankAccountsPage() {
     toAccountId: '',
     amount: '',
     description: '',
+    transactionDate: new Date().toISOString().split('T')[0],
   });
 
   const [adjustmentForm, setAdjustmentForm] = useState<AdjustmentForm>({
@@ -241,12 +243,12 @@ export default function BankAccountsPage() {
         toAccountId: transferForm.toAccountId,
         amount: parseFloat(transferForm.amount),
         description: transferForm.description,
-        transactionDate: new Date().toISOString(),
+        transactionDate: transferForm.transactionDate,
       });
       
       toast.success('Transferência realizada com sucesso!');
       setShowTransferModal(false);
-      setTransferForm({ fromAccountId: '', toAccountId: '', amount: '', description: '' });
+      setTransferForm({ fromAccountId: '', toAccountId: '', amount: '', description: '', transactionDate: new Date().toISOString().split('T')[0] });
       loadAccounts();
     } catch (error: any) {
       console.error('Erro ao transferir:', error.response?.data || error.message);
@@ -719,6 +721,18 @@ export default function BankAccountsPage() {
                   onChange={(e) => setTransferForm({ ...transferForm, amount: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
                   placeholder="0.00"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Data da Transferência *</label>
+                <input
+                  type="date"
+                  required
+                  value={transferForm.transactionDate}
+                  onChange={(e) => setTransferForm({ ...transferForm, transactionDate: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
+                  style={{ colorScheme: 'light' }}
                 />
               </div>
 

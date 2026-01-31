@@ -1,13 +1,13 @@
 'use client';
 
 import { useAuth } from '@/stores/auth';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/api';
 import { toast } from 'sonner';
 import EditTransactionModal from '@/components/NewTransactionModal';
 import CreateTransactionModal from '@/components/UnifiedTransactionModal';
-import { Receipt, Filter, Edit2, Trash2, Calendar, TrendingDown, TrendingUp, CheckCircle, XCircle, Clock, Plus, ArrowLeft, ChevronUp, ChevronDown, Check, User, Search } from 'lucide-react';
+import { Receipt, Filter, Edit2, Trash2, Calendar, CheckCircle, XCircle, Clock, Plus, ArrowLeft, ChevronUp, ChevronDown, Check, User, ArrowRightLeft, Search, X, Tag, Eye, EyeOff } from 'lucide-react';
 
 interface UserProfile {
   id: string;
@@ -22,7 +22,7 @@ interface Transaction {
   id: string;
   amount: string;
   description: string;
-  type: 'income' | 'expense';
+  type: 'income' | 'expense' | 'transfer';
   transactionDate: string;
   dueDate?: string; // Para ocorrências
   paidDate?: string; // Data real do pagamento
@@ -70,11 +70,28 @@ interface Category {
   name: string;
   type: string;
   icon: string;
+  color?: string;
+  level?: number;
+  parentId?: string | null;
+  isActive?: boolean;
+  children?: Category[];
+  _count?: {
+    transactions: number;
+  };
+}
+
+interface CategoryForm {
+  name: string;
+  type: 'income' | 'expense';
+  icon: string;
+  color: string;
+  parentId: string | null;
 }
 
 interface BankAccount {
   id: string;
   name: string;
+  currentBalance?: number;
 }
 
 interface PaymentMethod {
@@ -103,29 +120,45 @@ export default function TransactionsPage() {
     accounts: string[];
     paymentMethods: string[];
     statuses: string[];
-    profiles: string[];
   }>({
     categories: [],
     accounts: [],
     paymentMethods: [],
     statuses: [],
-    profiles: [],
   });
+  const [dateColumnFilter, setDateColumnFilter] = useState<{ startDate: string; endDate: string } | null>(null);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
-  const [filterSearchTerms, setFilterSearchTerms] = useState<{ [key: string]: string }>({});
-  const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'week' | 'month' | 'custom' | 'specific' | 'dayOfMonth' | 'year'>('all');
-  const [customDateRange, setCustomDateRange] = useState({ start: '', end: '' });
-  const [specificDate, setSpecificDate] = useState('');
-  const [dayOfMonth, setDayOfMonth] = useState('');
-  const [yearFilter, setYearFilter] = useState('');
-  const [descriptionSearch, setDescriptionSearch] = useState('');
+  const [columnFilterSearch, setColumnFilterSearch] = useState('');
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [transferForm, setTransferForm] = useState({
+    fromAccountId: '',
+    toAccountId: '',
+    amount: '',
+    description: '',
+    transactionDate: new Date().toISOString().split('T')[0],
+  });
+  const [submittingTransfer, setSubmittingTransfer] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Estados para modal de categorias
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [showEditCategoryModal, setShowEditCategoryModal] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+  const [submittingCategory, setSubmittingCategory] = useState(false);
+  const [categoryForm, setCategoryForm] = useState<CategoryForm>({
+    name: '',
+    type: 'expense',
+    icon: '📝',
+    color: '#3B82F6',
+    parentId: null,
+  });
 
   // Fechar dropdown ao clicar fora
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setOpenDropdown(null);
+        setColumnFilterSearch('');
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -139,7 +172,7 @@ export default function TransactionsPage() {
     categoryId: '',
     bankAccountId: '',
     paymentMethodId: '',
-    type: 'all' as 'all' | 'income' | 'expense',
+    type: 'all' as 'all' | 'income' | 'expense' | 'transfer',
     status: 'all' as 'all' | 'completed' | 'pending',
   });
 
@@ -163,8 +196,8 @@ export default function TransactionsPage() {
         // Se tiver startDate e endDate, usa eles
         ...(startDateParam && { startDate: startDateParam }),
         ...(endDateParam && { endDate: endDateParam }),
-        // Tipo: INCOME ou EXPENSE
-        ...(typeParam && { type: typeParam.toLowerCase() as 'all' | 'income' | 'expense' }),
+        // Tipo: INCOME, EXPENSE ou TRANSFER
+        ...(typeParam && { type: typeParam.toLowerCase() as 'all' | 'income' | 'expense' | 'transfer' }),
         // Status: completed ou pending (se for overdue, deixa all para filtrar por coluna)
         ...(statusParam && statusParam !== 'overdue' && { status: statusParam.toLowerCase() as 'all' | 'completed' | 'pending' })
       }));
@@ -193,6 +226,7 @@ export default function TransactionsPage() {
       const params: any = {
         startDate: filters.startDate,
         endDate: filters.endDate,
+        limit: 1000, // Buscar todas as transações do período
       };
 
       if (filters.categoryId) params.categoryId = filters.categoryId;
@@ -203,7 +237,7 @@ export default function TransactionsPage() {
 
       // Buscar transações realizadas + ocorrências pendentes
       const [transactionsRes, occurrencesRes, categoriesRes, accountsRes, paymentMethodsRes] = await Promise.all([
-        api.get('/transactions', { params: { ...params, limit: 1000 } }),
+        api.get('/transactions', { params }),
         api.get('/recurring-bills/occurrences', { params }),
         api.get('/categories?isActive=true'),
         api.get('/bank-accounts?isActive=true'),
@@ -384,6 +418,151 @@ export default function TransactionsPage() {
     loadData();
   };
 
+  // Funções para gerenciar categorias
+  const handleCreateCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!categoryForm.name.trim()) {
+      toast.error('Nome da categoria é obrigatório');
+      return;
+    }
+    setSubmittingCategory(true);
+    try {
+      await api.post('/categories', categoryForm);
+      toast.success('Categoria criada com sucesso!');
+      setShowCategoryModal(false);
+      setCategoryForm({ name: '', type: 'expense', icon: '📝', color: '#3B82F6', parentId: null });
+      loadData(); // Recarrega categorias
+    } catch (error: any) {
+      console.error('Erro ao criar categoria:', error);
+      toast.error(error.response?.data?.message || 'Erro ao criar categoria');
+    } finally {
+      setSubmittingCategory(false);
+    }
+  };
+
+  const handleEditCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCategory) return;
+    setSubmittingCategory(true);
+    try {
+      await api.put(`/categories/${editingCategory.id}`, categoryForm);
+      toast.success('Categoria atualizada com sucesso!');
+      setShowEditCategoryModal(false);
+      setEditingCategory(null);
+      setCategoryForm({ name: '', type: 'expense', icon: '📝', color: '#3B82F6', parentId: null });
+      loadData();
+    } catch (error: any) {
+      console.error('Erro ao editar categoria:', error);
+      toast.error(error.response?.data?.message || 'Erro ao editar categoria');
+    } finally {
+      setSubmittingCategory(false);
+    }
+  };
+
+  const openEditCategoryModal = (category: Category) => {
+    setEditingCategory(category);
+    setCategoryForm({
+      name: category.name,
+      type: category.type as 'income' | 'expense',
+      icon: category.icon || '📝',
+      color: category.color || '#3B82F6',
+      parentId: category.parentId || null,
+    });
+    setShowEditCategoryModal(true);
+  };
+
+  const toggleCategoryStatus = async (category: Category) => {
+    try {
+      await api.put(`/categories/${category.id}`, { isActive: !category.isActive });
+      toast.success(category.isActive ? 'Categoria desativada' : 'Categoria ativada');
+      loadData();
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Erro ao alterar status');
+    }
+  };
+
+  const handleDeleteCategory = async (category: Category) => {
+    if (!confirm(`Tem certeza que deseja excluir a categoria "${category.name}"? Esta ação não pode ser desfeita.`)) return;
+    try {
+      await api.delete(`/categories/${category.id}`);
+      toast.success('Categoria excluída com sucesso!');
+      loadData();
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Erro ao excluir categoria');
+    }
+  };
+
+  // Obter categorias pai candidatas para subcategoria
+  const getParentCandidates = (type: 'income' | 'expense', excludeId?: string) => {
+    return categories.filter(cat => 
+      cat.type === type && 
+      (cat.level === 1 || cat.level === 2) &&
+      cat.id !== excludeId
+    );
+  };
+
+  // Função para realizar transferência
+  const handleTransfer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!transferForm.fromAccountId || !transferForm.toAccountId || !transferForm.amount) {
+      toast.error('Preencha todos os campos obrigatórios');
+      return;
+    }
+    if (transferForm.fromAccountId === transferForm.toAccountId) {
+      toast.error('Conta de origem e destino não podem ser iguais');
+      return;
+    }
+
+    // Verificar se o saldo ficará negativo
+    const fromAccount = bankAccounts.find(acc => acc.id === transferForm.fromAccountId);
+    const amount = parseFloat(transferForm.amount);
+    const currentBalance = Number(fromAccount?.currentBalance) || 0;
+    const newBalance = currentBalance - amount;
+
+    if (newBalance < 0) {
+      const formatValue = (val: number) => val.toFixed(2).replace('.', ',');
+      const confirmed = confirm(
+        `⚠️ ATENÇÃO: O saldo da conta "${fromAccount?.name}" ficará NEGATIVO!\n\n` +
+        `Saldo atual: R$ ${formatValue(currentBalance)}\n` +
+        `Valor da transferência: R$ ${formatValue(amount)}\n` +
+        `Saldo após transferência: R$ ${formatValue(newBalance)}\n\n` +
+        `Deseja continuar mesmo assim?`
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    setSubmittingTransfer(true);
+    try {
+      await api.post('/bank-accounts/transfer/execute', {
+        fromAccountId: transferForm.fromAccountId,
+        toAccountId: transferForm.toAccountId,
+        amount: amount,
+        description: transferForm.description || 'Transferência entre contas',
+        transactionDate: transferForm.transactionDate,
+      });
+      toast.success('Transferência realizada com sucesso!');
+      setShowTransferModal(false);
+      setTransferForm({
+        fromAccountId: '',
+        toAccountId: '',
+        amount: '',
+        description: '',
+        transactionDate: new Date().toISOString().split('T')[0],
+      });
+      loadData();
+    } catch (error: any) {
+      console.error('Erro ao transferir:', error);
+      const errorMessage = error.response?.data?.error?.message || 
+                          error.response?.data?.message || 
+                          'Erro ao realizar transferência';
+      toast.error(errorMessage);
+    } finally {
+      setSubmittingTransfer(false);
+    }
+  };
+
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
@@ -395,20 +574,6 @@ export default function TransactionsPage() {
     return new Date(dateString).toLocaleDateString('pt-BR');
   };
 
-  const getTotals = () => {
-    const income = transactions
-      .filter(t => t.type === 'income')
-      .reduce((sum, t) => sum + Number(t.amount), 0);
-    
-    const expense = transactions
-      .filter(t => t.type === 'expense')
-      .reduce((sum, t) => sum + Number(t.amount), 0);
-
-    return { income, expense, balance: income - expense };
-  };
-
-  const totals = getTotals();
-
   // Função para ordenar
   const handleSort = (key: string) => {
     let direction: 'asc' | 'desc' = 'asc';
@@ -419,7 +584,7 @@ export default function TransactionsPage() {
   };
 
   // Função para toggle de filtro checkbox
-  const toggleColumnFilter = (filterType: 'categories' | 'accounts' | 'paymentMethods' | 'statuses' | 'profiles', value: string) => {
+  const toggleColumnFilter = (filterType: 'categories' | 'accounts' | 'paymentMethods' | 'statuses', value: string) => {
     setColumnFilters(prev => {
       const current = prev[filterType];
       if (current.includes(value)) {
@@ -431,7 +596,7 @@ export default function TransactionsPage() {
   };
 
   // Selecionar/Deselecionar todos
-  const toggleAllColumnFilter = (filterType: 'categories' | 'accounts' | 'paymentMethods' | 'statuses' | 'profiles', allValues: string[]) => {
+  const toggleAllColumnFilter = (filterType: 'categories' | 'accounts' | 'paymentMethods' | 'statuses', allValues: string[]) => {
     setColumnFilters(prev => {
       if (prev[filterType].length === allValues.length) {
         return { ...prev, [filterType]: [] };
@@ -442,7 +607,7 @@ export default function TransactionsPage() {
   };
 
   // Limpar filtro de coluna
-  const clearColumnFilter = (filterType: 'categories' | 'accounts' | 'paymentMethods' | 'statuses' | 'profiles') => {
+  const clearColumnFilter = (filterType: 'categories' | 'accounts' | 'paymentMethods' | 'statuses') => {
     setColumnFilters(prev => ({ ...prev, [filterType]: [] }));
   };
 
@@ -455,11 +620,20 @@ export default function TransactionsPage() {
     { id: 'pending', name: 'Pendente' },
     { id: 'overdue', name: 'Atrasado' },
   ];
-  const uniqueProfiles = [...new Map(transactions.filter(t => t.userProfile).map(t => [t.userProfile?.id, t.userProfile])).values()].filter(Boolean);
 
   // Aplicar filtros e ordenação
   const getFilteredAndSortedTransactions = () => {
     let result = [...transactions];
+
+    // Aplicar filtro de data da coluna
+    if (dateColumnFilter) {
+      const startDate = new Date(dateColumnFilter.startDate + 'T00:00:00');
+      const endDate = new Date(dateColumnFilter.endDate + 'T23:59:59');
+      result = result.filter(t => {
+        const txDate = new Date(t.transactionDate);
+        return txDate >= startDate && txDate <= endDate;
+      });
+    }
 
     // Aplicar filtros de checkbox
     if (columnFilters.categories.length > 0) {
@@ -478,65 +652,6 @@ export default function TransactionsPage() {
         const statusId = t.status === 'completed' ? 'completed' : (isOverdue ? 'overdue' : 'pending');
         return columnFilters.statuses.includes(statusId);
       });
-    }
-
-    // Filtro de data
-    if (dateFilter !== 'all') {
-      const now = new Date();
-      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      
-      result = result.filter(t => {
-        const transDate = new Date(t.dueDate || t.transactionDate);
-        const transDateOnly = new Date(transDate.getFullYear(), transDate.getMonth(), transDate.getDate());
-        
-        switch (dateFilter) {
-          case 'today':
-            return transDateOnly.getTime() === today.getTime();
-          case 'week':
-            const weekAgo = new Date(today);
-            weekAgo.setDate(weekAgo.getDate() - 7);
-            return transDateOnly >= weekAgo && transDateOnly <= today;
-          case 'month':
-            const monthAgo = new Date(today);
-            monthAgo.setMonth(monthAgo.getMonth() - 1);
-            return transDateOnly >= monthAgo && transDateOnly <= today;
-          case 'custom':
-            if (customDateRange.start && customDateRange.end) {
-              const start = new Date(customDateRange.start);
-              const end = new Date(customDateRange.end);
-              end.setHours(23, 59, 59, 999);
-              return transDateOnly >= start && transDateOnly <= end;
-            }
-            return true;
-          case 'specific':
-            if (specificDate) {
-              const specDate = new Date(specificDate);
-              const specDateOnly = new Date(specDate.getFullYear(), specDate.getMonth(), specDate.getDate());
-              return transDateOnly.getTime() === specDateOnly.getTime();
-            }
-            return true;
-          case 'dayOfMonth':
-            if (dayOfMonth) {
-              const day = parseInt(dayOfMonth);
-              return transDate.getDate() === day;
-            }
-            return true;
-          case 'year':
-            if (yearFilter) {
-              const year = parseInt(yearFilter);
-              return transDate.getFullYear() === year;
-            }
-            return true;
-          default:
-            return true;
-        }
-      });
-    }
-    
-    // Filtro de descricao por palavra-chave
-    if (descriptionSearch.trim()) {
-      const searchLower = descriptionSearch.toLowerCase().trim();
-      result = result.filter(t => t.description.toLowerCase().includes(searchLower));
     }
 
     // Aplicar ordenação
@@ -589,6 +704,14 @@ export default function TransactionsPage() {
 
   const filteredTransactions = getFilteredAndSortedTransactions();
 
+  // Calcular o total das transações filtradas
+  const totalFiltered = useMemo(() => {
+    return filteredTransactions.reduce((sum, t) => {
+      const amount = Number(t.amount);
+      return sum + (t.type === 'income' ? amount : -Math.abs(amount));
+    }, 0);
+  }, [filteredTransactions]);
+
   // Componente de cabeçalho de coluna com ordenação e filtro
   const ColumnHeader = ({ 
     label, 
@@ -596,24 +719,17 @@ export default function TransactionsPage() {
     filterType,
     filterOptions,
     selectedFilters,
-    isDateColumn,
-    isDescriptionColumn,
+    isDateFilter,
   }: { 
     label: string; 
     sortKey?: string;
-    filterType?: 'categories' | 'accounts' | 'paymentMethods' | 'statuses' | 'profiles';
+    filterType?: 'categories' | 'accounts' | 'paymentMethods' | 'statuses' | 'date';
     filterOptions?: { id: string; name: string; icon?: string; color?: string }[];
     selectedFilters?: string[];
-    isDateColumn?: boolean;
-    isDescriptionColumn?: boolean;
+    isDateFilter?: boolean;
   }) => {
-    const isOpen = openDropdown === (filterType || sortKey || (isDateColumn ? 'date' : null) || (isDescriptionColumn ? 'description' : null));
-    const searchTerm = filterSearchTerms[filterType || ''] || '';
-    
-    const filteredOptions = filterOptions?.filter(opt => 
-      opt.name.toLowerCase().includes(searchTerm.toLowerCase())
-    ) || filterOptions;
-    const hasActiveFilter = selectedFilters && selectedFilters.length > 0;
+    const isOpen = openDropdown === (filterType || sortKey);
+    const hasActiveFilter = isDateFilter ? !!dateColumnFilter : (selectedFilters && selectedFilters.length > 0);
 
     return (
       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider relative">
@@ -634,8 +750,19 @@ export default function TransactionsPage() {
             </button>
           )}
           
+          {/* Botão de filtro de data */}
+          {isDateFilter && (
+            <button
+              onClick={() => setOpenDropdown(isOpen ? null : 'date')}
+              className={`p-1 hover:bg-gray-200 rounded transition-colors ${hasActiveFilter ? 'text-blue-600' : 'text-gray-400'}`}
+              title="Filtrar por data"
+            >
+              <Filter className="w-3 h-3" />
+            </button>
+          )}
+          
           {/* Botão de filtro */}
-          {filterType && filterOptions && (
+          {filterType && filterOptions && !isDateFilter && (
             <button
               onClick={() => setOpenDropdown(isOpen ? null : filterType)}
               className={`p-1 hover:bg-gray-200 rounded transition-colors ${hasActiveFilter ? 'text-blue-600' : 'text-gray-400'}`}
@@ -644,126 +771,40 @@ export default function TransactionsPage() {
               <Filter className="w-3 h-3" />
             </button>
           )}
-          
-          {/* Botao de filtro para coluna de data */}
-          {isDateColumn && (
-            <button
-              onClick={() => setOpenDropdown(isOpen ? null : 'date')}
-              className={`p-1 hover:bg-gray-200 rounded transition-colors ${dateFilter !== 'all' ? 'text-blue-600' : 'text-gray-400'}`}
-              title="Filtrar por data"
-            >
-              <Filter className="w-3 h-3" />
-            </button>
-          )}
-          
-          {/* Botao de busca para coluna de descricao */}
-          {isDescriptionColumn && (
-            <button
-              onClick={() => setOpenDropdown(isOpen ? null : 'description')}
-              className={`p-1 hover:bg-gray-200 rounded transition-colors ${descriptionSearch ? 'text-blue-600' : 'text-gray-400'}`}
-              title="Buscar por descricao"
-            >
-              <Search className="w-3 h-3" />
-            </button>
-          )}
         </div>
 
-        {/* Dropdown de busca por DESCRICAO */}
-        {isOpen && isDescriptionColumn && (
-          <div ref={dropdownRef} className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[280px]" onClick={(e) => e.stopPropagation()}>
-            <div className="p-3 space-y-2">
-              <div className="text-sm font-medium text-gray-700 mb-2">Buscar por palavra-chave</div>
+        {/* Dropdown de filtro */}
+        {isOpen && filterType && filterOptions && !isDateFilter && (
+          <div 
+            ref={dropdownRef}
+            className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[250px] max-h-[350px] flex flex-col"
+            onKeyDown={(e) => e.stopPropagation()}
+          >
+            {/* Campo de busca */}
+            <div className="p-2 border-b border-gray-100">
               <div className="relative">
                 <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input
                   type="text"
-                  placeholder="Digite para buscar..."
-                  value={descriptionSearch}
-                  onClick={(e) => e.stopPropagation()}
-                  onMouseDown={(e) => e.stopPropagation()}
-                  onChange={(e) => setDescriptionSearch(e.target.value)}
-                  className="w-full pl-8 pr-3 py-2 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500"
-                  autoFocus
-                />
-              </div>
-              {descriptionSearch && (
-                <p className="text-xs text-gray-500">Mostrando transacoes com "{descriptionSearch}" na descricao</p>
-              )}
-              <div className="flex gap-2 pt-2 border-t border-gray-100">
-                <button onClick={() => { setDescriptionSearch(''); setOpenDropdown(null); }} className="flex-1 px-3 py-1 text-sm text-gray-600 border border-gray-300 rounded hover:bg-gray-100">Limpar</button>
-                <button onClick={() => setOpenDropdown(null)} className="flex-1 px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">OK</button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Dropdown de filtro de DATA */}
-        {isOpen && isDateColumn && (
-          <div ref={dropdownRef} className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[250px]">
-            <div className="p-3 space-y-2">
-              <div className="text-sm font-medium text-gray-700 mb-2">Filtrar por periodo</div>
-              {[
-                { value: 'all', label: 'Todas as datas' },
-                { value: 'today', label: 'Hoje' },
-                { value: 'week', label: 'Esta semana' },
-                { value: 'month', label: 'Este mes' },
-                { value: 'custom', label: 'Periodo personalizado' },
-              ].map(opt => (
-                <button
-                  key={opt.value}
-                  onClick={() => { setDateFilter(opt.value as any); if (opt.value !== 'custom') setOpenDropdown(null); }}
-                  className={`flex items-center gap-2 w-full px-3 py-2 text-sm rounded hover:bg-gray-100 ${dateFilter === opt.value ? 'bg-blue-50 text-blue-600' : ''}`}
-                >
-                  <div className={`w-4 h-4 border rounded-full flex items-center justify-center ${dateFilter === opt.value ? 'border-blue-600' : 'border-gray-300'}`}>
-                    {dateFilter === opt.value && <div className="w-2 h-2 bg-blue-600 rounded-full" />}
-                  </div>
-                  {opt.label}
-                </button>
-              ))}
-              {dateFilter === 'custom' && (
-                <div className="pt-2 border-t border-gray-100 space-y-2">
-                  <div>
-                    <label className="text-xs text-gray-500">Data inicial</label>
-                    <input type="date" value={customDateRange.start} onChange={(e) => setCustomDateRange(prev => ({ ...prev, start: e.target.value }))} className="w-full px-2 py-1 text-sm border border-gray-300 rounded" />
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-500">Data final</label>
-                    <input type="date" value={customDateRange.end} onChange={(e) => setCustomDateRange(prev => ({ ...prev, end: e.target.value }))} className="w-full px-2 py-1 text-sm border border-gray-300 rounded" />
-                  </div>
-                  <button onClick={() => setOpenDropdown(null)} className="w-full px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">Aplicar</button>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Dropdown de filtro */}
-        {isOpen && filterType && filterOptions && (
-          <div 
-            ref={dropdownRef}
-            className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[200px] max-h-[300px] overflow-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="p-2 border-b border-gray-100">
-              <div className="relative mb-2" onClick={(e) => e.stopPropagation()}>
-                <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
-                  type="text"
                   placeholder="Buscar..."
-                  value={searchTerm}
-                  onClick={(e) => e.stopPropagation()}
-                  onMouseDown={(e) => e.stopPropagation()}
-                  onKeyDown={(e) => e.stopPropagation()}
-                  onChange={(e) => {
-                    e.stopPropagation();
-                    setFilterSearchTerms(prev => ({ ...prev, [filterType || '']: e.target.value }));
-                  }}
-                  className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500"
+                  value={columnFilterSearch}
+                  onChange={(e) => setColumnFilterSearch(e.target.value)}
+                  className="w-full pl-8 pr-8 py-1.5 text-sm border border-gray-200 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   autoFocus
                 />
+                {columnFilterSearch && (
+                  <button
+                    onClick={() => setColumnFilterSearch('')}
+                    className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
               </div>
+            </div>
+            <div className="p-2 border-b border-gray-100">
               <button
-                onClick={() => toggleAllColumnFilter(filterType, filterOptions.map(o => o.id))}
+                onClick={() => filterType !== 'date' && toggleAllColumnFilter(filterType, filterOptions.filter(o => o.name.toLowerCase().includes(columnFilterSearch.toLowerCase())).map(o => o.id))}
                 className="flex items-center gap-2 w-full px-2 py-1 text-sm hover:bg-gray-100 rounded"
               >
                 <div className={`w-4 h-4 border rounded flex items-center justify-center ${selectedFilters?.length === filterOptions.length ? 'bg-blue-600 border-blue-600' : 'border-gray-300'}`}>
@@ -772,11 +813,13 @@ export default function TransactionsPage() {
                 <span>Selecionar Todos</span>
               </button>
             </div>
-            <div className="p-2 max-h-[200px] overflow-auto">
-              {(filteredOptions || []).map(option => (
+            <div className="p-2 overflow-auto flex-1">
+              {filterOptions
+                .filter(option => option.name.toLowerCase().includes(columnFilterSearch.toLowerCase()))
+                .map(option => (
                 <button
                   key={option.id}
-                  onClick={() => toggleColumnFilter(filterType, option.id)}
+                  onClick={() => filterType !== 'date' && toggleColumnFilter(filterType, option.id)}
                   className="flex items-center gap-2 w-full px-2 py-1 text-sm hover:bg-gray-100 rounded"
                 >
                   <div className={`w-4 h-4 border rounded flex items-center justify-center ${selectedFilters?.includes(option.id) ? 'bg-blue-600 border-blue-600' : 'border-gray-300'}`}>
@@ -793,13 +836,84 @@ export default function TransactionsPage() {
             {selectedFilters && selectedFilters.length > 0 && (
               <div className="p-2 border-t border-gray-100">
                 <button
-                  onClick={() => clearColumnFilter(filterType)}
+                  onClick={() => clearColumnFilter(filterType as 'categories' | 'accounts' | 'paymentMethods' | 'statuses')}
                   className="w-full px-3 py-1 text-sm text-red-600 hover:bg-red-50 rounded"
                 >
                   Limpar Filtro
                 </button>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Dropdown de filtro de data */}
+        {isOpen && isDateFilter && (
+          <div 
+            ref={dropdownRef}
+            className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[280px] p-3"
+            onKeyDown={(e) => e.stopPropagation()}
+          >
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Data Inicial</label>
+                <input
+                  type="date"
+                  value={dateColumnFilter?.startDate || ''}
+                  onChange={(e) => setDateColumnFilter(prev => ({
+                    startDate: e.target.value,
+                    endDate: prev?.endDate || e.target.value
+                  }))}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  style={{ colorScheme: 'light' }}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Data Final</label>
+                <input
+                  type="date"
+                  value={dateColumnFilter?.endDate || ''}
+                  onChange={(e) => setDateColumnFilter(prev => ({
+                    startDate: prev?.startDate || e.target.value,
+                    endDate: e.target.value
+                  }))}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  style={{ colorScheme: 'light' }}
+                />
+              </div>
+              <div className="flex gap-2 pt-2 border-t border-gray-100">
+                <button
+                  onClick={() => {
+                    const today = new Date().toISOString().split('T')[0];
+                    setDateColumnFilter({ startDate: today, endDate: today });
+                  }}
+                  className="flex-1 px-3 py-1.5 text-xs bg-gray-100 text-gray-700 hover:bg-gray-200 rounded transition-colors"
+                >
+                  Hoje
+                </button>
+                <button
+                  onClick={() => {
+                    const today = new Date();
+                    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
+                    const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().split('T')[0];
+                    setDateColumnFilter({ startDate: startOfMonth, endDate: endOfMonth });
+                  }}
+                  className="flex-1 px-3 py-1.5 text-xs bg-gray-100 text-gray-700 hover:bg-gray-200 rounded transition-colors"
+                >
+                  Este Mês
+                </button>
+              </div>
+              {dateColumnFilter && (
+                <button
+                  onClick={() => {
+                    setDateColumnFilter(null);
+                    setOpenDropdown(null);
+                  }}
+                  className="w-full px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded transition-colors"
+                >
+                  Limpar Filtro
+                </button>
+              )}
+            </div>
           </div>
         )}
       </th>
@@ -818,8 +932,8 @@ export default function TransactionsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-8">
-      <div className="max-w-7xl mx-auto">
+    <div className="h-screen bg-gray-50 p-4 md:p-6 flex flex-col overflow-hidden">
+      <div className="w-full flex flex-col flex-1 overflow-hidden">
         {/* Header */}
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-8 gap-4">
           <div className="flex items-center gap-4">
@@ -840,6 +954,13 @@ export default function TransactionsPage() {
                 {(columnFilters.categories.length > 0 || columnFilters.accounts.length > 0 || columnFilters.paymentMethods.length > 0 || columnFilters.statuses.length > 0) && (
                   <span className="text-blue-600 ml-2">(filtradas)</span>
                 )}
+                <span className="mx-2">•</span>
+                <span className="font-semibold">
+                  Total: 
+                  <span className={`ml-1 ${totalFiltered >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {totalFiltered >= 0 ? '+' : '-'} {formatCurrency(Math.abs(totalFiltered))}
+                  </span>
+                </span>
               </p>
             </div>
           </div>
@@ -856,53 +977,28 @@ export default function TransactionsPage() {
               Filtros
             </button>
             <button
+              onClick={() => setShowTransferModal(true)}
+              className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2"
+              title="Transferência entre contas"
+            >
+              <ArrowRightLeft className="w-5 h-5" />
+              <span className="hidden sm:inline">Transferir</span>
+            </button>
+            <button
+              onClick={() => setShowCategoryModal(true)}
+              className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors flex items-center gap-2"
+              title="Gerenciar Categorias"
+            >
+              <Tag className="w-5 h-5" />
+              <span className="hidden sm:inline">Categorias</span>
+            </button>
+            <button
               onClick={handleAddNew}
               className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
             >
               <Plus className="w-5 h-5" />
               <span className="hidden sm:inline">Nova Transação</span>
             </button>
-          </div>
-        </div>
-
-        {/* Resumo */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-          <div className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="p-3 bg-green-100 rounded-lg">
-                <TrendingUp className="w-6 h-6 text-green-600" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-500 font-medium">Receitas</p>
-                <p className="text-2xl font-bold text-green-600">{formatCurrency(totals.income)}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="p-3 bg-red-100 rounded-lg">
-                <TrendingDown className="w-6 h-6 text-red-600" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-500 font-medium">Despesas</p>
-                <p className="text-2xl font-bold text-red-600">{formatCurrency(totals.expense)}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="p-3 bg-blue-100 rounded-lg">
-                <Receipt className="w-6 h-6 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-500 font-medium">Saldo</p>
-                <p className={`text-2xl font-bold ${totals.balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {formatCurrency(totals.balance)}
-                </p>
-              </div>
-            </div>
           </div>
         </div>
 
@@ -999,6 +1095,7 @@ export default function TransactionsPage() {
                   <option value="all">Todas</option>
                   <option value="income">Receitas</option>
                   <option value="expense">Despesas</option>
+                  <option value="transfer">Transferências</option>
                 </select>
               </div>
 
@@ -1020,13 +1117,13 @@ export default function TransactionsPage() {
         )}
 
         {/* Lista de Transações */}
-        <div className="bg-white rounded-lg shadow-md overflow-hidden flex flex-col" style={{ maxHeight: "calc(100vh - 280px)" }}>
+        <div className="bg-white rounded-lg shadow-md overflow-hidden flex-1 flex flex-col">
           <div className="overflow-auto flex-1">
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
                 <tr>
-                  <ColumnHeader label="Data" sortKey="date" isDateColumn />
-                  <ColumnHeader label="Descrição" sortKey="description" isDescriptionColumn />
+                  <ColumnHeader label="Data" sortKey="date" isDateFilter />
+                  <ColumnHeader label="Descrição" sortKey="description" />
                   <ColumnHeader 
                     label="Categoria" 
                     sortKey="category" 
@@ -1041,12 +1138,9 @@ export default function TransactionsPage() {
                     filterOptions={uniqueAccounts.map(a => ({ id: a?.id || '', name: a?.name || '' }))}
                     selectedFilters={columnFilters.accounts}
                   />
-                  <ColumnHeader
-                    label="Perfil"
-                    filterType="profiles"
-                    filterOptions={uniqueProfiles.map(p => ({ id: p?.id || '', name: p?.name || '' }))}
-                    selectedFilters={columnFilters.profiles}
-                  />
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Perfil
+                  </th>
                   <ColumnHeader 
                     label="Meio de Pagamento" 
                     sortKey="paymentMethod" 
@@ -1149,8 +1243,14 @@ export default function TransactionsPage() {
                         {transaction.paymentMethod?.name || '-'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold">
-                        <span className={transaction.type === 'income' ? 'text-green-600' : 'text-red-600'}>
-                          {transaction.type === 'income' ? '+' : '-'} {formatCurrency(Number(transaction.amount))}
+                        <span className={
+                          transaction.type === 'income' 
+                            ? 'text-green-600' 
+                            : transaction.type === 'transfer' 
+                              ? 'text-blue-600' 
+                              : 'text-red-600'
+                        }>
+                          {transaction.type === 'income' ? '+' : transaction.type === 'transfer' ? '↔' : '-'} {formatCurrency(Math.abs(Number(transaction.amount)))}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
@@ -1262,6 +1362,432 @@ export default function TransactionsPage() {
           onSuccess={handleModalSuccess}
           transaction={editingTransaction}
         />
+      )}
+
+      {/* Modal de Transferência */}
+      {showTransferModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
+            <div className="bg-gradient-to-r from-purple-600 to-purple-700 px-6 py-5 flex items-center justify-between rounded-t-2xl">
+              <h2 className="text-xl font-bold text-white flex items-center gap-3">
+                <ArrowRightLeft className="w-6 h-6" />
+                Transferência entre Contas
+              </h2>
+              <button
+                onClick={() => setShowTransferModal(false)}
+                className="p-2 hover:bg-white/20 rounded-lg transition-all text-white"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <form onSubmit={handleTransfer} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Conta Origem *</label>
+                <select
+                  required
+                  value={transferForm.fromAccountId}
+                  onChange={(e) => setTransferForm({ ...transferForm, fromAccountId: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-gray-900 bg-white"
+                >
+                  <option value="">Selecione a conta de origem</option>
+                  {bankAccounts.map((account) => (
+                    <option key={account.id} value={account.id}>
+                      {account.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Conta Destino *</label>
+                <select
+                  required
+                  value={transferForm.toAccountId}
+                  onChange={(e) => setTransferForm({ ...transferForm, toAccountId: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-gray-900 bg-white"
+                >
+                  <option value="">Selecione a conta de destino</option>
+                  {bankAccounts
+                    .filter((account) => account.id !== transferForm.fromAccountId)
+                    .map((account) => (
+                      <option key={account.id} value={account.id}>
+                        {account.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Valor *</label>
+                <input
+                  type="number"
+                  required
+                  step="0.01"
+                  min="0.01"
+                  value={transferForm.amount}
+                  onChange={(e) => setTransferForm({ ...transferForm, amount: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-gray-900 bg-white"
+                  placeholder="0.00"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Data da Transferência *</label>
+                <input
+                  type="date"
+                  required
+                  value={transferForm.transactionDate}
+                  onChange={(e) => setTransferForm({ ...transferForm, transactionDate: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-gray-900 bg-white"
+                  style={{ colorScheme: 'light' }}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Descrição</label>
+                <input
+                  type="text"
+                  value={transferForm.description}
+                  onChange={(e) => setTransferForm({ ...transferForm, description: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-gray-900 bg-white"
+                  placeholder="Ex: Transferência para reserva"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowTransferModal(false)}
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingTransfer}
+                  className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50"
+                >
+                  {submittingTransfer ? 'Transferindo...' : 'Transferir'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Gerenciamento de Categorias */}
+      {showCategoryModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="bg-gradient-to-r from-amber-600 to-amber-700 px-6 py-5 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-white flex items-center gap-3">
+                <Tag className="w-6 h-6" />
+                Gerenciar Categorias
+              </h2>
+              <button
+                onClick={() => setShowCategoryModal(false)}
+                className="p-2 hover:bg-white/20 rounded-lg transition-all text-white"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto flex-1">
+              {/* Formulário de Nova Categoria */}
+              <div className="mb-6 p-4 bg-gray-50 rounded-xl">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">Nova Categoria</h3>
+                <form onSubmit={handleCreateCategory} className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Nome *</label>
+                      <input
+                        type="text"
+                        required
+                        value={categoryForm.name}
+                        onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 text-gray-900 bg-white"
+                        placeholder="Nome da categoria"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Tipo *</label>
+                      <select
+                        required
+                        value={categoryForm.type}
+                        onChange={(e) => setCategoryForm({ ...categoryForm, type: e.target.value as 'income' | 'expense' })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 text-gray-900 bg-white"
+                      >
+                        <option value="expense">Despesa</option>
+                        <option value="income">Receita</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Categoria Pai</label>
+                      <select
+                        value={categoryForm.parentId || ''}
+                        onChange={(e) => setCategoryForm({ ...categoryForm, parentId: e.target.value || null })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 text-gray-900 bg-white"
+                      >
+                        <option value="">Nenhuma (Categoria Principal)</option>
+                        {getParentCandidates(categoryForm.type).map((cat) => (
+                          <option key={cat.id} value={cat.id}>
+                            {cat.icon} {cat.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Ícone</label>
+                      <input
+                        type="text"
+                        value={categoryForm.icon}
+                        onChange={(e) => setCategoryForm({ ...categoryForm, icon: e.target.value })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 text-gray-900 bg-white"
+                        placeholder="Ex: 🏠, 🚗, 💰"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Cor</label>
+                      <input
+                        type="color"
+                        value={categoryForm.color}
+                        onChange={(e) => setCategoryForm({ ...categoryForm, color: e.target.value })}
+                        className="w-full h-10 px-1 py-1 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 cursor-pointer"
+                      />
+                    </div>
+                    <div className="flex items-end">
+                      <button
+                        type="submit"
+                        disabled={submittingCategory}
+                        className="w-full px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                      >
+                        <Plus className="w-5 h-5" />
+                        {submittingCategory ? 'Criando...' : 'Criar Categoria'}
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              </div>
+
+              {/* Lista de Categorias */}
+              <div>
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">Categorias Existentes</h3>
+                <div className="space-y-2 max-h-96 overflow-y-auto">
+                  {categories.length === 0 ? (
+                    <p className="text-gray-500 text-center py-4">Nenhuma categoria encontrada</p>
+                  ) : (
+                    categories.map((category) => (
+                      <div
+                        key={category.id}
+                        className={`p-3 rounded-lg border ${category.isActive !== false ? 'bg-white border-gray-200' : 'bg-gray-100 border-gray-300 opacity-60'}`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <span
+                              className="w-8 h-8 rounded-lg flex items-center justify-center text-lg"
+                              style={{ backgroundColor: category.color || (category.type === 'income' ? '#dcfce7' : '#fee2e2') }}
+                            >
+                              {category.icon || (category.type === 'income' ? '💰' : '💸')}
+                            </span>
+                            <div>
+                              <span className="font-medium text-gray-800">{category.name}</span>
+                              <div className="flex items-center gap-2 text-xs text-gray-500">
+                                <span className={`px-2 py-0.5 rounded-full ${category.type === 'income' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                  {category.type === 'income' ? 'Receita' : 'Despesa'}
+                                </span>
+                                {category.level && category.level > 0 && (
+                                  <span className="text-gray-400">Subcategoria</span>
+                                )}
+                                {category._count?.transactions !== undefined && (
+                                  <span className="text-gray-400">{category._count.transactions} transações</span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => toggleCategoryStatus(category)}
+                              className={`p-2 rounded-lg transition-colors ${category.isActive !== false ? 'hover:bg-gray-100 text-gray-600' : 'hover:bg-green-100 text-green-600'}`}
+                              title={category.isActive !== false ? 'Desativar' : 'Ativar'}
+                            >
+                              {category.isActive !== false ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                            </button>
+                            <button
+                              onClick={() => openEditCategoryModal(category)}
+                              className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
+                              title="Editar"
+                            >
+                              <Edit2 className="w-4 h-4 text-blue-600" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteCategory(category)}
+                              className="p-2 hover:bg-red-100 rounded-lg transition-colors"
+                              title="Excluir"
+                            >
+                              <Trash2 className="w-4 h-4 text-red-600" />
+                            </button>
+                          </div>
+                        </div>
+                        {/* Subcategorias */}
+                        {category.children && category.children.length > 0 && (
+                          <div className="mt-2 ml-8 space-y-1">
+                            {category.children.map((sub) => (
+                              <div
+                                key={sub.id}
+                                className={`p-2 rounded-lg border ${sub.isActive !== false ? 'bg-gray-50 border-gray-200' : 'bg-gray-100 border-gray-300 opacity-60'}`}
+                              >
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm">{sub.icon || '📁'}</span>
+                                    <span className="text-sm text-gray-700">{sub.name}</span>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      onClick={() => toggleCategoryStatus(sub)}
+                                      className={`p-1 rounded transition-colors ${sub.isActive !== false ? 'hover:bg-gray-200 text-gray-500' : 'hover:bg-green-100 text-green-600'}`}
+                                      title={sub.isActive !== false ? 'Desativar' : 'Ativar'}
+                                    >
+                                      {sub.isActive !== false ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                                    </button>
+                                    <button
+                                      onClick={() => openEditCategoryModal(sub)}
+                                      className="p-1 hover:bg-blue-100 rounded transition-colors"
+                                      title="Editar"
+                                    >
+                                      <Edit2 className="w-3 h-3 text-blue-600" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteCategory(sub)}
+                                      className="p-1 hover:bg-red-100 rounded transition-colors"
+                                      title="Excluir"
+                                    >
+                                      <Trash2 className="w-3 h-3 text-red-600" />
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 bg-gray-50 border-t border-gray-200">
+              <button
+                onClick={() => setShowCategoryModal(false)}
+                className="w-full px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Editar Categoria */}
+      {showEditCategoryModal && editingCategory && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
+            <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-5 flex items-center justify-between rounded-t-2xl">
+              <h2 className="text-xl font-bold text-white flex items-center gap-3">
+                <Edit2 className="w-6 h-6" />
+                Editar Categoria
+              </h2>
+              <button
+                onClick={() => setShowEditCategoryModal(false)}
+                className="p-2 hover:bg-white/20 rounded-lg transition-all text-white"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditCategory} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Nome *</label>
+                <input
+                  type="text"
+                  required
+                  value={categoryForm.name}
+                  onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
+                  placeholder="Nome da categoria"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Tipo *</label>
+                <select
+                  required
+                  value={categoryForm.type}
+                  onChange={(e) => setCategoryForm({ ...categoryForm, type: e.target.value as 'income' | 'expense', parentId: '' })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
+                >
+                  <option value="expense">Despesa</option>
+                  <option value="income">Receita</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Categoria Pai</label>
+                <select
+                  value={categoryForm.parentId || ''}
+                  onChange={(e) => setCategoryForm({ ...categoryForm, parentId: e.target.value || null })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
+                >
+                  <option value="">Nenhuma (Categoria Principal)</option>
+                  {getParentCandidates(categoryForm.type, editingCategory.id).map((cat) => (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.icon} {cat.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Ícone</label>
+                <input
+                  type="text"
+                  value={categoryForm.icon}
+                  onChange={(e) => setCategoryForm({ ...categoryForm, icon: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
+                  placeholder="Ex: 🏠, 🚗, 💰"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Cor</label>
+                <input
+                  type="color"
+                  value={categoryForm.color}
+                  onChange={(e) => setCategoryForm({ ...categoryForm, color: e.target.value })}
+                  className="w-full h-10 px-1 py-1 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowEditCategoryModal(false)}
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingCategory}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                >
+                  {submittingCategory ? 'Salvando...' : 'Salvar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

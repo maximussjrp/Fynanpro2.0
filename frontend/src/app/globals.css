@@ -130,3 +130,64 @@ body {
     background-color: rgb(243 244 246);
   }
 }
+
+/* ==================== FIX: GRÁFICO DE PIZZA MOBILE ==================== */
+/* Correção de texto branco em fundo branco no mobile (360px-430px) */
+@media (max-width: 430px) {
+  /* Labels do gráfico de pizza */
+  .pie-chart-mobile .recharts-pie-label-text,
+  .pie-chart-mobile .recharts-text,
+  .pie-chart-mobile text {
+    fill: #1f2937 !important;
+    color: #1f2937 !important;
+  }
+  
+  /* Legenda do gráfico */
+  .pie-chart-mobile .recharts-legend-item-text {
+    fill: #1f2937 !important;
+    color: #1f2937 !important;
+  }
+  
+  /* Tooltip - garantir contraste */
+  .pie-chart-mobile .recharts-tooltip-wrapper {
+    z-index: 1000;
+  }
+  
+  .pie-chart-mobile .recharts-default-tooltip {
+    background-color: #ffffff !important;
+    border: 1px solid #e5e7eb !important;
+    border-radius: 8px !important;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
+  }
+  
+  .pie-chart-mobile .recharts-tooltip-label,
+  .pie-chart-mobile .recharts-tooltip-item {
+    color: #1f2937 !important;
+  }
+  
+  .pie-chart-mobile .recharts-tooltip-item-name,
+  .pie-chart-mobile .recharts-tooltip-item-value {
+    color: #1f2937 !important;
+  }
+}
+
+/* Override dark mode para gráfico de pizza */
+@media (max-width: 430px) and (prefers-color-scheme: dark) {
+  .pie-chart-mobile .recharts-pie-label-text,
+  .pie-chart-mobile .recharts-text,
+  .pie-chart-mobile text {
+    fill: #1f2937 !important;
+    color: #1f2937 !important;
+  }
+  
+  .pie-chart-mobile .recharts-default-tooltip {
+    background-color: #ffffff !important;
+  }
+  
+  .pie-chart-mobile .recharts-tooltip-label,
+  .pie-chart-mobile .recharts-tooltip-item,
+  .pie-chart-mobile .recharts-tooltip-item-name,
+  .pie-chart-mobile .recharts-tooltip-item-value {
+    color: #1f2937 !important;
+  }
+}

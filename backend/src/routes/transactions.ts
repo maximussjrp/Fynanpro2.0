@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { successResponse, errorResponse } from '../utils/response';
 import { transactionService } from '../services/transaction.service';
+import { aiCategorizationService } from '../services/ai-categorization.service';
 import { CreateTransactionSchema, UpdateTransactionSchema, TransactionFiltersSchema } from '../dtos/transaction.dto';
 import { log } from '../utils/logger';
 import { prisma } from '../utils/prisma-client';
@@ -1142,6 +1143,121 @@ router.post('/:id/generate-next', async (req: AuthRequest, res: Response) => {
     }
 
     return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao gerar próxima ocorrência', 500);
+  }
+});
+
+// ==================== AI CATEGORY SUGGESTION ====================
+/**
+ * @swagger
+ * /transactions/suggest-category:
+ *   post:
+ *     summary: Sugerir categoria com IA
+ *     description: Usa IA (Google Gemini) para sugerir a categoria mais apropriada para uma transação
+ *     tags: [Transactions]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - description
+ *               - type
+ *             properties:
+ *               description:
+ *                 type: string
+ *                 description: Descrição da transação
+ *               amount:
+ *                 type: number
+ *                 description: Valor da transação
+ *               type:
+ *                 type: string
+ *                 enum: [income, expense]
+ *     responses:
+ *       200:
+ *         description: Sugestão de categoria retornada
+ *       400:
+ *         description: Dados inválidos
+ *       503:
+ *         description: Serviço de IA não disponível
+ */
+router.post('/suggest-category', async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId!;
+    const { description, amount, type } = req.body;
+
+    // Validação básica
+    if (!description || typeof description !== 'string') {
+      return errorResponse(res, 'VALIDATION_ERROR', 'Descrição é obrigatória', 400);
+    }
+
+    if (!type || !['income', 'expense'].includes(type)) {
+      return errorResponse(res, 'VALIDATION_ERROR', 'Tipo deve ser income ou expense', 400);
+    }
+
+    // Verificar se serviço está disponível
+    if (!aiCategorizationService.isAvailable()) {
+      return errorResponse(
+        res, 
+        'SERVICE_UNAVAILABLE', 
+        'Serviço de categorização automática não configurado', 
+        503
+      );
+    }
+
+    // Chamar serviço de IA
+    const suggestion = await aiCategorizationService.suggestCategory({
+      description,
+      amount: amount || 0,
+      type,
+      tenantId,
+    });
+
+    if (!suggestion) {
+      return errorResponse(
+        res, 
+        'AI_ERROR', 
+        'Não foi possível sugerir uma categoria', 
+        500
+      );
+    }
+
+    return successResponse(res, {
+      suggestion,
+      message: 'Categoria sugerida com sucesso',
+    });
+  } catch (error: any) {
+    log.error('Suggest category error', { error, body: req.body, tenantId: req.tenantId });
+    return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao sugerir categoria', 500);
+  }
+});
+
+/**
+ * @swagger
+ * /transactions/ai-status:
+ *   get:
+ *     summary: Verificar status do serviço de IA
+ *     description: Verifica se o serviço de categorização com IA está disponível
+ *     tags: [Transactions]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.get('/ai-status', async (req: AuthRequest, res: Response) => {
+  try {
+    const isAvailable = aiCategorizationService.isAvailable();
+    
+    return successResponse(res, {
+      available: isAvailable,
+      model: isAvailable ? 'gemini-2.5-flash-lite' : null,
+      message: isAvailable 
+        ? 'Serviço de categorização com IA disponível' 
+        : 'GEMINI_API_KEY não configurada',
+    });
+  } catch (error) {
+    log.error('AI status check error', { error });
+    return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao verificar status', 500);
   }
 });
 

@@ -155,6 +155,17 @@ export default function UnifiedTransactionModal({
     status: false,
   });
   const [transactionCount, setTransactionCount] = useState(0);
+  
+  // Ref para controlar se o modal já foi inicializado (evitar reset durante re-renders)
+  const wasOpenRef = useRef(false);
+  
+  // Refs para acessar valores atualizados dentro de closures
+  const multipleModeEnabledRef = useRef(multipleModeEnabled);
+  const lockedFieldsRef = useRef(lockedFields);
+  
+  // Manter refs sincronizados com states
+  multipleModeEnabledRef.current = multipleModeEnabled;
+  lockedFieldsRef.current = lockedFields;
 
   // Fechar dropdown ao clicar fora
   useEffect(() => {
@@ -171,14 +182,28 @@ export default function UnifiedTransactionModal({
   }, []);
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !wasOpenRef.current) {
+      // Modal acabou de abrir - fazer reset completo
+      wasOpenRef.current = true;
       loadFormData();
       resetForm(false);
-      setTransactionCount(0); // Reset contador ao abrir
+      setTransactionCount(0);
+      setMultipleModeEnabled(false);
+      setLockedFields({
+        type: false,
+        transactionDate: false,
+        categoryId: false,
+        bankAccountId: false,
+        paymentMethodId: false,
+        status: false,
+      });
       // Atualizar tab quando initialTab mudar
       if (initialTab) {
         setTransactionType(initialTab);
       }
+    } else if (!isOpen && wasOpenRef.current) {
+      // Modal fechou - resetar flag
+      wasOpenRef.current = false;
     }
   }, [isOpen, initialTab]);
 
@@ -208,21 +233,31 @@ export default function UnifiedTransactionModal({
   };
 
   const resetForm = (preserveLocked: boolean = false) => {
-    if (preserveLocked && multipleModeEnabled) {
-      // Preservar campos bloqueados
-      setFormData(prev => ({
-        type: lockedFields.type ? prev.type : defaultType,
-        amount: '',
-        description: '',
-        transactionDate: lockedFields.transactionDate ? prev.transactionDate : new Date().toISOString().split('T')[0],
-        categoryId: lockedFields.categoryId ? prev.categoryId : '',
-        bankAccountId: lockedFields.bankAccountId ? prev.bankAccountId : '',
-        paymentMethodId: lockedFields.paymentMethodId ? prev.paymentMethodId : '',
-        status: lockedFields.status ? prev.status : (transactionType === 'single' ? 'completed' : 'pending'),
-        notes: '',
-      }));
+    // Usar refs para garantir valores atualizados
+    const isMultipleMode = multipleModeEnabledRef.current;
+    const currentLockedFields = lockedFieldsRef.current;
+    
+    console.log('🔄 resetForm chamado:', { preserveLocked, isMultipleMode, currentLockedFields });
+    
+    if (preserveLocked && isMultipleMode) {
+      // Preservar campos bloqueados - manter status atual se bloqueado
+      setFormData(prev => {
+        const newData = {
+          type: currentLockedFields.type ? prev.type : defaultType,
+          amount: '',
+          description: '',
+          transactionDate: currentLockedFields.transactionDate ? prev.transactionDate : new Date().toISOString().split('T')[0],
+          categoryId: currentLockedFields.categoryId ? prev.categoryId : '',
+          bankAccountId: currentLockedFields.bankAccountId ? prev.bankAccountId : '',
+          paymentMethodId: currentLockedFields.paymentMethodId ? prev.paymentMethodId : '',
+          status: currentLockedFields.status ? prev.status : prev.status, // Manter status atual no modo múltiplos
+          notes: '',
+        };
+        console.log('📋 Novo formData (preservando bloqueados):', newData);
+        return newData;
+      });
       // Preservar busca de categoria se bloqueada
-      if (!lockedFields.categoryId) {
+      if (!currentLockedFields.categoryId) {
         setCategorySearch('');
       }
     } else {
@@ -708,7 +743,10 @@ export default function UnifiedTransactionModal({
               type="button"
               onClick={() => {
                 setTransactionType('single');
-                setFormData(prev => ({ ...prev, status: 'completed' }));
+                // Não alterar status se estiver bloqueado no modo múltiplos
+                if (!multipleModeEnabled || !lockedFields.status) {
+                  setFormData(prev => ({ ...prev, status: 'completed' }));
+                }
               }}
               className={`flex items-center gap-2 px-4 py-3 font-semibold transition-all border-b-2 ${
                 transactionType === 'single'
@@ -723,7 +761,10 @@ export default function UnifiedTransactionModal({
               type="button"
               onClick={() => {
                 setTransactionType('recurring');
-                setFormData(prev => ({ ...prev, status: 'pending' }));
+                // Não alterar status se estiver bloqueado no modo múltiplos
+                if (!multipleModeEnabled || !lockedFields.status) {
+                  setFormData(prev => ({ ...prev, status: 'pending' }));
+                }
               }}
               className={`flex items-center gap-2 px-4 py-3 font-semibold transition-all border-b-2 ${
                 transactionType === 'recurring'
@@ -738,7 +779,10 @@ export default function UnifiedTransactionModal({
               type="button"
               onClick={() => {
                 setTransactionType('installment');
-                setFormData(prev => ({ ...prev, status: 'pending' }));
+                // Não alterar status se estiver bloqueado no modo múltiplos
+                if (!multipleModeEnabled || !lockedFields.status) {
+                  setFormData(prev => ({ ...prev, status: 'pending' }));
+                }
               }}
               className={`flex items-center gap-2 px-4 py-3 font-semibold transition-all border-b-2 ${
                 transactionType === 'installment'

@@ -876,6 +876,7 @@ export class TransactionService {
 
               if (accountExists) {
                 if (txn.type === 'income') {
+                  // Receita: decrementa o saldo (reverte o crédito)
                   await tx.bankAccount.update({
                     where: { id: txn.bankAccountId },
                     data: {
@@ -885,14 +886,50 @@ export class TransactionService {
                     },
                   });
                 } else if (txn.type === 'expense') {
+                  // Despesa: incrementa o saldo (reverte o débito)
                   await tx.bankAccount.update({
                     where: { id: txn.bankAccountId },
                     data: {
                       currentBalance: {
-                        increment: amount,
+                        increment: Math.abs(amount),
                       },
                     },
                   });
+                } else if (txn.type === 'transfer') {
+                  // Transferência: reverter o valor na conta de origem/destino
+                  // Se amount é negativo, era saída (conta origem) - incrementar para reverter
+                  // Se amount é positivo, era entrada (conta destino) - decrementar para reverter
+                  if (amount < 0) {
+                    // Era saída (negativo) - reverter incrementando
+                    await tx.bankAccount.update({
+                      where: { id: txn.bankAccountId },
+                      data: {
+                        currentBalance: {
+                          increment: Math.abs(amount),
+                        },
+                      },
+                    });
+                    log.info('Reverted transfer outflow', { 
+                      transactionId: txn.id, 
+                      bankAccountId: txn.bankAccountId,
+                      amount: Math.abs(amount),
+                    });
+                  } else {
+                    // Era entrada (positivo) - reverter decrementando
+                    await tx.bankAccount.update({
+                      where: { id: txn.bankAccountId },
+                      data: {
+                        currentBalance: {
+                          decrement: amount,
+                        },
+                      },
+                    });
+                    log.info('Reverted transfer inflow', { 
+                      transactionId: txn.id, 
+                      bankAccountId: txn.bankAccountId,
+                      amount,
+                    });
+                  }
                 }
               } else {
                 log.warn('Bank account not found for balance revert', { 

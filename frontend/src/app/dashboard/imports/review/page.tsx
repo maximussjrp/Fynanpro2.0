@@ -18,7 +18,8 @@ import {
   ArrowLeft, RefreshCw, Check, X, AlertTriangle, 
   ArrowLeftRight, CreditCard, Filter, CheckSquare,
   Square, Zap, ZapOff, Tag, Loader2, ChevronDown,
-  Sparkles, TrendingDown, CheckCircle2, Info, Clock
+  Sparkles, TrendingDown, CheckCircle2, Info, Clock,
+  Wand2
 } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
@@ -94,6 +95,11 @@ export default function ReviewPage() {
   // Track resolved count for UX feedback
   const [resolvedInSession, setResolvedInSession] = useState(0);
   
+  // AI Categorization states
+  const [aiAvailable, setAiAvailable] = useState<boolean>(false);
+  const [aiSuggesting, setAiSuggesting] = useState(false);
+  const [aiProgress, setAiProgress] = useState({ current: 0, total: 0 });
+  
   // ==================== DATA LOADING ====================
   
   const loadReviewData = useCallback(async () => {
@@ -133,11 +139,124 @@ export default function ReviewPage() {
       console.error('Erro ao carregar categorias:', err);
     }
   }, [accessToken]);
+
+  // Check if AI is available
+  const checkAiAvailability = useCallback(async () => {
+    if (!accessToken) return;
+    try {
+      const response = await fetch(`${API_URL}/transactions/ai-status`, {
+        headers: { 'Authorization': `Bearer ${accessToken}` }
+      });
+      const data = await response.json();
+      setAiAvailable(data.data?.available || false);
+    } catch {
+      setAiAvailable(false);
+    }
+  }, [accessToken]);
   
   useEffect(() => {
     loadReviewData();
     loadCategories();
-  }, [loadReviewData, loadCategories]);
+    checkAiAvailability();
+  }, [loadReviewData, loadCategories, checkAiAvailability]);
+
+  // ==================== AI CATEGORY SUGGESTION ====================
+
+  const suggestCategoriesWithAI = async () => {
+    // Get items without category that need review
+    const itemsToProcess = items.filter(item => 
+      item.needsReview && 
+      !item.categoryId && 
+      item.flags.transactionKind === 'bank' // Only normal transactions
+    );
+
+    if (itemsToProcess.length === 0) {
+      setError('Nenhuma transação sem categoria para processar');
+      return;
+    }
+
+    setAiSuggesting(true);
+    setAiProgress({ current: 0, total: itemsToProcess.length });
+    setError(null);
+    setSuccess(null);
+
+    let successCount = 0;
+    let failCount = 0;
+
+    try {
+      // Process in batches of 3 to avoid rate limiting
+      for (let i = 0; i < itemsToProcess.length; i++) {
+        const item = itemsToProcess[i];
+        setAiProgress({ current: i + 1, total: itemsToProcess.length });
+
+        try {
+          // Get AI suggestion
+          const suggestResponse = await fetch(`${API_URL}/transactions/suggest-category`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              description: item.rawDescription,
+              amount: Math.abs(item.amount),
+              type: item.amount < 0 ? 'expense' : 'income'
+            })
+          });
+
+          if (suggestResponse.ok) {
+            const suggestData = await suggestResponse.json();
+            const suggestion = suggestData.data?.suggestion;
+
+            if (suggestion && suggestion.confidence >= 0.5) {
+              // Apply category to this transaction
+              const applyResponse = await fetch(`${API_URL}/import/review/${batchId}`, {
+                method: 'PUT',
+                headers: {
+                  'Authorization': `Bearer ${accessToken}`,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                  transactionIds: [item.transactionId],
+                  action: 'set_category',
+                  payload: { categoryId: suggestion.categoryId }
+                })
+              });
+
+              if (applyResponse.ok) {
+                successCount++;
+              } else {
+                failCount++;
+              }
+            } else {
+              failCount++;
+            }
+          } else {
+            failCount++;
+          }
+        } catch {
+          failCount++;
+        }
+
+        // Small delay to avoid rate limiting
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+
+      if (successCount > 0) {
+        setSuccess(`✨ IA categorizou ${successCount} transações automaticamente!`);
+        setResolvedInSession(prev => prev + successCount);
+        await loadReviewData();
+      }
+      if (failCount > 0 && successCount === 0) {
+        setError(`Não foi possível categorizar ${failCount} transações`);
+      }
+    } catch (err: any) {
+      setError('Erro ao processar categorização com IA');
+    } finally {
+      setAiSuggesting(false);
+      setAiProgress({ current: 0, total: 0 });
+    }
+  };
   
   // ==================== SELECTION ====================
   
@@ -529,6 +648,26 @@ export default function ReviewPage() {
           </p>
         </div>
       )}
+
+      {/* AI Processing Progress */}
+      {aiSuggesting && (
+        <div className="bg-gradient-to-r from-violet-500/10 to-fuchsia-500/10 border border-violet-500/30 rounded-xl p-4 mb-4">
+          <div className="flex items-center gap-3">
+            <Wand2 className="w-5 h-5 text-violet-400 animate-pulse" />
+            <div className="flex-1">
+              <p className="text-violet-300 font-medium">
+                ✨ Categorizando com IA... {aiProgress.current}/{aiProgress.total}
+              </p>
+              <div className="mt-2 h-2 bg-zinc-700 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-gradient-to-r from-violet-500 to-fuchsia-500 transition-all duration-300"
+                  style={{ width: `${aiProgress.total > 0 ? (aiProgress.current / aiProgress.total) * 100 : 0}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* Bulk Actions - Smart */}
       <div className="flex items-center gap-4 mb-4 flex-wrap">
@@ -605,6 +744,26 @@ export default function ReviewPage() {
                   <p className="text-xs text-zinc-400">Todas as sugestões</p>
                 </div>
               </button>
+              {aiAvailable && (
+                <button
+                  onClick={() => {
+                    setShowBulkMenu(false);
+                    suggestCategoriesWithAI();
+                  }}
+                  disabled={aiSuggesting}
+                  className="w-full px-4 py-3 text-left hover:bg-zinc-800 transition-colors flex items-center gap-3 border-t border-zinc-700 bg-gradient-to-r from-violet-500/10 to-fuchsia-500/10"
+                >
+                  <div className="w-8 h-8 bg-gradient-to-br from-violet-500 to-fuchsia-500 rounded-lg flex items-center justify-center">
+                    <Wand2 className="w-4 h-4 text-white" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-transparent bg-clip-text bg-gradient-to-r from-violet-400 to-fuchsia-400">
+                      ✨ Categorizar com IA
+                    </p>
+                    <p className="text-xs text-zinc-400">Google Gemini (gratuito)</p>
+                  </div>
+                </button>
+              )}
             </div>
           )}
         </div>

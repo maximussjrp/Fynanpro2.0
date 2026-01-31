@@ -493,12 +493,14 @@ router.post('/transfer/execute', async (req: AuthRequest, res: Response) => {
       return errorResponse(res, 'VALIDATION_ERROR', 'Conta de destino não encontrada', 400);
     }
 
-    // Check if has sufficient balance
-    if (Number(fromAccount.currentBalance) < amount) {
-      return errorResponse(res, 'INSUFFICIENT_BALANCE', 'Saldo insuficiente na conta de origem', 400);
-    }
+    // Verificar se saldo ficará negativo (apenas para aviso, não bloqueia)
+    const currentBalance = Number(fromAccount.currentBalance);
+    const willBeNegative = currentBalance < amount;
+    const newBalance = currentBalance - amount;
 
-    const transferDate = new Date(transactionDate);
+    // Converter data para timezone local (evita problema de UTC-3)
+    const [year, month, day] = transactionDate.split('-').map(Number);
+    const transferDate = new Date(year, month - 1, day, 12, 0, 0); // meio-dia para evitar problemas de timezone
     const transferDescription = description || `Transferência: ${fromAccount.name} → ${toAccount.name}`;
 
     // ========== TRANSAÇÃO ATÔMICA ==========
