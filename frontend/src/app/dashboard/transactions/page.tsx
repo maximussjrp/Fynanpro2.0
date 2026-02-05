@@ -127,6 +127,8 @@ export default function TransactionsPage() {
     statuses: [],
   });
   const [dateColumnFilter, setDateColumnFilter] = useState<{ startDate: string; endDate: string } | null>(null);
+  // Draft para filtro de data da coluna (evita filtrar ao navegar no calendário)
+  const [draftDateColumnFilter, setDraftDateColumnFilter] = useState<{ startDate: string; endDate: string } | null>(null);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [columnFilterSearch, setColumnFilterSearch] = useState('');
   const [showTransferModal, setShowTransferModal] = useState(false);
@@ -300,7 +302,7 @@ export default function TransactionsPage() {
       const params: any = {
         startDate: filters.startDate,
         endDate: filters.endDate,
-        limit: 1000, // Buscar todas as transações do período
+        limit: 10000, // Buscar todas as transações do período (sem limite prático)
       };
 
       if (filters.categoryId) params.categoryId = filters.categoryId;
@@ -924,7 +926,7 @@ export default function TransactionsPage() {
         {isOpen && isDateFilter && (
           <div 
             ref={dropdownRef}
-            className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[280px] p-3"
+            className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[300px] p-3"
             onKeyDown={(e) => e.stopPropagation()}
           >
             <div className="space-y-3">
@@ -932,12 +934,15 @@ export default function TransactionsPage() {
                 <label className="block text-xs font-medium text-gray-600 mb-1">Data Inicial</label>
                 <input
                   type="date"
-                  value={dateColumnFilter?.startDate || ''}
-                  onChange={(e) => setDateColumnFilter(prev => ({
+                  value={draftDateColumnFilter?.startDate || dateColumnFilter?.startDate || ''}
+                  onChange={(e) => setDraftDateColumnFilter(prev => ({
                     startDate: e.target.value,
-                    endDate: prev?.endDate || e.target.value
+                    endDate: prev?.endDate || dateColumnFilter?.endDate || e.target.value
                   }))}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    draftDateColumnFilter && (draftDateColumnFilter.startDate !== dateColumnFilter?.startDate || draftDateColumnFilter.endDate !== dateColumnFilter?.endDate)
+                      ? 'border-amber-400' : 'border-gray-200'
+                  }`}
                   style={{ colorScheme: 'light' }}
                 />
               </div>
@@ -945,20 +950,36 @@ export default function TransactionsPage() {
                 <label className="block text-xs font-medium text-gray-600 mb-1">Data Final</label>
                 <input
                   type="date"
-                  value={dateColumnFilter?.endDate || ''}
-                  onChange={(e) => setDateColumnFilter(prev => ({
-                    startDate: prev?.startDate || e.target.value,
+                  value={draftDateColumnFilter?.endDate || dateColumnFilter?.endDate || ''}
+                  onChange={(e) => setDraftDateColumnFilter(prev => ({
+                    startDate: prev?.startDate || dateColumnFilter?.startDate || e.target.value,
                     endDate: e.target.value
                   }))}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    draftDateColumnFilter && (draftDateColumnFilter.startDate !== dateColumnFilter?.startDate || draftDateColumnFilter.endDate !== dateColumnFilter?.endDate)
+                      ? 'border-amber-400' : 'border-gray-200'
+                  }`}
                   style={{ colorScheme: 'light' }}
                 />
               </div>
+              {/* Botão Aplicar - só aparece se há mudanças pendentes */}
+              {draftDateColumnFilter && (draftDateColumnFilter.startDate !== dateColumnFilter?.startDate || draftDateColumnFilter.endDate !== dateColumnFilter?.endDate) && (
+                <button
+                  onClick={() => {
+                    setDateColumnFilter(draftDateColumnFilter);
+                    setDraftDateColumnFilter(null);
+                  }}
+                  className="w-full px-3 py-2 text-sm bg-blue-600 text-white hover:bg-blue-700 rounded-lg transition-colors font-medium"
+                >
+                  ✓ Aplicar Filtro
+                </button>
+              )}
               <div className="flex gap-2 pt-2 border-t border-gray-100">
                 <button
                   onClick={() => {
                     const today = new Date().toISOString().split('T')[0];
                     setDateColumnFilter({ startDate: today, endDate: today });
+                    setDraftDateColumnFilter(null);
                   }}
                   className="flex-1 px-3 py-1.5 text-xs bg-gray-100 text-gray-700 hover:bg-gray-200 rounded transition-colors"
                 >
@@ -970,6 +991,7 @@ export default function TransactionsPage() {
                     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
                     const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().split('T')[0];
                     setDateColumnFilter({ startDate: startOfMonth, endDate: endOfMonth });
+                    setDraftDateColumnFilter(null);
                   }}
                   className="flex-1 px-3 py-1.5 text-xs bg-gray-100 text-gray-700 hover:bg-gray-200 rounded transition-colors"
                 >
@@ -980,6 +1002,7 @@ export default function TransactionsPage() {
                 <button
                   onClick={() => {
                     setDateColumnFilter(null);
+                    setDraftDateColumnFilter(null);
                     setOpenDropdown(null);
                   }}
                   className="w-full px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded transition-colors"
