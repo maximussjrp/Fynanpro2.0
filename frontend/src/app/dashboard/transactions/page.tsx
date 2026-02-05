@@ -265,21 +265,31 @@ export default function TransactionsPage() {
       // Data de hoje formatada
       const today = new Date().toISOString().split('T')[0];
       
+      // Se status for overdue, expandir range para pegar transações antigas (últimos 2 anos até hoje)
+      const isOverdue = statusParam === 'overdue';
+      const overdueStartDate = new Date();
+      overdueStartDate.setFullYear(overdueStartDate.getFullYear() - 2);
+      
       setFilters(prev => ({
         ...prev,
+        // Se for overdue, expandir range para últimos 2 anos até hoje
+        ...(isOverdue && { 
+          startDate: overdueStartDate.toISOString().split('T')[0], 
+          endDate: today 
+        }),
         // Se tiver date específico, usa como start e end
-        ...(dateParam && { startDate: dateParam, endDate: dateParam }),
+        ...(!isOverdue && dateParam && { startDate: dateParam, endDate: dateParam }),
         // Se tiver startDate e endDate, usa eles
-        ...(startDateParam && { startDate: startDateParam }),
-        ...(endDateParam && { endDate: endDateParam }),
+        ...(!isOverdue && startDateParam && { startDate: startDateParam }),
+        ...(!isOverdue && endDateParam && { endDate: endDateParam }),
         // Tipo: INCOME, EXPENSE ou TRANSFER
         ...(typeParam && { type: typeParam.toLowerCase() as 'all' | 'income' | 'expense' | 'transfer' }),
         // Status: completed ou pending (se for overdue, deixa all para filtrar por coluna)
         ...(statusParam && statusParam !== 'overdue' && { status: statusParam.toLowerCase() as 'all' | 'completed' | 'pending' })
       }));
       
-      // Se status for overdue, aplicar filtro de coluna
-      if (statusParam === 'overdue') {
+      // Se status for overdue, aplicar filtro de coluna para status atrasado
+      if (isOverdue) {
         setColumnFilters(prev => ({ ...prev, statuses: ['overdue'] }));
       }
       
