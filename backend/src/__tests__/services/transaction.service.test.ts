@@ -494,6 +494,109 @@ describe('TransactionService', () => {
       );
     });
 
+    it('deve criar datas com horários corretos para início e fim do dia', async () => {
+      (prisma.transaction.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.transaction.count as jest.Mock).mockResolvedValue(0);
+
+      await transactionService.getAll('tenant-123', {
+        startDate: '2024-01-15',
+        endDate: '2024-01-15',
+        page: 1,
+        limit: 10,
+      });
+
+      const call = (prisma.transaction.findMany as jest.Mock).mock.calls[0][0];
+      const { gte, lte } = call.where.transactionDate;
+      
+      // Verificar que gte é início do dia (00:00:00)
+      expect(gte.getHours()).toBe(0);
+      expect(gte.getMinutes()).toBe(0);
+      expect(gte.getSeconds()).toBe(0);
+      expect(gte.getMilliseconds()).toBe(0);
+      
+      // Verificar que lte é final do dia (23:59:59.999)
+      expect(lte.getHours()).toBe(23);
+      expect(lte.getMinutes()).toBe(59);
+      expect(lte.getSeconds()).toBe(59);
+      expect(lte.getMilliseconds()).toBe(999);
+    });
+
+    it('deve filtrar corretamente datas retroativas (passado distante)', async () => {
+      (prisma.transaction.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.transaction.count as jest.Mock).mockResolvedValue(0);
+
+      // Testar data retroativa de 1 ano atrás
+      await transactionService.getAll('tenant-123', {
+        startDate: '2023-01-01',
+        endDate: '2023-12-31',
+        page: 1,
+        limit: 10,
+      });
+
+      const call = (prisma.transaction.findMany as jest.Mock).mock.calls[0][0];
+      const { gte, lte } = call.where.transactionDate;
+      
+      // Verificar ano correto
+      expect(gte.getFullYear()).toBe(2023);
+      expect(lte.getFullYear()).toBe(2023);
+      
+      // Verificar meses corretos
+      expect(gte.getMonth()).toBe(0); // Janeiro = 0
+      expect(lte.getMonth()).toBe(11); // Dezembro = 11
+      
+      // Verificar dias corretos
+      expect(gte.getDate()).toBe(1);
+      expect(lte.getDate()).toBe(31);
+    });
+
+    it('deve filtrar corretamente range cruzando meses', async () => {
+      (prisma.transaction.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.transaction.count as jest.Mock).mockResolvedValue(0);
+
+      await transactionService.getAll('tenant-123', {
+        startDate: '2024-11-25',
+        endDate: '2024-12-05',
+        page: 1,
+        limit: 10,
+      });
+
+      const call = (prisma.transaction.findMany as jest.Mock).mock.calls[0][0];
+      const { gte, lte } = call.where.transactionDate;
+      
+      // Início: 25 de Novembro
+      expect(gte.getMonth()).toBe(10); // Novembro = 10
+      expect(gte.getDate()).toBe(25);
+      
+      // Fim: 5 de Dezembro
+      expect(lte.getMonth()).toBe(11); // Dezembro = 11
+      expect(lte.getDate()).toBe(5);
+    });
+
+    it('deve filtrar corretamente range cruzando anos', async () => {
+      (prisma.transaction.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.transaction.count as jest.Mock).mockResolvedValue(0);
+
+      await transactionService.getAll('tenant-123', {
+        startDate: '2024-12-20',
+        endDate: '2025-01-10',
+        page: 1,
+        limit: 10,
+      });
+
+      const call = (prisma.transaction.findMany as jest.Mock).mock.calls[0][0];
+      const { gte, lte } = call.where.transactionDate;
+      
+      // Início: 20 de Dezembro de 2024
+      expect(gte.getFullYear()).toBe(2024);
+      expect(gte.getMonth()).toBe(11); // Dezembro
+      expect(gte.getDate()).toBe(20);
+      
+      // Fim: 10 de Janeiro de 2025
+      expect(lte.getFullYear()).toBe(2025);
+      expect(lte.getMonth()).toBe(0); // Janeiro
+      expect(lte.getDate()).toBe(10);
+    });
+
     it('deve isolar transações por tenant', async () => {
       (prisma.transaction.findMany as jest.Mock).mockResolvedValue([]);
       (prisma.transaction.count as jest.Mock).mockResolvedValue(0);

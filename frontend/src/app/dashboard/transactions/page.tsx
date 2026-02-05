@@ -165,16 +165,90 @@ export default function TransactionsPage() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
   
-  // Filtros
-  const [filters, setFilters] = useState({
-    startDate: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
-    endDate: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().split('T')[0],
+  // Helper para obter datas do mês atual
+  const getDefaultDateRange = () => {
+    const now = new Date();
+    return {
+      startDate: new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0],
+      endDate: new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0],
+    };
+  };
+
+  const defaultRange = getDefaultDateRange();
+
+  // Filtros APLICADOS (usados para buscar dados da API)
+  const [appliedFilters, setAppliedFilters] = useState({
+    startDate: defaultRange.startDate,
+    endDate: defaultRange.endDate,
     categoryId: '',
     bankAccountId: '',
     paymentMethodId: '',
     type: 'all' as 'all' | 'income' | 'expense' | 'transfer',
     status: 'all' as 'all' | 'completed' | 'pending',
   });
+
+  // Filtros DRAFT (o que o usuário está escolhendo no formulário)
+  const [draftDateRange, setDraftDateRange] = useState({
+    startDate: defaultRange.startDate,
+    endDate: defaultRange.endDate,
+  });
+
+  // Flag para indicar se o draft é diferente do aplicado
+  const dateFilterPending = draftDateRange.startDate !== appliedFilters.startDate || 
+                            draftDateRange.endDate !== appliedFilters.endDate;
+
+  // Função para aplicar o filtro de data
+  const applyDateFilter = () => {
+    setAppliedFilters(prev => ({
+      ...prev,
+      startDate: draftDateRange.startDate,
+      endDate: draftDateRange.endDate,
+    }));
+  };
+
+  // Atalho: Aplicar "Hoje"
+  const applyToday = () => {
+    const today = new Date().toISOString().split('T')[0];
+    setDraftDateRange({ startDate: today, endDate: today });
+    setAppliedFilters(prev => ({ ...prev, startDate: today, endDate: today }));
+  };
+
+  // Atalho: Aplicar "Este Mês"
+  const applyThisMonth = () => {
+    const range = getDefaultDateRange();
+    setDraftDateRange(range);
+    setAppliedFilters(prev => ({ ...prev, ...range }));
+  };
+
+  // Atalho: Aplicar "Mês Anterior"
+  const applyLastMonth = () => {
+    const now = new Date();
+    const startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split('T')[0];
+    const endDate = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().split('T')[0];
+    setDraftDateRange({ startDate, endDate });
+    setAppliedFilters(prev => ({ ...prev, startDate, endDate }));
+  };
+
+  // Referência ao antigo estado "filters" (agora aponta para appliedFilters para compatibilidade)
+  const filters = appliedFilters;
+  const setFilters = (valueOrUpdater: typeof appliedFilters | ((prev: typeof appliedFilters) => typeof appliedFilters)) => {
+    if (typeof valueOrUpdater === 'function') {
+      setAppliedFilters(prev => {
+        const newVal = valueOrUpdater(prev);
+        // Sincronizar draft se datas mudaram
+        if (newVal.startDate !== prev.startDate || newVal.endDate !== prev.endDate) {
+          setDraftDateRange({ startDate: newVal.startDate, endDate: newVal.endDate });
+        }
+        return newVal;
+      });
+    } else {
+      // Sincronizar draft se datas mudaram
+      if (valueOrUpdater.startDate !== appliedFilters.startDate || valueOrUpdater.endDate !== appliedFilters.endDate) {
+        setDraftDateRange({ startDate: valueOrUpdater.startDate, endDate: valueOrUpdater.endDate });
+      }
+      setAppliedFilters(valueOrUpdater);
+    }
+  };
 
   // Verificar se há parâmetros na URL
   useEffect(() => {
@@ -1007,30 +1081,75 @@ export default function TransactionsPage() {
           <div className="bg-white rounded-lg shadow-md p-6 mb-6 animate-fadeIn">
             <h3 className="text-lg font-semibold mb-4">Filtros</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Data Inicial</label>
-                <input
-                  type="date"
-                  value={filters.startDate}
-                  onChange={(e) => setFilters({ ...filters, startDate: e.target.value })}
-                  className="w-full px-4 py-2 min-h-[44px] border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white appearance-none"
-                  style={{ colorScheme: 'light' }}
-                  title="Data inicial do filtro"
-                  aria-label="Data inicial"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Data Final</label>
-                <input
-                  type="date"
-                  value={filters.endDate}
-                  onChange={(e) => setFilters({ ...filters, endDate: e.target.value })}
-                  className="w-full px-4 py-2 min-h-[44px] border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white appearance-none"
-                  style={{ colorScheme: 'light' }}
-                  title="Data final do filtro"
-                  aria-label="Data final"
-                />
+              {/* Seção de Datas com Draft e Apply */}
+              <div className="lg:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Período</label>
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-wrap gap-2">
+                    <div className="flex-1 min-w-[140px]">
+                      <input
+                        type="date"
+                        value={draftDateRange.startDate}
+                        onChange={(e) => setDraftDateRange(prev => ({ ...prev, startDate: e.target.value }))}
+                        className={`w-full px-4 py-2 min-h-[44px] border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white appearance-none ${dateFilterPending ? 'border-amber-400' : 'border-gray-300'}`}
+                        style={{ colorScheme: 'light' }}
+                        title="Data inicial do filtro (navegue sem aplicar automaticamente)"
+                        aria-label="Data inicial"
+                      />
+                    </div>
+                    <span className="flex items-center text-gray-500">até</span>
+                    <div className="flex-1 min-w-[140px]">
+                      <input
+                        type="date"
+                        value={draftDateRange.endDate}
+                        onChange={(e) => setDraftDateRange(prev => ({ ...prev, endDate: e.target.value }))}
+                        className={`w-full px-4 py-2 min-h-[44px] border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white appearance-none ${dateFilterPending ? 'border-amber-400' : 'border-gray-300'}`}
+                        style={{ colorScheme: 'light' }}
+                        title="Data final do filtro (navegue sem aplicar automaticamente)"
+                        aria-label="Data final"
+                      />
+                    </div>
+                    <button
+                      onClick={applyDateFilter}
+                      disabled={!dateFilterPending}
+                      className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 min-h-[44px] ${
+                        dateFilterPending 
+                          ? 'bg-blue-600 text-white hover:bg-blue-700' 
+                          : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                      }`}
+                      title={dateFilterPending ? 'Aplicar filtro de data' : 'Filtro já aplicado'}
+                    >
+                      <Filter className="w-4 h-4" />
+                      Aplicar
+                    </button>
+                  </div>
+                  {/* Atalhos rápidos */}
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={applyToday}
+                      className="px-3 py-1.5 text-xs bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
+                    >
+                      Hoje
+                    </button>
+                    <button
+                      onClick={applyThisMonth}
+                      className="px-3 py-1.5 text-xs bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
+                    >
+                      Este Mês
+                    </button>
+                    <button
+                      onClick={applyLastMonth}
+                      className="px-3 py-1.5 text-xs bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
+                    >
+                      Mês Anterior
+                    </button>
+                    {dateFilterPending && (
+                      <span className="flex items-center text-xs text-amber-600 font-medium">
+                        ⚠️ Clique em "Aplicar" para filtrar
+                      </span>
+                    )}
+                  </div>
+                </div>
               </div>
 
               <div>

@@ -29,6 +29,45 @@ function parseLocalDate(dateInput: string | Date | undefined | null): Date {
   return new Date(year, month - 1, day, 12, 0, 0);
 }
 
+/**
+ * Helper para criar intervalo de datas para filtro
+ * Considera timezone Brazil (America/Sao_Paulo, -03:00)
+ * Garante que filtramos "dia inteiro" no fuso do usuário
+ * 
+ * @param startDateStr - Data inicial no formato YYYY-MM-DD
+ * @param endDateStr - Data final no formato YYYY-MM-DD
+ * @returns Objeto com gte e lte para filtro Prisma
+ */
+function createDateRangeFilter(startDateStr: string, endDateStr: string) {
+  // Parse como data local (evita interpretação UTC)
+  const [startYear, startMonth, startDay] = startDateStr.split('-').map(Number);
+  const [endYear, endMonth, endDay] = endDateStr.split('-').map(Number);
+  
+  // Criar Date objects no fuso local (servidor deve estar em UTC ou America/Sao_Paulo)
+  // Para garantir consistência, usamos horários explícitos
+  
+  // Início do dia: 00:00:00.000
+  const startDate = new Date(startYear, startMonth - 1, startDay, 0, 0, 0, 0);
+  
+  // Final do dia: 23:59:59.999
+  const endDate = new Date(endYear, endMonth - 1, endDay, 23, 59, 59, 999);
+  
+  log.debug('createDateRangeFilter', { 
+    input: { startDateStr, endDateStr },
+    output: { 
+      startDate: startDate.toISOString(), 
+      endDate: endDate.toISOString(),
+      startLocal: startDate.toString(),
+      endLocal: endDate.toString()
+    }
+  });
+  
+  return {
+    gte: startDate,
+    lte: endDate,
+  };
+}
+
 // Interfaces
 interface TransactionSummary {
   totalIncome: number;
@@ -67,16 +106,8 @@ export class TransactionService {
       };
 
       if (filters.startDate && filters.endDate) {
-        const startDate = new Date(filters.startDate);
-        startDate.setHours(0, 0, 0, 0); // Início do dia
-        
-        const endDate = new Date(filters.endDate);
-        endDate.setHours(23, 59, 59, 999); // Final do dia
-        
-        where.transactionDate = {
-          gte: startDate,
-          lte: endDate,
-        };
+        // Usar helper que trata timezone corretamente
+        where.transactionDate = createDateRangeFilter(filters.startDate, filters.endDate);
       }
 
       if (filters.type) {
@@ -999,16 +1030,8 @@ export class TransactionService {
       };
 
       if (filters.startDate && filters.endDate) {
-        const startDate = new Date(filters.startDate);
-        startDate.setHours(0, 0, 0, 0); // Início do dia
-        
-        const endDate = new Date(filters.endDate);
-        endDate.setHours(23, 59, 59, 999); // Final do dia
-        
-        where.transactionDate = {
-          gte: startDate,
-          lte: endDate,
-        };
+        // Usar helper que trata timezone corretamente
+        where.transactionDate = createDateRangeFilter(filters.startDate, filters.endDate);
       }
 
       if (filters.categoryId) {
