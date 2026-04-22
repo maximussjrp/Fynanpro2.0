@@ -29,7 +29,7 @@ import { swaggerSpec } from './config/swagger';
 import { startTransactionGeneratorJob } from './jobs/transaction-generator.job';
 import { startAllJobs } from './jobs/notification.job';
 import { authService } from './services/auth.service';
-import { RegisterSchema, LoginSchema, RefreshTokenSchema } from './dtos/auth.dto';
+import { RegisterSchema, LoginSchema, RefreshTokenSchema, ChangePasswordSchema } from './dtos/auth.dto';
 import { log, httpLogger } from './utils/logger';
 import { subscriptionMiddlewareWithExemptions } from './middleware/subscription';
 import { authMiddleware } from './middleware/auth';
@@ -763,10 +763,10 @@ apiRouter.post('/auth/reset-password', async (req: Request, res: Response) => {
 });
 
 // Logout de todos os dispositivos (requer autenticação)
-apiRouter.post('/auth/logout-all', async (req: Request, res: Response) => {
+apiRouter.post('/auth/logout-all', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user?.userId;
-    
+    const userId = (req as any).userId;
+
     if (!userId) {
       return res.status(401).json({
         success: false,
@@ -791,6 +791,60 @@ apiRouter.post('/auth/logout-all', async (req: Request, res: Response) => {
         code: 'INTERNAL_ERROR',
         message: 'Erro ao fazer logout'
       }
+    });
+  }
+});
+
+// Alterar senha (usuário autenticado)
+apiRouter.post('/auth/change-password', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).userId;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: { code: 'UNAUTHORIZED', message: 'Não autenticado' }
+      });
+    }
+
+    const validated = ChangePasswordSchema.parse(req.body);
+    await authService.changePassword(userId, validated);
+
+    return res.json({
+      success: true,
+      message: 'Senha alterada com sucesso. Faça login novamente.'
+    });
+  } catch (error: any) {
+    log.error('Change password error', { error: error?.message });
+
+    if (error?.name === 'ZodError') {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: error.errors?.[0]?.message || 'Dados inválidos',
+          details: error.errors
+        }
+      });
+    }
+
+    if (error?.message === 'Senha atual incorreta') {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_CURRENT_PASSWORD', message: 'Senha atual incorreta' }
+      });
+    }
+
+    if (error?.message === 'Usuário não encontrado') {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'USER_NOT_FOUND', message: 'Usuário não encontrado' }
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      error: { code: 'INTERNAL_ERROR', message: 'Erro ao alterar senha' }
     });
   }
 });
