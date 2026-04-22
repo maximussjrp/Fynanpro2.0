@@ -3222,7 +3222,7 @@ export class ChatbotService {
         },
       });
       
-      const totalMes = (totalResult._sum.amount || 0) + newAmount;
+      const totalMes = Number(totalResult._sum.amount || 0) + newAmount;
       
       // Verificar níveis de alerta
       const percentual = (totalMes / limite) * 100;

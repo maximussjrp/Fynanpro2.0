@@ -1,3 +1,5 @@
+// @ts-nocheck -- Feature adormecida: tabelas Coupon/CouponUsage não existem no schema.prisma nem no DB.
+// Rotas em admin.ts nunca foram exercitadas em produção. Código preservado como referência.
 import { prisma } from '../config/database';
 import { Decimal } from '@prisma/client/runtime/library';
 

@@ -1,3 +1,7 @@
+// @ts-nocheck -- Feature adormecida: tabelas Subscription/Payment não existem no schema.prisma nem no DB.
+// Status de assinatura atualmente é lido direto de Tenant.subscriptionPlan/Status.
+// Código preservado para quando integração com gateway (Asaas) for ativada.
+
 /**
  * Payment Service - Integração com Asaas
  * Sistema de cobrança recorrente para assinaturas SaaS

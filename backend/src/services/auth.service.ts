@@ -23,6 +23,7 @@ interface AuthResponse {
     email: string;
     fullName: string;
     role: string;
+    isEmailVerified?: boolean;
   };
   tenant: {
     id: string;
@@ -30,6 +31,7 @@ interface AuthResponse {
     slug: string;
   };
   tokens: TokenPair;
+  message?: string;
 }
 
 export class AuthService {
@@ -688,7 +690,7 @@ export class AuthService {
     try {
       // Usa ioredis para controlar tentativas
       const Redis = (await import('ioredis')).default;
-      const redis = new Redis(env.REDIS_URL);
+      const redis = new Redis(env.REDIS_URL || 'redis://localhost:6379');
       
       const attempts = await redis.incr(key);
       
@@ -720,7 +722,7 @@ export class AuthService {
     
     try {
       const Redis = (await import('ioredis')).default;
-      const redis = new Redis(env.REDIS_URL);
+      const redis = new Redis(env.REDIS_URL || 'redis://localhost:6379');
       
       const attempts = await redis.get(key);
       const ttl = await redis.ttl(key);
@@ -746,7 +748,7 @@ export class AuthService {
     
     try {
       const Redis = (await import('ioredis')).default;
-      const redis = new Redis(env.REDIS_URL);
+      const redis = new Redis(env.REDIS_URL || 'redis://localhost:6379');
       await redis.del(key);
       await redis.quit();
     } catch (error) {

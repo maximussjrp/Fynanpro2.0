@@ -190,7 +190,7 @@ Apenas o JSON, sem texto adicional.`;
         return null;
       }
 
-      const data = await response.json();
+      const data: any = await response.json();
       
       // Extrair texto da resposta
       const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;

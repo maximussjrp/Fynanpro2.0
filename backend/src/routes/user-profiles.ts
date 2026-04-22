@@ -539,7 +539,8 @@ router.put('/:id/avatar', async (req: AuthRequest, res) => {
 
     return successResponse(res, {
       profile: updatedProfile,
-    }, 'Avatar atualizado com sucesso');
+      message: 'Avatar atualizado com sucesso',
+    });
   } catch (error: any) {
     log.error('Upload avatar error', { error, tenantId: req.tenantId });
     return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao atualizar avatar', 500);
@@ -583,7 +584,8 @@ router.delete('/:id/avatar', async (req: AuthRequest, res) => {
 
     return successResponse(res, {
       profile: updatedProfile,
-    }, 'Avatar removido com sucesso');
+      message: 'Avatar removido com sucesso',
+    });
   } catch (error: any) {
     log.error('Remove avatar error', { error, tenantId: req.tenantId });
     return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao remover avatar', 500);
