@@ -71,6 +71,26 @@ export const mockPrisma = {
       findMany: jest.fn(),
       count: jest.fn(),
     },
+    billingCustomer: {
+      create: jest.fn(),
+      findFirst: jest.fn(),
+      findMany: jest.fn(),
+      update: jest.fn(),
+      updateMany: jest.fn(),
+    },
+    asaasWebhookEvent: {
+      create: jest.fn(),
+      findUnique: jest.fn(),
+      findFirst: jest.fn(),
+      findMany: jest.fn(),
+      update: jest.fn(),
+      upsert: jest.fn(),
+    },
+    domainEvent: {
+      create: jest.fn(),
+      findMany: jest.fn(),
+      update: jest.fn(),
+    },
     $transaction: jest.fn((fn) => fn({
       user: {
         create: jest.fn(),

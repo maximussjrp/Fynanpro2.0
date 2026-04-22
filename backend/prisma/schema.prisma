@@ -74,6 +74,7 @@ model Tenant {
   transactions           Transaction[]
   triggerCategories      TriggerCategory[]
   userProfiles           UserProfile[]
+  billingCustomers       BillingCustomer[]
 
   @@index([ownerId])
   @@index([subscriptionPlan])
@@ -731,4 +732,62 @@ model ClientProfile {
   @@index([consultantUserId])
   @@index([tenantId])
   @@index([status])
+}
+
+// ============================================================
+// Fase A1 — Asaas Foundation (100% aditivo, flags OFF).
+// Nenhum código de runtime consome estes modelos ainda.
+// ============================================================
+
+model BillingCustomer {
+  id              String    @id @default(uuid())
+  tenantId        String
+  provider        String    @default("asaas")
+  asaasCustomerId String
+  isActive        Boolean   @default(true)
+  metadata        Json?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, asaasCustomerId])
+  @@index([tenantId, isActive])
+  @@index([tenantId, createdAt])
+}
+
+model AsaasWebhookEvent {
+  id             String    @id @default(uuid())
+  asaasEventId   String?   @unique
+  eventType      String
+  payload        Json
+  receivedAt     DateTime  @default(now())
+  processedAt    DateTime?
+  status         String    @default("received")
+  lastError      String?
+  signatureValid Boolean   @default(false)
+
+  @@index([eventType])
+  @@index([status])
+  @@index([receivedAt])
+}
+
+model DomainEvent {
+  id            String    @id @default(uuid())
+  eventType     String
+  aggregateType String?
+  aggregateId   String?
+  payload       Json
+  status        String    @default("pending")
+  attempts      Int       @default(0)
+  lastError     String?
+  nextAttemptAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  processedAt   DateTime?
+
+  @@index([status, nextAttemptAt])
+  @@index([eventType])
+  @@index([aggregateType, aggregateId])
+  @@index([createdAt])
 }

@@ -22,7 +22,9 @@ export type FeatureFlagName =
   | 'education.enabled'
   | 'auth.activeTenantId'
   | 'auth.switchTenant'
-  | 'rbac.newMiddleware';
+  | 'rbac.newMiddleware'
+  | 'asaas.enabled'
+  | 'asaas.webhook.enabled';
 
 const DEFAULTS: Record<FeatureFlagName, boolean> = {
   'consultant.enabled': false,
@@ -31,6 +33,8 @@ const DEFAULTS: Record<FeatureFlagName, boolean> = {
   'auth.activeTenantId': false,
   'auth.switchTenant': false,
   'rbac.newMiddleware': false,
+  'asaas.enabled': false,
+  'asaas.webhook.enabled': false,
 };
 
 function envKey(flag: FeatureFlagName): string {
@@ -50,6 +54,8 @@ export const featureFlags: Record<FeatureFlagName, boolean> = {
   'auth.activeTenantId': readFlag('auth.activeTenantId'),
   'auth.switchTenant': readFlag('auth.switchTenant'),
   'rbac.newMiddleware': readFlag('rbac.newMiddleware'),
+  'asaas.enabled': readFlag('asaas.enabled'),
+  'asaas.webhook.enabled': readFlag('asaas.webhook.enabled'),
 };
 
 export function isFeatureEnabled(flag: FeatureFlagName): boolean {

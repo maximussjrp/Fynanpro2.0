@@ -26,6 +26,9 @@ import lgpdRoutes from './routes/lgpd.routes';
 // Phase 2A — Consultant / Client Base (behind feature flag `consultant.enabled`)
 import consultantRoutes from './routes/consultant';
 import adminConsultantsRoutes from './routes/admin-consultants';
+// Phase A1 — Asaas Foundation (behind feature flags `asaas.enabled` / `asaas.webhook.enabled`)
+import billingRoutes from './routes/billing';
+import webhooksRoutes from './routes/webhooks';
 import { createDefaultCategories } from './utils/default-categories';
 import { env } from './config/env';
 import { swaggerSpec } from './config/swagger';
@@ -281,6 +284,11 @@ apiRouter.use('/lgpd', lgpdRoutes);
 // Quando OFF, as rotas respondem 404 (requireFeature) sem tocar em nada legado.
 // `/admin/consultants` já foi montado acima antes de `/admin` (ordem importa).
 apiRouter.use('/consultant', consultantRoutes);
+
+// Fase A1 — Asaas Foundation (flags `asaas.enabled` / `asaas.webhook.enabled`, default OFF).
+// Superfícies novas, sem consumir nada legado. Stripe (subscription) segue intocado.
+apiRouter.use('/billing', billingRoutes);
+apiRouter.use('/webhooks', webhooksRoutes);
 
 // Auth routes com rate limiting
 
