@@ -22,6 +22,7 @@ import planningRoutes from './routes/planning';
 import subscriptionRoutes from './routes/subscription';
 import energyGovernanceRoutes from './routes/energy-governance';
 import userProfileRoutes from './routes/user-profiles';
+import lgpdRoutes from './routes/lgpd.routes';
 import { createDefaultCategories } from './utils/default-categories';
 import { env } from './config/env';
 import { swaggerSpec } from './config/swagger';
@@ -202,7 +203,7 @@ const apiRouter = express.Router();
 // Aplica verificação apenas em rotas que requerem autenticação
 apiRouter.use((req, res, next) => {
   // Rotas públicas que não precisam de verificação de assinatura
-  const publicRoutes = ['/auth', '/subscription/plans', '/subscription/webhook'];
+  const publicRoutes = ['/auth', '/subscription/plans', '/subscription/webhook', '/lgpd/policy'];
   const isPublic = publicRoutes.some(route => req.path.startsWith(route));
   
   if (isPublic) {
@@ -266,6 +267,9 @@ apiRouter.use('/subscription', subscriptionRoutes);
 
 // User Profile routes (perfis de usuário - CPF/CNPJ)
 apiRouter.use('/profiles', userProfileRoutes);
+
+// LGPD routes (política pública + rotas privadas com auth próprio)
+apiRouter.use('/lgpd', lgpdRoutes);
 
 // Auth routes com rate limiting
 
