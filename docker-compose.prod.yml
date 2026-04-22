@@ -58,6 +58,14 @@ services:
       STRIPE_PRICE_YEARLY: ${STRIPE_PRICE_YEARLY}
       RESEND_API_KEY: ${RESEND_API_KEY}
       EMAIL_FROM: ${EMAIL_FROM:-UTOP <noreply@utopsistema.com.br>}
+      # Asaas (Fase A1)
+      ASAAS_API_KEY: ${ASAAS_API_KEY}
+      ASAAS_SANDBOX: ${ASAAS_SANDBOX:-true}
+      ASAAS_WEBHOOK_TOKEN: ${ASAAS_WEBHOOK_TOKEN}
+      # Feature flags (default OFF no código; podem ser ligadas via .env)
+      FF_ASAAS_ENABLED: ${FF_ASAAS_ENABLED:-false}
+      FF_ASAAS_WEBHOOK_ENABLED: ${FF_ASAAS_WEBHOOK_ENABLED:-false}
+      FF_CONSULTANT_ENABLED: ${FF_CONSULTANT_ENABLED:-false}
     depends_on:
       postgres:
         condition: service_healthy
