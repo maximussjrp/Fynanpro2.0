@@ -8,26 +8,36 @@ datasource db {
 }
 
 model User {
-  id                       String         @id @default(uuid())
-  email                    String         @unique
+  id                       String             @id @default(uuid())
+  email                    String             @unique
   passwordHash             String
   fullName                 String
-  role                     String         @default("owner")
-  isActive                 Boolean        @default(true)
-  isEmailVerified          Boolean        @default(false)
+  role                     String             @default("owner")
+  isActive                 Boolean            @default(true)
+  isEmailVerified          Boolean            @default(false)
   lastLoginAt              DateTime?
-  createdAt                DateTime       @default(now())
-  updatedAt                DateTime       @updatedAt
+  createdAt                DateTime           @default(now())
+  updatedAt                DateTime           @updatedAt
   deletedAt                DateTime?
   emailVerificationToken   String?
   emailVerificationExpires DateTime?
   passwordResetToken       String?
   passwordResetExpires     DateTime?
+  // Phase 1A (MLM base) - additive optional columns, inactive until Phase 1B/2/3
+  sponsorId                String?
+  homeTenantId             String?
   auditLogs                AuditLog[]
   refreshTokens            RefreshToken[]
-  ownedTenants             Tenant[]       @relation("TenantOwner")
+  ownedTenants             Tenant[]           @relation("TenantOwner")
   tenantUsers              TenantUser[]
   transactions             Transaction[]
+  sponsor                  User?              @relation("UserSponsor", fields: [sponsorId], references: [id])
+  sponsored                User[]             @relation("UserSponsor")
+  consultantProfile        ConsultantProfile?
+  clientProfile            ClientProfile?     @relation("ClientProfileClient")
+
+  @@index([sponsorId])
+  @@index([homeTenantId])
 }
 
 model Tenant {
@@ -45,6 +55,8 @@ model Tenant {
   stripeSubscriptionId   String?
   stripePriceId          String?
   stripeCurrentPeriodEnd DateTime?
+  // Phase 1A (MLM base) - optional tenant classification, default preserves legacy behavior
+  tenantType             String                    @default("personal")
   auditLogs              AuditLog[]
   bankAccounts           BankAccount[]
   budgets                Budget[]
@@ -659,4 +671,64 @@ model BankAccountOwner {
   @@unique([bankAccountId, userProfileId])
   @@index([bankAccountId])
   @@index([userProfileId])
+}
+
+// ============================================================
+// Phase 1A - MLM/Consultant base (additive, not wired to routes yet)
+// ============================================================
+
+enum ConsultantTier {
+  BRONZE
+  SILVER
+  GOLD
+  PLATINUM
+  DIAMOND
+}
+
+enum ConsultantStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  INACTIVE
+}
+
+enum ClientStatus {
+  ACTIVE
+  PAUSED
+  CHURNED
+}
+
+model ConsultantProfile {
+  id          String           @id @default(uuid())
+  userId      String           @unique
+  status      ConsultantStatus @default(PENDING)
+  tier        ConsultantTier   @default(BRONZE)
+  displayName String?
+  bio         String?
+  publicSlug  String?          @unique
+  approvedAt  DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  deletedAt   DateTime?
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([tier])
+}
+
+model ClientProfile {
+  id               String       @id @default(uuid())
+  clientUserId     String       @unique
+  consultantUserId String?
+  tenantId         String
+  status           ClientStatus @default(ACTIVE)
+  notes            String?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  deletedAt        DateTime?
+  client           User         @relation("ClientProfileClient", fields: [clientUserId], references: [id], onDelete: Cascade)
+
+  @@index([consultantUserId])
+  @@index([tenantId])
+  @@index([status])
 }
