@@ -50,7 +50,7 @@ export type ChangePasswordDTO = z.infer<typeof ChangePasswordSchema>;
 
 // ==================== SWITCH TENANT DTO (Phase 1B) ====================
 export const SwitchTenantSchema = z.object({
-  tenantId: z.string().uuid('tenantId deve ser um UUID v·lido'),
+  tenantId: z.string().uuid('tenantId deve ser um UUID v√°lido'),
 });
 
 export type SwitchTenantDTO = z.infer<typeof SwitchTenantSchema>;
