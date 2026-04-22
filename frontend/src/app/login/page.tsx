@@ -496,9 +496,9 @@ export default function LoginPage() {
 
             {isLogin && (
               <div className="mt-6 text-center">
-                <a href="#" className="text-sm font-medium text-[#C9A962] hover:text-[#B8983D] hover:underline" style={{fontFamily: 'Inter, sans-serif'}}>
+                <Link href="/forgot-password" className="text-sm font-medium text-[#C9A962] hover:text-[#B8983D] hover:underline" style={{fontFamily: 'Inter, sans-serif'}}>
                   Esqueceu sua senha?
-                </a>
+                </Link>
               </div>
             )}
 
