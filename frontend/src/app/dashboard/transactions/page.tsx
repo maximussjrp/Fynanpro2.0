@@ -940,50 +940,100 @@ export default function TransactionsPage() {
             onKeyDown={(e) => e.stopPropagation()}
           >
             <div className="space-y-3">
+              <div className="text-xs text-gray-500 bg-blue-50 p-2 rounded-lg border border-blue-100">
+                💡 Digite as datas e clique em <strong>"Aplicar Filtro"</strong>
+              </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Data Inicial</label>
                 <input
-                  type="date"
-                  value={draftDateColumnFilter?.startDate || dateColumnFilter?.startDate || ''}
-                  onChange={(e) => setDraftDateColumnFilter(prev => ({
-                    startDate: e.target.value,
-                    endDate: prev?.endDate || dateColumnFilter?.endDate || e.target.value
-                  }))}
+                  type="text"
+                  placeholder="DD/MM/AAAA"
+                  value={(() => {
+                    const val = draftDateColumnFilter?.startDate || dateColumnFilter?.startDate || '';
+                    if (!val) return '';
+                    const [y, m, d] = val.split('-');
+                    return `${d}/${m}/${y}`;
+                  })()}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, '');
+                    let formatted = '';
+                    if (val.length >= 1) formatted = val.slice(0, 2);
+                    if (val.length >= 3) formatted += '/' + val.slice(2, 4);
+                    if (val.length >= 5) formatted += '/' + val.slice(4, 8);
+                    e.target.value = formatted;
+                    
+                    if (val.length === 8) {
+                      const day = val.slice(0, 2);
+                      const month = val.slice(2, 4);
+                      const year = val.slice(4, 8);
+                      const isoDate = `${year}-${month}-${day}`;
+                      setDraftDateColumnFilter(prev => ({
+                        startDate: isoDate,
+                        endDate: prev?.endDate || dateColumnFilter?.endDate || isoDate
+                      }));
+                    }
+                  }}
                   className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                     draftDateColumnFilter && (draftDateColumnFilter.startDate !== dateColumnFilter?.startDate || draftDateColumnFilter.endDate !== dateColumnFilter?.endDate)
-                      ? 'border-amber-400' : 'border-gray-200'
+                      ? 'border-amber-400 bg-amber-50' : 'border-gray-200'
                   }`}
-                  style={{ colorScheme: 'light' }}
+                  maxLength={10}
                 />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Data Final</label>
                 <input
-                  type="date"
-                  value={draftDateColumnFilter?.endDate || dateColumnFilter?.endDate || ''}
-                  onChange={(e) => setDraftDateColumnFilter(prev => ({
-                    startDate: prev?.startDate || dateColumnFilter?.startDate || e.target.value,
-                    endDate: e.target.value
-                  }))}
+                  type="text"
+                  placeholder="DD/MM/AAAA"
+                  value={(() => {
+                    const val = draftDateColumnFilter?.endDate || dateColumnFilter?.endDate || '';
+                    if (!val) return '';
+                    const [y, m, d] = val.split('-');
+                    return `${d}/${m}/${y}`;
+                  })()}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, '');
+                    let formatted = '';
+                    if (val.length >= 1) formatted = val.slice(0, 2);
+                    if (val.length >= 3) formatted += '/' + val.slice(2, 4);
+                    if (val.length >= 5) formatted += '/' + val.slice(4, 8);
+                    e.target.value = formatted;
+                    
+                    if (val.length === 8) {
+                      const day = val.slice(0, 2);
+                      const month = val.slice(2, 4);
+                      const year = val.slice(4, 8);
+                      const isoDate = `${year}-${month}-${day}`;
+                      setDraftDateColumnFilter(prev => ({
+                        startDate: prev?.startDate || dateColumnFilter?.startDate || isoDate,
+                        endDate: isoDate
+                      }));
+                    }
+                  }}
                   className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                     draftDateColumnFilter && (draftDateColumnFilter.startDate !== dateColumnFilter?.startDate || draftDateColumnFilter.endDate !== dateColumnFilter?.endDate)
-                      ? 'border-amber-400' : 'border-gray-200'
+                      ? 'border-amber-400 bg-amber-50' : 'border-gray-200'
                   }`}
-                  style={{ colorScheme: 'light' }}
+                  maxLength={10}
                 />
               </div>
-              {/* Botão Aplicar - só aparece se há mudanças pendentes */}
-              {draftDateColumnFilter && (draftDateColumnFilter.startDate !== dateColumnFilter?.startDate || draftDateColumnFilter.endDate !== dateColumnFilter?.endDate) && (
-                <button
-                  onClick={() => {
+              {/* Botão Aplicar - sempre visível se há dados no draft */}
+              <button
+                onClick={() => {
+                  if (draftDateColumnFilter) {
                     setDateColumnFilter(draftDateColumnFilter);
                     setDraftDateColumnFilter(null);
-                  }}
-                  className="w-full px-3 py-2 text-sm bg-blue-600 text-white hover:bg-blue-700 rounded-lg transition-colors font-medium"
-                >
-                  ✓ Aplicar Filtro
-                </button>
-              )}
+                  }
+                }}
+                disabled={!draftDateColumnFilter || (draftDateColumnFilter.startDate === dateColumnFilter?.startDate && draftDateColumnFilter.endDate === dateColumnFilter?.endDate)}
+                className={`w-full px-3 py-2 text-sm rounded-lg transition-colors font-medium ${
+                  draftDateColumnFilter && (draftDateColumnFilter.startDate !== dateColumnFilter?.startDate || draftDateColumnFilter.endDate !== dateColumnFilter?.endDate)
+                    ? 'bg-blue-600 text-white hover:bg-blue-700'
+                    : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                }`}
+              >
+                ✓ Aplicar Filtro
+              </button>
               <div className="flex gap-2 pt-2 border-t border-gray-100">
                 <button
                   onClick={() => {
@@ -1264,6 +1314,75 @@ export default function TransactionsPage() {
                   <option value="pending">Pendentes</option>
                 </select>
               </div>
+            </div>
+
+            {/* Botões de ação do filtro */}
+            <div className="flex gap-3 mt-6 pt-4 border-t border-gray-200">
+              <button
+                onClick={() => {
+                  // Ver Tudo: Limpa o filtro de data para ver todas as transações
+                  const twoYearsAgo = new Date();
+                  twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
+                  const twoYearsLater = new Date();
+                  twoYearsLater.setFullYear(twoYearsLater.getFullYear() + 2);
+                  
+                  const startDate = twoYearsAgo.toISOString().split('T')[0];
+                  const endDate = twoYearsLater.toISOString().split('T')[0];
+                  
+                  setDraftDateRange({ startDate, endDate });
+                  setAppliedFilters(prev => ({ ...prev, startDate, endDate }));
+                  setFilters(prev => ({ ...prev, startDate, endDate }));
+                }}
+                className="flex-1 px-4 py-2.5 text-sm bg-blue-600 text-white hover:bg-blue-700 rounded-lg transition-colors font-medium flex items-center justify-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                </svg>
+                Ver Tudo
+              </button>
+              <button
+                onClick={() => {
+                  // Limpar Filtros: Reseta todos os filtros para o padrão (mês atual)
+                  const today = new Date();
+                  const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
+                  const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().split('T')[0];
+                  
+                  setDraftDateRange({ startDate: startOfMonth, endDate: endOfMonth });
+                  setAppliedFilters({
+                    startDate: startOfMonth,
+                    endDate: endOfMonth,
+                    categoryId: '',
+                    bankAccountId: '',
+                    paymentMethodId: '',
+                    type: 'all',
+                    status: 'all'
+                  });
+                  setFilters({
+                    startDate: startOfMonth,
+                    endDate: endOfMonth,
+                    categoryId: '',
+                    bankAccountId: '',
+                    paymentMethodId: '',
+                    type: 'all',
+                    status: 'all'
+                  });
+                  setDateColumnFilter(null);
+                  setDraftDateColumnFilter(null);
+                  setColumnFilters({
+                    categories: [],
+                    accounts: [],
+                    paymentMethods: [],
+                    statuses: []
+                  });
+                }}
+                className="flex-1 px-4 py-2.5 text-sm bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-lg transition-colors font-medium flex items-center justify-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                Limpar Filtros
+              </button>
             </div>
           </div>
         )}
