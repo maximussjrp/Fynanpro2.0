@@ -255,13 +255,16 @@ export const adminService = {
     }
 
     // Atualizar tenant com plano e data de expiração
+    // Ao migrar para plano pago, limpar trialEndsAt para evitar que data antiga de trial
+    // sobrescreva a nova validade na UI
     const updated = await prisma.tenant.update({
       where: { id: tenantId },
       data: {
         subscriptionPlan: newPlanId,
         subscriptionStatus: 'active',
         stripeCurrentPeriodEnd: periodEnd,
-        stripePriceId: newPlanId !== 'trial' ? newPlanId : null
+        stripePriceId: newPlanId !== 'trial' ? newPlanId : null,
+        trialEndsAt: newPlanId === 'trial' ? periodEnd : null
       }
     });
 

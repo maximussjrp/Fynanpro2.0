@@ -283,7 +283,11 @@ export default function TenantsPage() {
                 {filteredTenants.map((tenant) => {
                   const status = STATUS_LABELS[tenant.subscriptionStatus] || STATUS_LABELS.trial;
                   const StatusIcon = status.icon;
-                  const daysRemaining = getDaysRemaining(tenant.trialEndsAt || tenant.stripeCurrentPeriodEnd);
+                  // Para planos pagos usa stripeCurrentPeriodEnd; para trial usa trialEndsAt
+                  const validityDate = tenant.subscriptionPlan && tenant.subscriptionPlan !== 'trial'
+                    ? (tenant.stripeCurrentPeriodEnd || tenant.trialEndsAt)
+                    : (tenant.trialEndsAt || tenant.stripeCurrentPeriodEnd);
+                  const daysRemaining = getDaysRemaining(validityDate);
                   
                   return (
                     <tr key={tenant.id} className="hover:bg-gray-50">
