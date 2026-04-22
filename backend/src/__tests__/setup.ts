@@ -58,6 +58,19 @@ export const mockPrisma = {
       findUnique: jest.fn(),
       update: jest.fn(),
     },
+    consultantProfile: {
+      create: jest.fn(),
+      findFirst: jest.fn(),
+      findUnique: jest.fn(),
+      findMany: jest.fn(),
+      update: jest.fn(),
+      count: jest.fn(),
+    },
+    clientProfile: {
+      findFirst: jest.fn(),
+      findMany: jest.fn(),
+      count: jest.fn(),
+    },
     $transaction: jest.fn((fn) => fn({
       user: {
         create: jest.fn(),

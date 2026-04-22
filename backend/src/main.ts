@@ -23,6 +23,9 @@ import subscriptionRoutes from './routes/subscription';
 import energyGovernanceRoutes from './routes/energy-governance';
 import userProfileRoutes from './routes/user-profiles';
 import lgpdRoutes from './routes/lgpd.routes';
+// Phase 2A — Consultant / Client Base (behind feature flag `consultant.enabled`)
+import consultantRoutes from './routes/consultant';
+import adminConsultantsRoutes from './routes/admin-consultants';
 import { createDefaultCategories } from './utils/default-categories';
 import { env } from './config/env';
 import { swaggerSpec } from './config/swagger';
@@ -257,6 +260,9 @@ apiRouter.use('/import', importRoutes);
 apiRouter.use('/chatbot', chatbotRoutes);
 
 // Admin routes (super_master only)
+// NOTE: `/admin/consultants` (Fase 2A) precisa ser montado ANTES de `/admin`
+// para que o matcher de prefixo do Express pegue primeiro a rota nova.
+apiRouter.use('/admin/consultants', adminConsultantsRoutes);
 apiRouter.use('/admin', adminRoutes);
 
 // Planning routes (planejamento anual)
@@ -270,6 +276,11 @@ apiRouter.use('/profiles', userProfileRoutes);
 
 // LGPD routes (política pública + rotas privadas com auth próprio)
 apiRouter.use('/lgpd', lgpdRoutes);
+
+// Phase 2A — Consultor (feature flag `consultant.enabled`, default OFF).
+// Quando OFF, as rotas respondem 404 (requireFeature) sem tocar em nada legado.
+// `/admin/consultants` já foi montado acima antes de `/admin` (ordem importa).
+apiRouter.use('/consultant', consultantRoutes);
 
 // Auth routes com rate limiting
 
