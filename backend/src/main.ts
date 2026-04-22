@@ -29,7 +29,7 @@ import { swaggerSpec } from './config/swagger';
 import { startTransactionGeneratorJob } from './jobs/transaction-generator.job';
 import { startAllJobs } from './jobs/notification.job';
 import { authService } from './services/auth.service';
-import { RegisterSchema, LoginSchema, RefreshTokenSchema, ChangePasswordSchema } from './dtos/auth.dto';
+import { RegisterSchema, LoginSchema, RefreshTokenSchema, ChangePasswordSchema, SwitchTenantSchema } from './dtos/auth.dto';
 import { log, httpLogger } from './utils/logger';
 import { subscriptionMiddlewareWithExemptions } from './middleware/subscription';
 import { authMiddleware } from './middleware/auth';
@@ -791,6 +791,72 @@ apiRouter.post('/auth/logout-all', authMiddleware, async (req: Request, res: Res
         code: 'INTERNAL_ERROR',
         message: 'Erro ao fazer logout'
       }
+    });
+  }
+});
+
+// Trocar tenant ativo (Phase 1B) - valida TenantUser/ownership no servidor.
+// JWT sozinho NÃO é fonte suficiente de autorização; esta rota emite um novo
+// par de tokens contendo `activeTenantId` apenas se o acesso for válido.
+apiRouter.post('/auth/switch-tenant', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).userId;
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: { code: 'UNAUTHORIZED', message: 'Não autenticado' }
+      });
+    }
+
+    const { tenantId } = SwitchTenantSchema.parse(req.body);
+
+    const ipAddress = req.ip || req.socket.remoteAddress || undefined;
+    const userAgent = req.headers['user-agent'] || undefined;
+
+    const result = await authService.switchTenant(userId, tenantId, ipAddress, userAgent);
+
+    return res.json({
+      success: true,
+      data: {
+        tenant: result.tenant,
+        role: result.role,
+        tokens: result.tokens,
+      },
+    });
+  } catch (error: any) {
+    log.error('Switch tenant error', { error: error?.message });
+
+    if (error?.name === 'ZodError') {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: error.errors?.[0]?.message || 'Dados inválidos',
+          details: error.errors,
+        },
+      });
+    }
+
+    if (error?.code === 'TENANT_ACCESS_DENIED') {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'TENANT_ACCESS_DENIED',
+          message: 'Usuário não tem acesso a este tenant',
+        },
+      });
+    }
+
+    if (error?.message === 'Usuário inativo ou inexistente') {
+      return res.status(401).json({
+        success: false,
+        error: { code: 'USER_INACTIVE', message: error.message },
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      error: { code: 'INTERNAL_ERROR', message: 'Erro ao trocar tenant' },
     });
   }
 });

@@ -15,8 +15,14 @@ export const mockPrisma = {
     tenant: {
       create: jest.fn(),
       findUnique: jest.fn(),
+      findFirst: jest.fn(),
       findMany: jest.fn(),
       update: jest.fn(),
+    },
+    tenantUser: {
+      findUnique: jest.fn(),
+      findMany: jest.fn(),
+      findFirst: jest.fn(),
     },
     transaction: {
       create: jest.fn(),

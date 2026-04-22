@@ -41,11 +41,27 @@ export class AuthService {
 
   /**
    * Gera um par de tokens (access + refresh)
+   *
+   * Phase 1B: aceita `activeTenantId` opcional. Quando presente, é adicionado ao
+   * payload do access token. `tenantId` (legado) é SEMPRE preservado por
+   * backward compatibility — tokens antigos continuam válidos e tokens novos
+   * contêm ambos.
    */
-  private async generateTokenPair(userId: string, email: string, tenantId: string, role: string = 'owner'): Promise<TokenPair> {
+  private async generateTokenPair(
+    userId: string,
+    email: string,
+    tenantId: string,
+    role: string = 'owner',
+    activeTenantId?: string
+  ): Promise<TokenPair> {
+    const payload: Record<string, unknown> = { userId, email, tenantId, role };
+    if (activeTenantId) {
+      payload.activeTenantId = activeTenantId;
+    }
+
     // Access Token (curta duração)
     const accessToken = jwt.sign(
-      { userId, email, tenantId, role },
+      payload,
       env.JWT_SECRET,
       { expiresIn: this.ACCESS_TOKEN_EXPIRATION } as jwt.SignOptions
     );
@@ -504,6 +520,106 @@ export class AuthService {
       log.info('AuthService.revokeToken success');
     } catch (error) {
       log.error('AuthService.revokeToken error', { error });
+      throw error;
+    }
+  }
+
+  /**
+   * Troca o tenant ativo do usuário (Phase 1B).
+   *
+   * Valida SEMPRE no servidor que o usuário tem acesso ao targetTenantId via
+   * ownership OU TenantUser ativo. JWT sozinho nunca é suficiente.
+   *
+   * Ao confirmar o acesso, revoga todos os refresh tokens existentes do usuário
+   * e emite um novo par de tokens contendo `activeTenantId = targetTenantId`.
+   * O campo legado `tenantId` no payload continua populado com o mesmo valor,
+   * preservando compatibilidade com consumidores que ainda o leem.
+   */
+  async switchTenant(
+    userId: string,
+    targetTenantId: string,
+    ipAddress?: string,
+    userAgent?: string
+  ): Promise<{ tokens: TokenPair; tenant: { id: string; name: string; slug: string }; role: string }> {
+    try {
+      log.info('AuthService.switchTenant', { userId, targetTenantId });
+
+      // Valida acesso no servidor (ownership OU TenantUser).
+      const [user, ownedTenant, tenantUserLink] = await Promise.all([
+        prisma.user.findUnique({
+          where: { id: userId },
+          select: { id: true, email: true, role: true, isActive: true },
+        }),
+        prisma.tenant.findFirst({
+          where: { id: targetTenantId, ownerId: userId, deletedAt: null },
+          select: { id: true, name: true, slug: true },
+        }),
+        prisma.tenantUser.findUnique({
+          where: { tenantId_userId: { tenantId: targetTenantId, userId } },
+          select: {
+            role: true,
+            tenant: { select: { id: true, name: true, slug: true, deletedAt: true } },
+          },
+        }),
+      ]);
+
+      if (!user || !user.isActive) {
+        throw new Error('Usuário inativo ou inexistente');
+      }
+
+      let tenant: { id: string; name: string; slug: string } | null = null;
+      let effectiveRole = user.role;
+
+      if (ownedTenant) {
+        tenant = ownedTenant;
+        effectiveRole = 'owner';
+      } else if (tenantUserLink && tenantUserLink.tenant && tenantUserLink.tenant.deletedAt === null) {
+        tenant = {
+          id: tenantUserLink.tenant.id,
+          name: tenantUserLink.tenant.name,
+          slug: tenantUserLink.tenant.slug,
+        };
+        effectiveRole = tenantUserLink.role;
+      }
+
+      if (!tenant) {
+        // Não expõe se o tenant existe ou não — trata como acesso negado.
+        const err = new Error('Usuário não tem acesso a este tenant') as Error & { code?: string };
+        err.code = 'TENANT_ACCESS_DENIED';
+        throw err;
+      }
+
+      // Revoga todos os refresh tokens atuais (segurança + rotation).
+      await prisma.refreshToken.updateMany({
+        where: { userId, isRevoked: false },
+        data: {
+          isRevoked: true,
+          revokedAt: new Date(),
+          revokedReason: 'switch_tenant',
+        },
+      });
+
+      // Emite novo par contendo activeTenantId.
+      const tokens = await this.generateTokenPair(
+        user.id,
+        user.email,
+        tenant.id,
+        effectiveRole,
+        tenant.id
+      );
+
+      if (ipAddress || userAgent) {
+        await prisma.refreshToken.updateMany({
+          where: { token: tokens.refreshToken },
+          data: { ipAddress, userAgent },
+        });
+      }
+
+      log.info('AuthService.switchTenant success', { userId, tenantId: tenant.id });
+
+      return { tokens, tenant, role: effectiveRole };
+    } catch (error) {
+      log.error('AuthService.switchTenant error', { error, userId, targetTenantId });
       throw error;
     }
   }
