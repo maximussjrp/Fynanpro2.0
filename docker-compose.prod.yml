@@ -43,7 +43,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
-      DATABASE_URL: postgresql://${POSTGRES_USER:-utop_user}:${POSTGRES_PASSWORD:-utop_secure_pass_2025}@utop-postgres:5432/utop_prod?schema=public&connection_limit=10&pool_timeout=20
+      DATABASE_URL: postgresql://${POSTGRES_USER:-utop_user}:${POSTGRES_PASSWORD:-utop_secure_pass_2025}@utop-postgres:5432/utop?schema=public&connection_limit=10&pool_timeout=20
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
