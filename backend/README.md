@@ -63,7 +63,7 @@ Edite o arquivo `.env` com suas configurações:
 
 ```env
 # Database
-DATABASE_URL="postgresql://user:password@localhost:5432/fynanpro"
+DATABASE_URL="postgresql://user:password@localhost:5432/utop"
 
 # JWT
 JWT_SECRET="sua-chave-secreta-muito-segura-com-pelo-menos-32-caracteres"
@@ -303,6 +303,6 @@ MIT License - veja o arquivo [LICENSE](LICENSE) para detalhes.
 
 ## 📞 Suporte
 
-- Email: support@fynanpro.com
-- Issues: https://github.com/seu-usuario/fynanpro2.0/issues
+- Email: support@utopsistema.com.br
+- Issues: https://github.com/maximussjrp/Fynanpro2.0/issues
 - Docs: http://localhost:3000/api-docs

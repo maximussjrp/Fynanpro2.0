@@ -7,14 +7,14 @@ services:
     restart: always
     environment:
       POSTGRES_DB: utop
-      POSTGRES_USER: ${POSTGRES_USER:-utop_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-utop_secure_pass_2025}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required in .env}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - utop_net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-utop_user} -d utop"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d utop"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -43,7 +43,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
-      DATABASE_URL: postgresql://${POSTGRES_USER:-utop_user}:${POSTGRES_PASSWORD:-utop_secure_pass_2025}@utop-postgres:5432/utop?schema=public&connection_limit=10&pool_timeout=20
+      DATABASE_URL: postgresql://${POSTGRES_USER:?POSTGRES_USER is required}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@utop-postgres:5432/utop?schema=public&connection_limit=10&pool_timeout=20
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}

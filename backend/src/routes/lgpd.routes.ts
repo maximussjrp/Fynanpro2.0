@@ -218,10 +218,10 @@ router.get('/policy', async (_req: Request, res: Response) => {
     version: '1.0.0',
     lastUpdated: '2025-01-01',
     company: {
-      name: 'FYNANPRO',
+      name: 'UTOP Sistema',
       cnpj: 'XX.XXX.XXX/0001-XX', // Substituir pelo real
       address: 'Endereço da empresa',
-      dpoEmail: 'privacidade@fynanpro.com.br',
+      dpoEmail: 'privacidade@utopsistema.com.br',
     },
     sections: [
       {
@@ -287,7 +287,7 @@ Após exclusão da conta, dados são anonimizados.`,
       {
         title: '8. Contato',
         content: `Para exercer seus direitos ou esclarecer dúvidas:
-- E-mail: privacidade@fynanpro.com.br
+- E-mail: privacidade@utopsistema.com.br
 - Use a função "Exportar meus dados" no sistema
 - Use a função "Excluir minha conta" para eliminação`,
       },

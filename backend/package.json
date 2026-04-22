@@ -1,7 +1,7 @@
 {
-  "name": "fynanpro-backend",
+  "name": "utop-backend",
   "version": "1.0.0",
-  "description": "FYNANPRO 2.0 - Backend API",
+  "description": "UTOP Sistema - Backend API",
   "main": "dist/main.js",
   "scripts": {
     "start": "tsx src/main.ts",
@@ -20,7 +20,7 @@
     "saas",
     "api"
   ],
-  "author": "FYNANPRO Team",
+  "author": "UTOP Sistema Team",
   "license": "MIT",
   "dependencies": {
     "@prisma/client": "^5.7.0",

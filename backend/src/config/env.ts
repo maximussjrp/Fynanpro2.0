@@ -8,7 +8,9 @@ interface EnvConfig {
   PORT: number;
   DATABASE_URL: string;
   JWT_SECRET: string;
+  JWT_REFRESH_SECRET: string;
   JWT_EXPIRATION: string;
+  JWT_REFRESH_EXPIRATION: string;
   FRONTEND_URL: string;
   REDIS_URL?: string;
   // Asaas Payment Gateway
@@ -22,11 +24,20 @@ interface EnvConfig {
  * @throws Error se alguma variável crítica não estiver configurada
  */
 export function validateEnv(): EnvConfig {
+  const isProd = process.env.NODE_ENV === 'production';
+
   const requiredVars = [
     'DATABASE_URL',
     'JWT_SECRET',
+    'JWT_REFRESH_SECRET',
     'JWT_EXPIRATION',
+    'JWT_REFRESH_EXPIRATION',
   ];
+
+  // Em produção exigimos também FRONTEND_URL e REDIS_URL explicitamente
+  if (isProd) {
+    requiredVars.push('FRONTEND_URL', 'REDIS_URL');
+  }
 
   const missing: string[] = [];
 
@@ -74,10 +85,24 @@ Gere um secret seguro com:
     throw new Error('JWT_SECRET muito curto - mínimo 32 caracteres');
   }
 
+  // Validar JWT_REFRESH_SECRET tamanho mínimo e distinção de JWT_SECRET
+  const jwtRefreshSecret = process.env.JWT_REFRESH_SECRET!;
+  if (jwtRefreshSecret.length < 32) {
+    console.error('❌ JWT_REFRESH_SECRET deve ter no mínimo 32 caracteres.');
+    throw new Error('JWT_REFRESH_SECRET muito curto - mínimo 32 caracteres');
+  }
+  if (jwtRefreshSecret === jwtSecret) {
+    console.error('❌ JWT_REFRESH_SECRET não pode ser igual a JWT_SECRET.');
+    throw new Error('JWT_REFRESH_SECRET não pode ser igual a JWT_SECRET');
+  }
+
   // Validar formato de JWT_EXPIRATION
   const expirationRegex = /^\d+[smhd]$/;
   if (!expirationRegex.test(process.env.JWT_EXPIRATION!)) {
     throw new Error('JWT_EXPIRATION deve estar no formato: 15m, 1h, 7d, etc');
+  }
+  if (!expirationRegex.test(process.env.JWT_REFRESH_EXPIRATION!)) {
+    throw new Error('JWT_REFRESH_EXPIRATION deve estar no formato: 15m, 1h, 7d, etc');
   }
 
   return {
@@ -85,7 +110,9 @@ Gere um secret seguro com:
     PORT: parseInt(process.env.PORT || '3000'),
     DATABASE_URL: process.env.DATABASE_URL!,
     JWT_SECRET: jwtSecret,
+    JWT_REFRESH_SECRET: jwtRefreshSecret,
     JWT_EXPIRATION: process.env.JWT_EXPIRATION!,
+    JWT_REFRESH_EXPIRATION: process.env.JWT_REFRESH_EXPIRATION!,
     FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:3001',
     REDIS_URL: process.env.REDIS_URL,
     // Asaas Payment Gateway

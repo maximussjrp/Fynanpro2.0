@@ -6,7 +6,7 @@
 
 | Item | Valor |
 |------|-------|
-| **Nome** | UTOP / Fynanpro |
+| **Nome** | UTOP Sistema |
 | **Servidor VPS** | 91.99.16.145 |
 | **Projeto no servidor** | /opt/utop |
 | **API URL (Produção)** | https://api.utopsistema.com.br/api/v1 |

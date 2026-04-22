@@ -8,7 +8,6 @@ module.exports = {
     'src/**/*.ts',
     '!src/**/*.d.ts',
     '!src/main.ts',
-    '!src/main-routes.ts',
     '!src/**/*.test.ts',
   ],
   coverageDirectory: 'coverage',

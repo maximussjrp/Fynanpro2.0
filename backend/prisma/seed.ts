@@ -8,7 +8,15 @@ async function main() {
 
   // 1. Criar Master User (Max Guarinieri)
   console.log('👤 Criando usuário Master...');
-  const masterPassword = await bcrypt.hash('MxG#2025$FynanPro!Dev', 12);
+
+  const seedMasterPassword = process.env.SEED_MASTER_PASSWORD;
+  if (!seedMasterPassword || seedMasterPassword.length < 12) {
+    console.error('❌ SEED_MASTER_PASSWORD não definida ou muito curta (mínimo 12 caracteres).');
+    console.error('   Defina uma senha forte via variável de ambiente antes de rodar o seed.');
+    console.error('   Exemplo: SEED_MASTER_PASSWORD="SenhaForte@2026" npm run prisma:seed');
+    process.exit(1);
+  }
+  const masterPassword = await bcrypt.hash(seedMasterPassword, 12);
   
   const masterUser = await prisma.user.upsert({
     where: { email: 'max.guarinieri@gmail.com' },
@@ -109,7 +117,7 @@ async function main() {
   console.log('\n✨ Seed concluído com sucesso!');
   console.log('\n📧 Credenciais de acesso:');
   console.log('   Email: max.guarinieri@gmail.com');
-  console.log('   Senha: MxG#2025$FynanPro!Dev');
+  console.log('   Senha: (definida via SEED_MASTER_PASSWORD — NÃO exibida)');
   console.log('   Tenant: UTOP Master');
   console.log('   Plano: Enterprise (1 ano)\n');
 }
