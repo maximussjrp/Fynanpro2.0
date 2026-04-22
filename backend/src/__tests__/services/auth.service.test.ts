@@ -47,7 +47,11 @@ describe('AuthService', () => {
             create: jest.fn().mockResolvedValue({ id: 'tu-123' }),
           },
           category: {
+            create: jest.fn().mockResolvedValue({ id: 'cat-1' }),
             createMany: jest.fn().mockResolvedValue({ count: 10 }),
+          },
+          userProfile: {
+            create: jest.fn().mockResolvedValue({ id: 'profile-123' }),
           },
         };
         return fn(mockTx);
@@ -97,6 +101,7 @@ describe('AuthService', () => {
       const mockUser = {
         id: 'user-123',
         email: 'test@example.com',
+        fullName: 'Test User',
       };
 
       const mockTenant = {
@@ -117,7 +122,11 @@ describe('AuthService', () => {
           user: { create: jest.fn().mockResolvedValue(mockUser) },
           tenant: { create: jest.fn().mockResolvedValue(mockTenant) },
           tenantUser: { create: jest.fn().mockResolvedValue({ id: 'tu-123' }) },
-          category: { createMany: jest.fn().mockResolvedValue({ count: 10 }) },
+          category: {
+            create: jest.fn().mockResolvedValue({ id: 'cat-1' }),
+            createMany: jest.fn().mockResolvedValue({ count: 10 }),
+          },
+          userProfile: { create: jest.fn().mockResolvedValue({ id: 'profile-123' }) },
         };
         return fn(mockTx);
       });
@@ -135,7 +144,7 @@ describe('AuthService', () => {
     });
 
     it('deve fazer hash da senha antes de salvar', async () => {
-      const mockUser = { id: 'user-123' };
+      const mockUser = { id: 'user-123', email: 'test@example.com', fullName: 'Test User' };
       const mockTenant = { id: 'tenant-123' };
 
       let hashedPassword: string | undefined;
@@ -158,7 +167,11 @@ describe('AuthService', () => {
             create: jest.fn().mockResolvedValue({ id: 'tu-123' }),
           },
           category: {
+            create: jest.fn().mockResolvedValue({ id: 'cat-1' }),
             createMany: jest.fn().mockResolvedValue({ count: 10 }),
+          },
+          userProfile: {
+            create: jest.fn().mockResolvedValue({ id: 'profile-123' }),
           },
         };
         return fn(mockTx);
@@ -189,6 +202,7 @@ describe('AuthService', () => {
         fullName: 'Test User',
         role: 'owner',
         isActive: true,
+        isEmailVerified: true,
         ownedTenants: [
           {
             id: 'tenant-123',
@@ -227,6 +241,7 @@ describe('AuthService', () => {
         email: 'test@example.com',
         passwordHash: await bcrypt.hash('CorrectPassword', 10),
         isActive: true,
+        isEmailVerified: true,
         ownedTenants: [],
         tenantUsers: [],
       };
@@ -258,6 +273,7 @@ describe('AuthService', () => {
         email: 'test@example.com',
         passwordHash: await bcrypt.hash('CorrectPassword', 10),
         isActive: true,
+        isEmailVerified: true,
         ownedTenants: [],
         tenantUsers: [],
       };
@@ -463,6 +479,7 @@ describe('AuthService', () => {
         role: 'owner',
         passwordHash: await bcrypt.hash('Password123!', 10),
         isActive: true,
+        isEmailVerified: true,
         ownedTenants: [
           {
             id: 'tenant-123',

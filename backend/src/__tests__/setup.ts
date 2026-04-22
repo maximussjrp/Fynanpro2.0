@@ -118,11 +118,23 @@ jest.mock('../services/cache.service', () => ({
   },
 }));
 
-// Mock ENV
-process.env.JWT_SECRET = 'test-secret-key-with-32-characters-minimum';
-process.env.JWT_EXPIRATION = '15m';
-process.env.DATABASE_URL = 'postgresql://test:test@localhost:5432/test';
-process.env.NODE_ENV = 'test';
+// Mock ioredis (evita conexões reais em testes — auth.service usa pra rate limiting)
+jest.mock('ioredis', () => {
+  const RedisMock = jest.fn().mockImplementation(() => ({
+    incr: jest.fn().mockResolvedValue(1),
+    expire: jest.fn().mockResolvedValue(1),
+    get: jest.fn().mockResolvedValue(null),
+    ttl: jest.fn().mockResolvedValue(-1),
+    del: jest.fn().mockResolvedValue(1),
+    quit: jest.fn().mockResolvedValue('OK'),
+    on: jest.fn(),
+  }));
+  return { __esModule: true, default: RedisMock };
+});
+
+// Mock ENV — agora definido em jest.env.ts (setupFiles, pre-module).
+// Mantido aqui apenas como guarda de sanidade caso rodem isoladamente.
+process.env.NODE_ENV = process.env.NODE_ENV || 'test';
 
 // Suppress console logs during tests
 global.console = {
