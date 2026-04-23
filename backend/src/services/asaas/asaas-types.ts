@@ -121,3 +121,34 @@ export interface AsaasCustomerResponse {
   dateCreated?: string;
   [key: string]: unknown;
 }
+
+/**
+ * Payload para POST /subscriptions.
+ * Campos obrigatórios conforme docs v3: customer, billingType, value, nextDueDate, cycle.
+ * externalReference é nosso "handle" (ex.: Subscription.id local) para reconciliação.
+ */
+export interface AsaasSubscriptionCreate {
+  customer: string;
+  billingType: AsaasBillingType;
+  value: number;
+  nextDueDate: string;
+  cycle: 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY' | 'QUARTERLY' | 'SEMIANNUALLY' | 'YEARLY';
+  description?: string;
+  externalReference?: string;
+  endDate?: string;
+  maxPayments?: number;
+}
+
+export interface AsaasSubscriptionResponse {
+  id: string;
+  customer: string;
+  value: number;
+  nextDueDate: string;
+  cycle: 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY' | 'QUARTERLY' | 'SEMIANNUALLY' | 'YEARLY';
+  status: AsaasSubscriptionStatus;
+  billingType: AsaasBillingType;
+  description?: string;
+  externalReference?: string;
+  dateCreated?: string;
+  [key: string]: unknown;
+}

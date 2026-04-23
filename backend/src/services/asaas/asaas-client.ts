@@ -18,6 +18,8 @@ import {
   ASAAS_BASE_URL_PRODUCTION,
   AsaasCustomerCreate,
   AsaasCustomerResponse,
+  AsaasSubscriptionCreate,
+  AsaasSubscriptionResponse,
 } from './asaas-types';
 
 export interface AsaasClientOptions {
@@ -97,6 +99,17 @@ export class AsaasClient {
 
   async getCustomer(id: string): Promise<AsaasCustomerResponse> {
     return this.request<AsaasCustomerResponse>('GET', `/customers/${encodeURIComponent(id)}`);
+  }
+
+  async createSubscription(data: AsaasSubscriptionCreate): Promise<AsaasSubscriptionResponse> {
+    return this.request<AsaasSubscriptionResponse>('POST', '/subscriptions', data);
+  }
+
+  async getSubscription(id: string): Promise<AsaasSubscriptionResponse> {
+    return this.request<AsaasSubscriptionResponse>(
+      'GET',
+      `/subscriptions/${encodeURIComponent(id)}`,
+    );
   }
 
   /** Baixo nível. Exposto para camadas que precisem de endpoints ainda não cobertos. */
