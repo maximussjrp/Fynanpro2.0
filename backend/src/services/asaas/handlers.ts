@@ -126,12 +126,27 @@ export const PAYMENT_CREATED: WebhookHandler = async (ctx) => {
 };
 
 /**
- * PAYMENT_CONFIRMED — pagamento confirmado (PIX/CC) ou recebido (boleto baixado).
+ * PAYMENT_CONFIRMED — pagamento confirmado pelo Asaas.
+ *
+ * Semântica Asaas (ver `PAYMENT_RECEIVED` abaixo — é o mesmo handler):
+ *   - PAYMENT_CONFIRMED: pagamento confirmado mas ainda não liquidado
+ *     (ex.: PIX/CC aprovado; boleto compensando). Em muitos cenários o
+ *     Asaas pula direto para PAYMENT_RECEIVED e nunca emite CONFIRMED
+ *     (sandbox + "Confirmar recebimento em dinheiro" em boleto).
+ *   - PAYMENT_RECEIVED: valor efetivamente liquidado / recebido.
+ *
+ * Para o UTOP (C4.1), ambos significam "pagamento concluído" e devem
+ * disparar o mesmo efeito: marcar `PaymentRecord=paid`, ativar Subscription
+ * e atualizar o cache legado em Tenant. Por isso exportamos um alias
+ * `PAYMENT_RECEIVED = PAYMENT_CONFIRMED` e registramos os dois no processor.
+ *
  *   1. upsert PaymentRecord → status='paid', paidAt
  *   2. se há Subscription associada: status='active', mexe em currentPeriodStart/End
  *   3. atualiza Tenant.subscriptionStatus via mapping (cache legado)
  *
- * Idempotente: chamadas repetidas mantêm o mesmo estado final.
+ * Idempotente: chamadas repetidas (inclusive CONFIRMED seguido de RECEIVED
+ * para o mesmo `asaasPaymentId`) mantêm o mesmo estado final — o upsert é
+ * chaveado por `asaasPaymentId` e todas as atualizações são convergentes.
  */
 export const PAYMENT_CONFIRMED: WebhookHandler = async (ctx) => {
   const payment = ctx.payload.payment!;
@@ -200,8 +215,24 @@ export const PAYMENT_CONFIRMED: WebhookHandler = async (ctx) => {
 
   log.info('handler PAYMENT_CONFIRMED ok', {
     eventId: ctx.eventId,
+    eventType: ctx.payload?.event,
     asaasPaymentId: payment.id,
     subscriptionId: updatedSub.id,
     tenantCache: cacheValue,
   });
 };
+
+/**
+ * PAYMENT_RECEIVED — alias semântico de PAYMENT_CONFIRMED.
+ *
+ * O Asaas emite `PAYMENT_RECEIVED` quando o pagamento é liquidado (boleto
+ * compensado, "recebimento em dinheiro" confirmado no painel sandbox, etc.).
+ * Em muitos fluxos é o ÚNICO evento de conclusão que o Asaas envia — ele
+ * pula `PAYMENT_CONFIRMED`. Por isso tratamos os dois com a mesma lógica
+ * (ver docblock de `PAYMENT_CONFIRMED`).
+ *
+ * Idempotência: mesmo `asaasPaymentId` em eventos distintos (CONFIRMED +
+ * RECEIVED, ou RECEIVED duplicado) produz o mesmo estado final graças ao
+ * upsert por chave única.
+ */
+export const PAYMENT_RECEIVED: WebhookHandler = PAYMENT_CONFIRMED;

@@ -21,6 +21,7 @@ import type { AsaasWebhookPayload } from './asaas-types';
 import {
   PAYMENT_CREATED,
   PAYMENT_CONFIRMED,
+  PAYMENT_RECEIVED,
   type WebhookHandler,
   type WebhookHandlerContext,
 } from './handlers';
@@ -52,7 +53,9 @@ export interface WebhookProcessorDeps {
   db: ProcessorDb;
   /**
    * Map de eventType → handler. Por padrão (factory abaixo) registra
-   * apenas PAYMENT_CREATED e PAYMENT_CONFIRMED. Demais eventos → skipped.
+   * PAYMENT_CREATED, PAYMENT_CONFIRMED e PAYMENT_RECEIVED (C4.1: RECEIVED
+   * é alias semântico de CONFIRMED — ver `handlers.ts`). Demais eventos →
+   * skipped.
    */
   handlers?: WebhookHandlerRegistry;
   /** Limite de eventos por chamada de processBatch. Default 50. */
@@ -78,6 +81,7 @@ export function buildWebhookProcessor(
     deps.handlers ?? {
       PAYMENT_CREATED,
       PAYMENT_CONFIRMED,
+      PAYMENT_RECEIVED,
     };
 
   async function markFailed(

@@ -33,6 +33,46 @@ describe('buildWebhookProcessor — DI guards', () => {
   });
 });
 
+describe('buildWebhookProcessor — default handler registry (C4.1)', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it.each([
+    ['PAYMENT_CREATED'],
+    ['PAYMENT_CONFIRMED'],
+    ['PAYMENT_RECEIVED'],
+  ])('%s é roteado (não cai em skipped)', async (eventType) => {
+    const db = makeDb();
+    // PaymentRecord + Subscription mocks ok no tx pra handler real não quebrar.
+    db.__tx.subscription.findFirst.mockResolvedValue(null);
+    db.__tx.paymentRecord.upsert.mockResolvedValue({});
+    db.asaasWebhookEvent.findUnique.mockResolvedValue({
+      id: 'evt_reg',
+      eventType,
+      payload: { event: eventType, payment: { id: 'pay_reg' } },
+      status: 'received',
+    });
+
+    const proc = buildWebhookProcessor({ db });
+    const out = await proc.processOne('evt_reg');
+
+    expect(out.outcome).toBe('processed');
+    expect(db.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('eventType desconhecido continua caindo em skipped', async () => {
+    const db = makeDb();
+    db.asaasWebhookEvent.findUnique.mockResolvedValue({
+      id: 'evt_unk',
+      eventType: 'RANDOM_UNREGISTERED',
+      payload: { event: 'RANDOM_UNREGISTERED' },
+      status: 'received',
+    });
+    const proc = buildWebhookProcessor({ db });
+    const out = await proc.processOne('evt_unk');
+    expect(out.outcome).toBe('skipped');
+  });
+});
+
 describe('processOne', () => {
   beforeEach(() => jest.clearAllMocks());
 

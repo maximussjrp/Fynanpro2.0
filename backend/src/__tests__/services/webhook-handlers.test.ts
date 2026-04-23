@@ -5,6 +5,7 @@
 import {
   PAYMENT_CREATED,
   PAYMENT_CONFIRMED,
+  PAYMENT_RECEIVED,
   SUBSCRIPTION_STATUS_TO_TENANT_CACHE,
 } from '../../services/asaas/handlers';
 
@@ -216,5 +217,99 @@ describe('PAYMENT_CONFIRMED handler', () => {
     const paidAt: Date = tx.paymentRecord.upsert.mock.calls[0][0].create.paidAt;
     expect(paidAt.getTime()).toBeGreaterThanOrEqual(before);
     expect(paidAt.getTime()).toBeLessThanOrEqual(after);
+  });
+});
+
+describe('PAYMENT_RECEIVED handler (C4.1 — alias de PAYMENT_CONFIRMED)', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('é literalmente a mesma função exportada que PAYMENT_CONFIRMED', () => {
+    // Garante que qualquer mudança futura em um não divergir silenciosamente do outro.
+    expect(PAYMENT_RECEIVED).toBe(PAYMENT_CONFIRMED);
+  });
+
+  it('PaymentRecord pending → paid, Subscription → active, Tenant cache=active', async () => {
+    const tx = makeTx();
+    tx.subscription.findFirst.mockResolvedValue({ id: 'sub_local_1', tenantId: 't1' });
+    tx.subscription.update.mockResolvedValue({
+      id: 'sub_local_1',
+      status: 'active',
+      tenantId: 't1',
+    });
+
+    await PAYMENT_RECEIVED({
+      tx,
+      payload: {
+        event: 'PAYMENT_RECEIVED',
+        payment: { ...samplePayment, status: 'RECEIVED' } as any,
+      },
+      eventId: 'evt_r1',
+    });
+
+    // PaymentRecord paid
+    const upsertArg = tx.paymentRecord.upsert.mock.calls[0][0];
+    expect(upsertArg.where.asaasPaymentId).toBe('pay_1');
+    expect(upsertArg.create.status).toBe('paid');
+    expect(upsertArg.update.status).toBe('paid');
+    expect(upsertArg.create.paidAt).toBeInstanceOf(Date);
+
+    // Subscription active
+    const subArg = tx.subscription.update.mock.calls[0][0];
+    expect(subArg.where.id).toBe('sub_local_1');
+    expect(subArg.data.status).toBe('active');
+
+    // Tenant cache
+    const tenantArg = tx.tenant.update.mock.calls[0][0];
+    expect(tenantArg.where.id).toBe('t1');
+    expect(tenantArg.data.subscriptionStatus).toBe('active');
+  });
+
+  it('idempotente entre PAYMENT_CONFIRMED + PAYMENT_RECEIVED para o mesmo asaasPaymentId', async () => {
+    // Simula o caso real: Asaas envia primeiro CONFIRMED e depois RECEIVED
+    // para o mesmo pay_*. O estado final precisa ser estável (paid/active).
+    const tx = makeTx();
+    tx.subscription.findFirst.mockResolvedValue({ id: 'sub_local_1', tenantId: 't1' });
+    tx.subscription.update.mockResolvedValue({
+      id: 'sub_local_1',
+      status: 'active',
+      tenantId: 't1',
+    });
+
+    await PAYMENT_CONFIRMED({
+      tx,
+      payload: { event: 'PAYMENT_CONFIRMED', payment: samplePayment as any },
+      eventId: 'evt_dup_1',
+    });
+    await PAYMENT_RECEIVED({
+      tx,
+      payload: { event: 'PAYMENT_RECEIVED', payment: samplePayment as any },
+      eventId: 'evt_dup_2',
+    });
+
+    // Mesmo asaasPaymentId nas duas chamadas (upsert @unique garante 1 row no DB real).
+    const ids = tx.paymentRecord.upsert.mock.calls.map((c: any[]) => c[0].where.asaasPaymentId);
+    expect(ids).toEqual(['pay_1', 'pay_1']);
+    // Sempre paid em ambas as chamadas (nunca regride).
+    const statuses = tx.paymentRecord.upsert.mock.calls.map((c: any[]) => c[0].update.status);
+    expect(statuses).toEqual(['paid', 'paid']);
+  });
+
+  it('PAYMENT_RECEIVED sem Subscription local → só PaymentRecord paid, não toca Tenant', async () => {
+    const tx = makeTx();
+    tx.subscription.findFirst.mockResolvedValue(null);
+
+    await PAYMENT_RECEIVED({
+      tx,
+      payload: {
+        event: 'PAYMENT_RECEIVED',
+        payment: { ...samplePayment, externalReference: undefined } as any,
+      },
+      eventId: 'evt_r_orphan',
+    });
+
+    expect(tx.paymentRecord.upsert).toHaveBeenCalledTimes(1);
+    expect(tx.paymentRecord.upsert.mock.calls[0][0].create.status).toBe('paid');
+    expect(tx.subscription.update).not.toHaveBeenCalled();
+    expect(tx.tenant.update).not.toHaveBeenCalled();
   });
 });
