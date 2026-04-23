@@ -25,6 +25,7 @@ import {
   type WebhookHandler,
   type WebhookHandlerContext,
 } from './handlers';
+import { invalidateTenantBillingCache } from '../billing/tenant-billing-cache';
 
 /** Subset mínimo do PrismaClient consumido. */
 export type ProcessorDb = Pick<
@@ -32,7 +33,29 @@ export type ProcessorDb = Pick<
   'asaasWebhookEvent' | 'paymentRecord' | 'subscription' | 'tenant' | '$transaction'
 >;
 
-export type WebhookHandlerRegistry = Record<string, WebhookHandler>;
+/**
+ * C5.0 — Spec de handler no registry. Permite especificar por handler se
+ * a validação `payment.id != null` deve ser aplicada (handlers SUBSCRIPTION_*
+ * não carregam `payment` no payload).
+ *
+ * Aceita também um `WebhookHandler` cru (backward-compat C4): nesse caso
+ * assume `requiresPaymentId: true`.
+ */
+export interface WebhookHandlerSpec {
+  handler: WebhookHandler;
+  requiresPaymentId: boolean;
+}
+
+export type WebhookHandlerRegistry = Record<
+  string,
+  WebhookHandler | WebhookHandlerSpec
+>;
+
+function normalizeSpec(v: WebhookHandler | WebhookHandlerSpec): WebhookHandlerSpec {
+  return typeof v === 'function'
+    ? { handler: v, requiresPaymentId: true }
+    : v;
+}
 
 export interface ProcessSingleResult {
   id: string;
@@ -84,6 +107,11 @@ export function buildWebhookProcessor(
       PAYMENT_RECEIVED,
     };
 
+  // Pré-normaliza o registry uma vez para eficiência em processBatch.
+  const specs: Record<string, WebhookHandlerSpec> = Object.fromEntries(
+    Object.entries(handlers).map(([k, v]) => [k, normalizeSpec(v)]),
+  );
+
   async function markFailed(
     eventId: string,
     err: Error,
@@ -121,8 +149,8 @@ export function buildWebhookProcessor(
       };
     }
 
-    const handler = handlers[event.eventType];
-    if (!handler) {
+    const spec = specs[event.eventType];
+    if (!spec) {
       await db.asaasWebhookEvent.update({
         where: { id: event.id },
         data: {
@@ -136,36 +164,42 @@ export function buildWebhookProcessor(
 
     const payload = event.payload as AsaasWebhookPayload;
 
-    // Validação mínima (rule #3): handlers de pagamento exigem payment.id.
-    const paymentId =
-      payload && typeof payload === 'object' && payload.payment
-        ? payload.payment.id
-        : undefined;
-    if (!paymentId || typeof paymentId !== 'string') {
-      const err = new Error('NO_PAYMENT_ID');
-      await markFailed(event.id, err);
-      log.warn('webhook-processor: evento sem payment.id', {
-        eventId: event.id,
-        eventType: event.eventType,
-      });
-      return {
-        id: event.id,
-        eventType: event.eventType,
-        outcome: 'failed',
-        error: err.message,
-      };
+    // C5.0: validação de payment.id virou POR-handler (spec.requiresPaymentId).
+    if (spec.requiresPaymentId) {
+      const paymentId =
+        payload && typeof payload === 'object' && payload.payment
+          ? payload.payment.id
+          : undefined;
+      if (!paymentId || typeof paymentId !== 'string') {
+        const err = new Error('NO_PAYMENT_ID');
+        await markFailed(event.id, err);
+        log.warn('webhook-processor: evento sem payment.id', {
+          eventId: event.id,
+          eventType: event.eventType,
+        });
+        return {
+          id: event.id,
+          eventType: event.eventType,
+          outcome: 'failed',
+          error: err.message,
+        };
+      }
     }
+
+    // Cache invalidation buffer — handlers empurram tenantIds a invalidar.
+    // Invalidação roda DEPOIS do commit (evita race com rollback da tx).
+    const invalidateTenantIds = new Set<string>();
 
     try {
       // RULE #2: handler + atualização do AsaasWebhookEvent na MESMA transação.
-      // Se qualquer step falhar, tudo reverte (DB consistente).
       await db.$transaction(async (tx) => {
         const ctx: WebhookHandlerContext = {
           tx: tx as unknown as Prisma.TransactionClient,
           payload,
           eventId: event.id,
+          invalidateTenantIds,
         };
-        await handler(ctx);
+        await spec.handler(ctx);
         await tx.asaasWebhookEvent.update({
           where: { id: event.id },
           data: {
@@ -175,6 +209,18 @@ export function buildWebhookProcessor(
           },
         });
       });
+
+      // C5.0: invalidação de cache PÓS-commit (se tx falhou, não chegamos aqui).
+      if (invalidateTenantIds.size > 0) {
+        for (const tenantId of invalidateTenantIds) {
+          invalidateTenantBillingCache(tenantId);
+        }
+        log.debug('webhook-processor: tenant billing cache invalidated', {
+          eventId: event.id,
+          eventType: event.eventType,
+          tenantCount: invalidateTenantIds.size,
+        });
+      }
 
       return { id: event.id, eventType: event.eventType, outcome: 'processed' };
     } catch (err) {

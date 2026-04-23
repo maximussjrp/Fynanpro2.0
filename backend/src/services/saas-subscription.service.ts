@@ -31,7 +31,7 @@ import type { AsaasBillingType, AsaasCustomerCreate } from './asaas/asaas-types'
 
 /** Tipo mínimo que consumimos do Prisma. Assim os testes podem passar um mock
  *  sem precisar implementar a superfície inteira do PrismaClient. */
-export type SaasSubscriptionDb = Pick<PrismaClient, 'subscription'>;
+export type SaasSubscriptionDb = Pick<PrismaClient, 'subscription' | 'tenant'>;
 
 export type SaasSupportedCycle = 'MONTHLY';
 
@@ -290,6 +290,35 @@ export function buildSaasSubscriptionService(
           plan: true,
         },
       });
+
+      // 6) C5.0 — Promoção ATÔMICA de Tenant.billingSource para 'asaas'
+      //    SÓ se estado atual é NULL ou 'trial'. updateMany com where condicional
+      //    garante idempotência e impede sobrescrita de 'stripe' ou 'manual'.
+      try {
+        const promo = await db.tenant.updateMany({
+          where: {
+            id: input.tenantId,
+            OR: [
+              { billingSource: null },
+              { billingSource: 'trial' },
+            ],
+          },
+          data: { billingSource: 'asaas' },
+        });
+        if (promo.count > 0) {
+          log.info('Tenant.billingSource promovido para asaas', {
+            tenantId: input.tenantId,
+            subscriptionId: updated.id,
+          });
+        }
+      } catch (promoErr) {
+        // Falha na promoção NÃO deve quebrar a criação da Subscription.
+        // Handler do webhook subsequente pode fazer a promoção em run-time.
+        log.warn('Falha ao promover Tenant.billingSource — prosseguindo', {
+          tenantId: input.tenantId,
+          err: (promoErr as Error).message,
+        });
+      }
 
       log.info('SaasSubscription criada', {
         tenantId: input.tenantId,

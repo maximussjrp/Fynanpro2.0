@@ -13,7 +13,11 @@ function makeTx() {
   return {
     paymentRecord: { upsert: jest.fn() },
     subscription: { findFirst: jest.fn(), findUnique: jest.fn(), update: jest.fn() },
-    tenant: { update: jest.fn() },
+    tenant: {
+      update: jest.fn(),
+      // C5.0 — default: tenant sem billingSource (zona neutra, guard permite).
+      findUnique: jest.fn().mockResolvedValue({ billingSource: null }),
+    },
   } as any;
 }
 
@@ -311,5 +315,103 @@ describe('PAYMENT_RECEIVED handler (C4.1 — alias de PAYMENT_CONFIRMED)', () =>
     expect(tx.paymentRecord.upsert.mock.calls[0][0].create.status).toBe('paid');
     expect(tx.subscription.update).not.toHaveBeenCalled();
     expect(tx.tenant.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('PAYMENT_CONFIRMED — billingSource guard (C5.0)', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('source=stripe → NÃO grava Tenant (guard bloqueia asaas)', async () => {
+    const tx = makeTx();
+    tx.subscription.findFirst.mockResolvedValue({ id: 'sub_local_1', tenantId: 't1' });
+    tx.subscription.update.mockResolvedValue({
+      id: 'sub_local_1',
+      status: 'active',
+      tenantId: 't1',
+    });
+    tx.tenant.findUnique.mockResolvedValue({ billingSource: 'stripe' });
+
+    const invalidateTenantIds = new Set<string>();
+    await PAYMENT_CONFIRMED({
+      tx,
+      payload: { event: 'PAYMENT_CONFIRMED', payment: samplePayment as any },
+      eventId: 'evt_guard_stripe',
+      invalidateTenantIds,
+    });
+
+    expect(tx.tenant.update).not.toHaveBeenCalled();
+    expect(invalidateTenantIds.size).toBe(0);
+  });
+
+  it('source=null → grava Tenant + PROMOVE para billingSource=asaas atomicamente', async () => {
+    const tx = makeTx();
+    tx.subscription.findFirst.mockResolvedValue({ id: 'sub_local_1', tenantId: 't1' });
+    tx.subscription.update.mockResolvedValue({
+      id: 'sub_local_1',
+      status: 'active',
+      tenantId: 't1',
+    });
+    tx.tenant.findUnique.mockResolvedValue({ billingSource: null });
+
+    const invalidateTenantIds = new Set<string>();
+    await PAYMENT_CONFIRMED({
+      tx,
+      payload: { event: 'PAYMENT_CONFIRMED', payment: samplePayment as any },
+      eventId: 'evt_guard_promote',
+      invalidateTenantIds,
+    });
+
+    expect(tx.tenant.update).toHaveBeenCalledTimes(1);
+    const arg = tx.tenant.update.mock.calls[0][0];
+    expect(arg.data.subscriptionStatus).toBe('active');
+    expect(arg.data.billingSource).toBe('asaas');
+    expect(invalidateTenantIds.has('t1')).toBe(true);
+  });
+
+  it('source=asaas → grava Tenant SEM re-promover (billingSource ausente do update)', async () => {
+    const tx = makeTx();
+    tx.subscription.findFirst.mockResolvedValue({ id: 'sub_local_1', tenantId: 't1' });
+    tx.subscription.update.mockResolvedValue({
+      id: 'sub_local_1',
+      status: 'active',
+      tenantId: 't1',
+    });
+    tx.tenant.findUnique.mockResolvedValue({ billingSource: 'asaas' });
+
+    const invalidateTenantIds = new Set<string>();
+    await PAYMENT_CONFIRMED({
+      tx,
+      payload: { event: 'PAYMENT_CONFIRMED', payment: samplePayment as any },
+      eventId: 'evt_guard_asaas',
+      invalidateTenantIds,
+    });
+
+    expect(tx.tenant.update).toHaveBeenCalledTimes(1);
+    const arg = tx.tenant.update.mock.calls[0][0];
+    expect(arg.data.subscriptionStatus).toBe('active');
+    expect(arg.data.billingSource).toBeUndefined();
+    expect(invalidateTenantIds.has('t1')).toBe(true);
+  });
+
+  it('source=trial → BLOQUEIA (só rota C3 promove trial→asaas)', async () => {
+    const tx = makeTx();
+    tx.subscription.findFirst.mockResolvedValue({ id: 'sub_local_1', tenantId: 't1' });
+    tx.subscription.update.mockResolvedValue({
+      id: 'sub_local_1',
+      status: 'active',
+      tenantId: 't1',
+    });
+    tx.tenant.findUnique.mockResolvedValue({ billingSource: 'trial' });
+
+    const invalidateTenantIds = new Set<string>();
+    await PAYMENT_CONFIRMED({
+      tx,
+      payload: { event: 'PAYMENT_CONFIRMED', payment: samplePayment as any },
+      eventId: 'evt_guard_trial',
+      invalidateTenantIds,
+    });
+
+    expect(tx.tenant.update).not.toHaveBeenCalled();
+    expect(invalidateTenantIds.size).toBe(0);
   });
 });

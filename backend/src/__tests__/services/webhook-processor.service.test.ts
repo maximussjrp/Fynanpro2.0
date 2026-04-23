@@ -271,3 +271,52 @@ describe('processBatch', () => {
     });
   });
 });
+
+describe('buildWebhookProcessor — WebhookHandlerSpec (C5.0)', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('handler com requiresPaymentId:false processa evento SEM payment.id', async () => {
+    const db = makeDb();
+    db.asaasWebhookEvent.findUnique.mockResolvedValue({
+      id: 'evt_sub',
+      eventType: 'SUBSCRIPTION_UPDATED',
+      payload: { event: 'SUBSCRIPTION_UPDATED', subscription: { id: 'sub_1' } },
+      status: 'received',
+    });
+
+    const handler = jest.fn().mockResolvedValue(undefined);
+    const proc = buildWebhookProcessor({
+      db,
+      handlers: {
+        SUBSCRIPTION_UPDATED: { handler, requiresPaymentId: false },
+      },
+    });
+
+    const out = await proc.processOne('evt_sub');
+
+    expect(out.outcome).toBe('processed');
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it('handler bare (sem spec) assume requiresPaymentId:true (back-compat C4)', async () => {
+    const db = makeDb();
+    db.asaasWebhookEvent.findUnique.mockResolvedValue({
+      id: 'evt_nop',
+      eventType: 'LEGACY_X',
+      payload: { event: 'LEGACY_X' }, // sem payment
+      status: 'received',
+    });
+
+    const handler = jest.fn();
+    const proc = buildWebhookProcessor({
+      db,
+      handlers: { LEGACY_X: handler },
+    });
+
+    const out = await proc.processOne('evt_nop');
+
+    expect(out.outcome).toBe('failed');
+    expect(out.error).toBe('NO_PAYMENT_ID');
+    expect(handler).not.toHaveBeenCalled();
+  });
+});

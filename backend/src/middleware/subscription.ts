@@ -1,18 +1,25 @@
 /**
  * Middleware de Verificação de Assinatura
  * Bloqueia acesso quando trial expirou ou assinatura está suspensa/cancelada
+ *
+ * C5.0: cache extraído para `services/billing/tenant-billing-cache.ts`
+ * (evita dependência circular com handlers do webhook Asaas).
  */
 
 import { Response, NextFunction } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { AuthRequest } from './auth';
 import { log } from '../utils/logger';
+import {
+  getCachedSubscription,
+  setCachedSubscription,
+  invalidateTenantBillingCache,
+} from '../services/billing/tenant-billing-cache';
+
+// Re-export para manter compat com importadores existentes.
+export { invalidateTenantBillingCache as clearSubscriptionCache };
 
 const prisma = new PrismaClient();
-
-// Cache simples para evitar consultas repetidas ao banco
-const subscriptionCache = new Map<string, { status: string; expiresAt: number }>();
-const CACHE_TTL = 60 * 1000; // 1 minuto
 
 /**
  * Middleware que verifica se a assinatura está ativa
@@ -31,8 +38,8 @@ export const subscriptionMiddleware = async (
     }
 
     // Verificar cache primeiro
-    const cached = subscriptionCache.get(tenantId);
-    if (cached && cached.expiresAt > Date.now()) {
+    const cached = getCachedSubscription(tenantId);
+    if (cached) {
       if (cached.status === 'suspended' || cached.status === 'cancelled') {
         return res.status(402).json({
           success: false,
@@ -79,10 +86,7 @@ export const subscriptionMiddleware = async (
         });
 
         // Atualizar cache
-        subscriptionCache.set(tenantId, {
-          status: 'suspended',
-          expiresAt: Date.now() + CACHE_TTL
-        });
+        setCachedSubscription(tenantId, 'suspended');
 
         log.info('Trial expirado - acesso bloqueado', { tenantId });
 
@@ -101,10 +105,7 @@ export const subscriptionMiddleware = async (
     // Verificar status da assinatura
     if (tenant.subscriptionStatus === 'suspended' || tenant.subscriptionStatus === 'cancelled') {
       // Atualizar cache
-      subscriptionCache.set(tenantId, {
-        status: tenant.subscriptionStatus,
-        expiresAt: Date.now() + CACHE_TTL
-      });
+      setCachedSubscription(tenantId, tenant.subscriptionStatus);
 
       return res.status(402).json({
         success: false,
@@ -119,10 +120,7 @@ export const subscriptionMiddleware = async (
     }
 
     // Assinatura ativa - atualizar cache
-    subscriptionCache.set(tenantId, {
-      status: 'active',
-      expiresAt: Date.now() + CACHE_TTL
-    });
+    setCachedSubscription(tenantId, 'active');
 
     return next();
   } catch (error) {
@@ -130,13 +128,6 @@ export const subscriptionMiddleware = async (
     // Em caso de erro, deixa passar para não bloquear indevidamente
     return next();
   }
-};
-
-/**
- * Limpa o cache de um tenant específico (usar após pagamento confirmado)
- */
-export const clearSubscriptionCache = (tenantId: string) => {
-  subscriptionCache.delete(tenantId);
 };
 
 /**

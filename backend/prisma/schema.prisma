@@ -47,6 +47,10 @@ model Tenant {
   slug                   String                    @unique
   subscriptionPlan       String                    @default("trial")
   subscriptionStatus     String                    @default("active")
+  /// C5.0 — fonte de verdade do billing para este tenant.
+  /// Valores: 'trial' | 'asaas' | 'stripe' | 'manual' | null (zona neutra).
+  /// Quando null, qualquer provider pode "tomar posse" no próximo webhook.
+  billingSource          String?
   trialEndsAt            DateTime?
   createdAt              DateTime                  @default(now())
   updatedAt              DateTime                  @updatedAt
@@ -82,6 +86,7 @@ model Tenant {
   @@index([subscriptionPlan])
   @@index([stripeCustomerId])
   @@index([stripeSubscriptionId])
+  @@index([billingSource])
 }
 
 model TenantUser {
@@ -850,6 +855,8 @@ model Subscription {
   currentPeriodStart   DateTime?
   currentPeriodEnd     DateTime?
   cancelledAt          DateTime?
+  /// C5.0 — última vez que um webhook Asaas (processed) tocou esta row.
+  lastAsaasEventAt     DateTime?
   metadata             Json?
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt

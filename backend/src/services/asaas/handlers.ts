@@ -17,12 +17,26 @@
 import type { Prisma } from '@prisma/client';
 import { log } from '../../utils/logger';
 import type { AsaasWebhookPayload, AsaasPaymentObject } from './asaas-types';
+import {
+  canProviderWriteTenant,
+  shouldPromoteBillingSource,
+  type BillingSource,
+} from './billing-source.guard';
 
 export interface WebhookHandlerContext {
   tx: Prisma.TransactionClient;
   payload: AsaasWebhookPayload;
   /** id do AsaasWebhookEvent que originou esta chamada (rastreabilidade). */
   eventId: string;
+  /**
+   * C5.0 — handlers que alterarem `Tenant.subscriptionStatus` devem empurrar
+   * o `tenantId` aqui. O processor invalida o cache PÓS-commit (não dentro
+   * da tx), evitando race com falha/rollback da transação.
+   *
+   * Opcional para compat com chamadas diretas em testes; processor sempre
+   * injeta um Set.
+   */
+  invalidateTenantIds?: Set<string>;
 }
 
 export type WebhookHandler = (ctx: WebhookHandlerContext) => Promise<void>;
@@ -200,17 +214,38 @@ export const PAYMENT_CONFIRMED: WebhookHandler = async (ctx) => {
       status: 'active',
       currentPeriodStart: now,
       currentPeriodEnd: nextPeriodEnd,
+      lastAsaasEventAt: now,
     },
     select: { id: true, status: true, tenantId: true },
   });
 
-  // Sincroniza cache legado em Tenant.
+  // Sincroniza cache legado em Tenant — respeitando billingSource guard (C5.0).
   const cacheValue = SUBSCRIPTION_STATUS_TO_TENANT_CACHE[updatedSub.status];
   if (cacheValue) {
-    await ctx.tx.tenant.update({
+    const tenantRow = await ctx.tx.tenant.findUnique({
       where: { id: updatedSub.tenantId },
-      data: { subscriptionStatus: cacheValue },
+      select: { billingSource: true },
     });
+    const source = (tenantRow?.billingSource ?? null) as BillingSource;
+    if (canProviderWriteTenant('asaas', source)) {
+      await ctx.tx.tenant.update({
+        where: { id: updatedSub.tenantId },
+        data: {
+          subscriptionStatus: cacheValue,
+          ...(shouldPromoteBillingSource(source)
+            ? { billingSource: 'asaas' }
+            : {}),
+        },
+      });
+      ctx.invalidateTenantIds?.add(updatedSub.tenantId);
+    } else {
+      log.warn('handler PAYMENT_CONFIRMED: skip Tenant write (billingSource guard)', {
+        eventId: ctx.eventId,
+        tenantId: updatedSub.tenantId,
+        billingSource: source,
+        reason: 'PROVIDER_MISMATCH',
+      });
+    }
   }
 
   log.info('handler PAYMENT_CONFIRMED ok', {
