@@ -34,6 +34,7 @@ import { env } from './config/env';
 import { swaggerSpec } from './config/swagger';
 import { startTransactionGeneratorJob } from './jobs/transaction-generator.job';
 import { startAllJobs } from './jobs/notification.job';
+import { startAsaasConsumerJob } from './jobs/asaas-consumer.job';
 import { authService } from './services/auth.service';
 import { RegisterSchema, LoginSchema, RefreshTokenSchema, ChangePasswordSchema, SwitchTenantSchema } from './dtos/auth.dto';
 import { log, httpLogger } from './utils/logger';
@@ -1021,6 +1022,9 @@ app.listen(port, () => {
   
   // ✅ Inicializar jobs de notificações e verificações
   startAllJobs();
+
+  // ✅ Fase A2A (C4) — Asaas webhook consumer (NO-OP enquanto flag OFF)
+  startAsaasConsumerJob();
 });
 
 // Graceful shutdown

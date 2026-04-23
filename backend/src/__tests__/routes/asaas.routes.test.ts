@@ -166,3 +166,220 @@ describe('Asaas routes — com flags ON', () => {
     expect(mockPrisma.asaasWebhookEvent.create).not.toHaveBeenCalled();
   });
 });
+
+// ============================================================
+// POST /billing/subscriptions — Fase A2A (C3)
+// ============================================================
+
+// Mock dos services Asaas para não exigir credenciais reais nos testes de rota.
+jest.mock('../../services/asaas/asaas-client', () => {
+  const actual = jest.requireActual('../../services/asaas/asaas-client');
+  return {
+    ...actual,
+    // Respeita ASAAS_API_KEY (comportamento real) mas evita chamar o fetch real.
+    buildAsaasClientFromEnv: jest.fn(() => {
+      if (!process.env.ASAAS_API_KEY) return null;
+      return {
+        createCustomer: jest.fn(),
+        createSubscription: jest.fn(),
+        ping: jest.fn().mockResolvedValue({ ok: true, account: {} }),
+      };
+    }),
+  };
+});
+
+jest.mock('../../services/asaas/asaas-customer.service', () => ({
+  buildAsaasCustomerService: jest.fn(() => ({
+    ensureCustomer: jest.fn().mockResolvedValue({
+      billingCustomerId: 'bc_1',
+      asaasCustomerId: 'cus_1',
+      created: true,
+    }),
+  })),
+}));
+
+jest.mock('../../services/asaas/asaas-subscription.service', () => ({
+  buildAsaasSubscriptionService: jest.fn(() => ({
+    create: jest.fn().mockResolvedValue({
+      id: 'asaas_sub_route_1',
+      customer: 'cus_1',
+      value: 29.9,
+      nextDueDate: '2026-05-01',
+      cycle: 'MONTHLY',
+      status: 'ACTIVE',
+      billingType: 'PIX',
+    }),
+  })),
+  AsaasSubscriptionServiceError: class extends Error {},
+}));
+
+describe('POST /billing/subscriptions — flag gating', () => {
+  const originalBilling = featureFlags['asaas.enabled'];
+  const originalSub = featureFlags['asaas.subscription.enabled'];
+
+  afterEach(() => {
+    (featureFlags as any)['asaas.enabled'] = originalBilling;
+    (featureFlags as any)['asaas.subscription.enabled'] = originalSub;
+  });
+
+  it('→ 404 quando asaas.enabled OFF', async () => {
+    (featureFlags as any)['asaas.enabled'] = false;
+    (featureFlags as any)['asaas.subscription.enabled'] = true;
+    const app = buildApp();
+    const res = await request(app).post('/api/v1/billing/subscriptions').send({});
+    expect(res.status).toBe(404);
+  });
+
+  it('→ 404 quando asaas.subscription.enabled OFF (mas asaas.enabled ON)', async () => {
+    (featureFlags as any)['asaas.enabled'] = true;
+    (featureFlags as any)['asaas.subscription.enabled'] = false;
+    const app = buildApp();
+    const res = await request(app).post('/api/v1/billing/subscriptions').send({});
+    expect(res.status).toBe(404);
+  });
+});
+
+describe('POST /billing/subscriptions — flags ON', () => {
+  const originalBilling = featureFlags['asaas.enabled'];
+  const originalSub = featureFlags['asaas.subscription.enabled'];
+  const originalApiKey = process.env.ASAAS_API_KEY;
+
+  beforeEach(() => {
+    (featureFlags as any)['asaas.enabled'] = true;
+    (featureFlags as any)['asaas.subscription.enabled'] = true;
+    process.env.ASAAS_API_KEY = 'k_test';
+    jest.clearAllMocks();
+  });
+
+  afterEach(() => {
+    (featureFlags as any)['asaas.enabled'] = originalBilling;
+    (featureFlags as any)['asaas.subscription.enabled'] = originalSub;
+    process.env.ASAAS_API_KEY = originalApiKey;
+  });
+
+  it('400 quando body é inválido (sem tenantId)', async () => {
+    const app = buildApp();
+    const res = await request(app)
+      .post('/api/v1/billing/subscriptions')
+      .send({ plan: 'monthly', amountCents: 2990, cycle: 'MONTHLY' });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('INVALID_INPUT');
+  });
+
+  it('400 quando customerData.name ausente', async () => {
+    const app = buildApp();
+    const res = await request(app)
+      .post('/api/v1/billing/subscriptions')
+      .send({
+        tenantId: 't1',
+        plan: 'monthly',
+        amountCents: 2990,
+        cycle: 'MONTHLY',
+        customerData: {},
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('INVALID_INPUT');
+  });
+
+  it('400 quando cycle != MONTHLY', async () => {
+    const app = buildApp();
+    const res = await request(app)
+      .post('/api/v1/billing/subscriptions')
+      .send({
+        tenantId: 't1',
+        plan: 'monthly',
+        amountCents: 2990,
+        cycle: 'YEARLY',
+        customerData: { name: 'n' },
+      });
+    expect(res.status).toBe(400);
+  });
+
+  it('503 quando ASAAS_API_KEY ausente', async () => {
+    delete process.env.ASAAS_API_KEY;
+    // O mock default de buildAsaasClientFromEnv retorna client — forçamos null aqui.
+    const { buildAsaasClientFromEnv } =
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      require('../../services/asaas/asaas-client');
+    (buildAsaasClientFromEnv as jest.Mock).mockReturnValueOnce(null);
+
+    const app = buildApp();
+    const res = await request(app)
+      .post('/api/v1/billing/subscriptions')
+      .send({
+        tenantId: 't1',
+        plan: 'monthly',
+        amountCents: 2990,
+        cycle: 'MONTHLY',
+        customerData: { name: 'n' },
+      });
+    expect(res.status).toBe(503);
+    expect(res.body.error.code).toBe('ASAAS_NOT_CONFIGURED');
+  });
+
+  it('201 no caminho feliz', async () => {
+    // Prisma mock: nenhuma sub viva, create + update retornam linhas.
+    (mockPrisma.subscription.findFirst as jest.Mock).mockResolvedValue(null);
+    (mockPrisma.subscription.create as jest.Mock).mockResolvedValue({
+      id: 'sub_new_1',
+      tenantId: 't1',
+      status: 'pending',
+      amountCents: 2990,
+      plan: 'monthly',
+      asaasSubscriptionId: null,
+    });
+    (mockPrisma.subscription.update as jest.Mock).mockResolvedValue({
+      id: 'sub_new_1',
+      tenantId: 't1',
+      status: 'pending',
+      asaasSubscriptionId: 'asaas_sub_route_1',
+      amountCents: 2990,
+      plan: 'monthly',
+    });
+
+    const app = buildApp();
+    const res = await request(app)
+      .post('/api/v1/billing/subscriptions')
+      .send({
+        tenantId: 't1',
+        plan: 'monthly',
+        amountCents: 2990,
+        cycle: 'MONTHLY',
+        customerData: { name: 'Tenant One', email: 't@x.com' },
+        nextDueDate: '2026-05-01',
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.created).toBe(true);
+    expect(res.body.data.subscription.id).toBe('sub_new_1');
+    expect(res.body.data.subscription.asaasSubscriptionId).toBe('asaas_sub_route_1');
+  });
+
+  it('200 quando já há sub viva (idempotente, created:false)', async () => {
+    (mockPrisma.subscription.findFirst as jest.Mock).mockResolvedValue({
+      id: 'sub_live',
+      tenantId: 't1',
+      status: 'active',
+      asaasSubscriptionId: 'asaas_live',
+      amountCents: 2990,
+      plan: 'monthly',
+    });
+
+    const app = buildApp();
+    const res = await request(app)
+      .post('/api/v1/billing/subscriptions')
+      .send({
+        tenantId: 't1',
+        plan: 'monthly',
+        amountCents: 2990,
+        cycle: 'MONTHLY',
+        customerData: { name: 'n' },
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.created).toBe(false);
+    expect(res.body.data.subscription.id).toBe('sub_live');
+    expect(mockPrisma.subscription.create).not.toHaveBeenCalled();
+  });
+});

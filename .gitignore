@@ -49,6 +49,16 @@ tmp/
 temp/
 *.tmp
 
+# Debug scripts with credentials (smoke tests, resets — local only)
+scripts/debug/smoke_*.sh
+scripts/debug/set_asaas_*.sh
+scripts/debug/fix_asaas_*.sh
+scripts/debug/reset_smoke_*.sh
+scripts/debug/validate_asaas_*.sh
+scripts/debug/check_bcrypt.sh
+scripts/debug/check_deploy.sh
+scripts/debug/find_master.sh
+
 # Nginx logs
 nginx/logs/
 nginx/access.log
