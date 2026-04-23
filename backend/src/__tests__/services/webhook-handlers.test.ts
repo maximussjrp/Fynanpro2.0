@@ -10,6 +10,10 @@ import {
   PAYMENT_REFUNDED,
   PAYMENT_CHARGEBACK_REQUESTED,
   PAYMENT_DELETED,
+  SUBSCRIPTION_UPDATED,
+  SUBSCRIPTION_DELETED,
+  SUBSCRIPTION_INACTIVATED,
+  ASAAS_SUB_STATUS_TO_LOCAL,
   SUBSCRIPTION_STATUS_TO_TENANT_CACHE,
 } from '../../services/asaas/handlers';
 
@@ -814,3 +818,385 @@ describe('PAYMENT_DELETED handler (C5.1)', () => {
     expect(tx.tenant.update).not.toHaveBeenCalled();
   });
 });
+
+// ============================================================================
+// C5.2 — SUBSCRIPTION_UPDATED / DELETED / INACTIVATED
+// ============================================================================
+
+const sampleAsaasSub = {
+  id: 'asaas_sub_1',
+  customer: 'cus_1',
+  value: 39.9,
+  nextDueDate: '2026-06-01',
+  cycle: 'MONTHLY' as const,
+  status: 'ACTIVE' as const,
+  billingType: 'PIX' as const,
+};
+
+describe('ASAAS_SUB_STATUS_TO_LOCAL mapping (C5.2)', () => {
+  it('ACTIVE → active', () => {
+    expect(ASAAS_SUB_STATUS_TO_LOCAL.ACTIVE).toBe('active');
+  });
+  it('EXPIRED → past_due (cache legado cruza past_due→active por política C4.1)', () => {
+    expect(ASAAS_SUB_STATUS_TO_LOCAL.EXPIRED).toBe('past_due');
+    expect(SUBSCRIPTION_STATUS_TO_TENANT_CACHE.past_due).toBe('active');
+  });
+  it('INACTIVE → suspended', () => {
+    expect(ASAAS_SUB_STATUS_TO_LOCAL.INACTIVE).toBe('suspended');
+  });
+});
+
+describe('SUBSCRIPTION_UPDATED handler (C5.2)', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('ACTIVE → Subscription active + cache active + promove billingSource null→asaas', async () => {
+    const tx = makeTx();
+    tx.subscription.findFirst.mockResolvedValue({
+      id: 'sub_local_1',
+      tenantId: 't1',
+      status: 'past_due',
+    });
+    tx.subscription.update.mockResolvedValue({
+      id: 'sub_local_1',
+      status: 'active',
+      tenantId: 't1',
+    });
+
+    const invalidateTenantIds = new Set<string>();
+    await SUBSCRIPTION_UPDATED({
+      tx,
+      payload: {
+        event: 'SUBSCRIPTION_UPDATED',
+        subscription: { ...sampleAsaasSub, status: 'ACTIVE' } as any,
+      },
+      eventId: 'evt_subu_a',
+      invalidateTenantIds,
+    });
+
+    const upd = tx.subscription.update.mock.calls[0][0];
+    expect(upd.data.status).toBe('active');
+    expect(upd.data.amountCents).toBe(3990);
+    expect(upd.data.currentPeriodEnd).toBeInstanceOf(Date);
+    expect(upd.data.lastAsaasEventAt).toBeInstanceOf(Date);
+
+    const tArg = tx.tenant.update.mock.calls[0][0];
+    expect(tArg.data.subscriptionStatus).toBe('active');
+    expect(tArg.data.billingSource).toBe('asaas'); // promoção null→asaas
+    expect(invalidateTenantIds.has('t1')).toBe(true);
+  });
+
+  it('EXPIRED → Subscription past_due + cache legado active (política C4.1 PRESERVADA)', async () => {
+    const tx = makeTx();
+    tx.subscription.findFirst.mockResolvedValue({
+      id: 'sub_local_1',
+      tenantId: 't1',
+      status: 'active',
+    });
+    tx.subscription.update.mockResolvedValue({
+      id: 'sub_local_1',
+      status: 'past_due',
+      tenantId: 't1',
+    });
+
+    await SUBSCRIPTION_UPDATED({
+      tx,
+      payload: {
+        event: 'SUBSCRIPTION_UPDATED',
+        subscription: { ...sampleAsaasSub, status: 'EXPIRED' } as any,
+      },
+      eventId: 'evt_subu_e',
+    });
+
+    expect(tx.subscription.update.mock.calls[0][0].data.status).toBe('past_due');
+    // Política C4.1: past_due → 'active' no cache legado, sem bloqueio.
+    expect(tx.tenant.update.mock.calls[0][0].data.subscriptionStatus).toBe('active');
+  });
+
+  it('INACTIVE → Subscription suspended + cache suspended', async () => {
+    const tx = makeTx();
+    tx.subscription.findFirst.mockResolvedValue({
+      id: 'sub_local_1',
+      tenantId: 't1',
+      status: 'active',
+    });
+    tx.subscription.update.mockResolvedValue({
+      id: 'sub_local_1',
+      status: 'suspended',
+      tenantId: 't1',
+    });
+
+    await SUBSCRIPTION_UPDATED({
+      tx,
+      payload: {
+        event: 'SUBSCRIPTION_UPDATED',
+        subscription: { ...sampleAsaasSub, status: 'INACTIVE' } as any,
+      },
+      eventId: 'evt_subu_i',
+    });
+
+    expect(tx.subscription.update.mock.calls[0][0].data.status).toBe('suspended');
+    expect(tx.tenant.update.mock.calls[0][0].data.subscriptionStatus).toBe('suspended');
+  });
+
+  it('Subscription local já cancelled → NÃO regride (só atualiza lastAsaasEventAt)', async () => {
+    const tx = makeTx();
+    tx.subscription.findFirst.mockResolvedValue({
+      id: 'sub_local_1',
+      tenantId: 't1',
+      status: 'cancelled',
+    });
+
+    await SUBSCRIPTION_UPDATED({
+      tx,
+      payload: {
+        event: 'SUBSCRIPTION_UPDATED',
+        subscription: { ...sampleAsaasSub, status: 'ACTIVE' } as any,
+      },
+      eventId: 'evt_subu_term',
+    });
+
+    // update CHAMADO mas só com lastAsaasEventAt, sem status/amount/period
+    expect(tx.subscription.update).toHaveBeenCalledTimes(1);
+    const updData = tx.subscription.update.mock.calls[0][0].data;
+    expect(updData.status).toBeUndefined();
+    expect(updData.amountCents).toBeUndefined();
+    expect(updData.lastAsaasEventAt).toBeInstanceOf(Date);
+    expect(tx.tenant.update).not.toHaveBeenCalled();
+  });
+
+  it('subscription local não encontrada → no-op com log WARN', async () => {
+    const tx = makeTx();
+    tx.subscription.findFirst.mockResolvedValue(null);
+
+    await SUBSCRIPTION_UPDATED({
+      tx,
+      payload: {
+        event: 'SUBSCRIPTION_UPDATED',
+        subscription: sampleAsaasSub as any,
+      },
+      eventId: 'evt_subu_404',
+    });
+
+    expect(tx.subscription.update).not.toHaveBeenCalled();
+    expect(tx.tenant.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('SUBSCRIPTION_DELETED handler (C5.2)', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('happy path: Subscription→cancelled + cancelledAt=now + cache cancelled', async () => {
+    const tx = makeTx();
+    tx.subscription.findFirst.mockResolvedValue({
+      id: 'sub_local_1',
+      tenantId: 't1',
+      status: 'active',
+    });
+    tx.subscription.findUnique.mockResolvedValue({ cancelledAt: null });
+    tx.subscription.update.mockResolvedValue({
+      id: 'sub_local_1',
+      status: 'cancelled',
+      tenantId: 't1',
+    });
+
+    const invalidateTenantIds = new Set<string>();
+    await SUBSCRIPTION_DELETED({
+      tx,
+      payload: {
+        event: 'SUBSCRIPTION_DELETED',
+        subscription: sampleAsaasSub as any,
+      },
+      eventId: 'evt_subd_1',
+      invalidateTenantIds,
+    });
+
+    const upd = tx.subscription.update.mock.calls[0][0];
+    expect(upd.data.status).toBe('cancelled');
+    expect(upd.data.cancelledAt).toBeInstanceOf(Date);
+    expect(upd.data.lastAsaasEventAt).toBeInstanceOf(Date);
+
+    expect(tx.tenant.update.mock.calls[0][0].data.subscriptionStatus).toBe('cancelled');
+    expect(invalidateTenantIds.has('t1')).toBe(true);
+  });
+
+  it('idempotência: 2ª chamada preserva cancelledAt original', async () => {
+    const tx = makeTx();
+    const originalCancel = new Date('2026-04-01T00:00:00Z');
+    tx.subscription.findFirst.mockResolvedValue({
+      id: 'sub_local_1',
+      tenantId: 't1',
+      status: 'cancelled',
+    });
+    tx.subscription.findUnique.mockResolvedValue({ cancelledAt: originalCancel });
+    tx.subscription.update.mockResolvedValue({
+      id: 'sub_local_1',
+      status: 'cancelled',
+      tenantId: 't1',
+    });
+
+    await SUBSCRIPTION_DELETED({
+      tx,
+      payload: {
+        event: 'SUBSCRIPTION_DELETED',
+        subscription: sampleAsaasSub as any,
+      },
+      eventId: 'evt_subd_idem',
+    });
+
+    const upd = tx.subscription.update.mock.calls[0][0];
+    expect(upd.data.status).toBe('cancelled');
+    expect(upd.data.cancelledAt).toBeUndefined(); // preservado
+  });
+
+  it('subscription local não encontrada → no-op', async () => {
+    const tx = makeTx();
+    tx.subscription.findFirst.mockResolvedValue(null);
+
+    await SUBSCRIPTION_DELETED({
+      tx,
+      payload: {
+        event: 'SUBSCRIPTION_DELETED',
+        subscription: sampleAsaasSub as any,
+      },
+      eventId: 'evt_subd_404',
+    });
+
+    expect(tx.subscription.update).not.toHaveBeenCalled();
+    expect(tx.tenant.update).not.toHaveBeenCalled();
+  });
+
+  it('guard: source=stripe → Subscription atualizada, Tenant NÃO', async () => {
+    const tx = makeTx();
+    tx.subscription.findFirst.mockResolvedValue({
+      id: 'sub_local_1',
+      tenantId: 't1',
+      status: 'active',
+    });
+    tx.subscription.findUnique.mockResolvedValue({ cancelledAt: null });
+    tx.subscription.update.mockResolvedValue({
+      id: 'sub_local_1',
+      status: 'cancelled',
+      tenantId: 't1',
+    });
+    tx.tenant.findUnique.mockResolvedValue({ billingSource: 'stripe' });
+
+    const invalidateTenantIds = new Set<string>();
+    await SUBSCRIPTION_DELETED({
+      tx,
+      payload: {
+        event: 'SUBSCRIPTION_DELETED',
+        subscription: sampleAsaasSub as any,
+      },
+      eventId: 'evt_subd_guard',
+      invalidateTenantIds,
+    });
+
+    expect(tx.subscription.update).toHaveBeenCalledTimes(1);
+    expect(tx.tenant.update).not.toHaveBeenCalled();
+    expect(invalidateTenantIds.size).toBe(0);
+  });
+});
+
+describe('SUBSCRIPTION_INACTIVATED handler (C5.2)', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('active → suspended + cache suspended', async () => {
+    const tx = makeTx();
+    tx.subscription.findFirst.mockResolvedValue({
+      id: 'sub_local_1',
+      tenantId: 't1',
+      status: 'active',
+    });
+    tx.subscription.update.mockResolvedValue({
+      id: 'sub_local_1',
+      status: 'suspended',
+      tenantId: 't1',
+    });
+
+    const invalidateTenantIds = new Set<string>();
+    await SUBSCRIPTION_INACTIVATED({
+      tx,
+      payload: {
+        event: 'SUBSCRIPTION_INACTIVATED',
+        subscription: sampleAsaasSub as any,
+      },
+      eventId: 'evt_subi_1',
+      invalidateTenantIds,
+    });
+
+    expect(tx.subscription.update.mock.calls[0][0].data.status).toBe('suspended');
+    expect(tx.tenant.update.mock.calls[0][0].data.subscriptionStatus).toBe('suspended');
+    expect(invalidateTenantIds.has('t1')).toBe(true);
+  });
+
+  it('NÃO regride se já cancelled (só lastAsaasEventAt)', async () => {
+    const tx = makeTx();
+    tx.subscription.findFirst.mockResolvedValue({
+      id: 'sub_local_1',
+      tenantId: 't1',
+      status: 'cancelled',
+    });
+
+    await SUBSCRIPTION_INACTIVATED({
+      tx,
+      payload: {
+        event: 'SUBSCRIPTION_INACTIVATED',
+        subscription: sampleAsaasSub as any,
+      },
+      eventId: 'evt_subi_term',
+    });
+
+    const updData = tx.subscription.update.mock.calls[0][0].data;
+    expect(updData.status).toBeUndefined();
+    expect(updData.lastAsaasEventAt).toBeInstanceOf(Date);
+    expect(tx.tenant.update).not.toHaveBeenCalled();
+  });
+
+  it('subscription local não encontrada → no-op', async () => {
+    const tx = makeTx();
+    tx.subscription.findFirst.mockResolvedValue(null);
+
+    await SUBSCRIPTION_INACTIVATED({
+      tx,
+      payload: {
+        event: 'SUBSCRIPTION_INACTIVATED',
+        subscription: sampleAsaasSub as any,
+      },
+      eventId: 'evt_subi_404',
+    });
+
+    expect(tx.subscription.update).not.toHaveBeenCalled();
+    expect(tx.tenant.update).not.toHaveBeenCalled();
+  });
+
+  it('guard: source=manual bloqueia Tenant', async () => {
+    const tx = makeTx();
+    tx.subscription.findFirst.mockResolvedValue({
+      id: 'sub_local_1',
+      tenantId: 't1',
+      status: 'active',
+    });
+    tx.subscription.update.mockResolvedValue({
+      id: 'sub_local_1',
+      status: 'suspended',
+      tenantId: 't1',
+    });
+    tx.tenant.findUnique.mockResolvedValue({ billingSource: 'manual' });
+
+    const invalidateTenantIds = new Set<string>();
+    await SUBSCRIPTION_INACTIVATED({
+      tx,
+      payload: {
+        event: 'SUBSCRIPTION_INACTIVATED',
+        subscription: sampleAsaasSub as any,
+      },
+      eventId: 'evt_subi_guard',
+      invalidateTenantIds,
+    });
+
+    expect(tx.subscription.update).toHaveBeenCalledTimes(1);
+    expect(tx.tenant.update).not.toHaveBeenCalled();
+    expect(invalidateTenantIds.size).toBe(0);
+  });
+});
+

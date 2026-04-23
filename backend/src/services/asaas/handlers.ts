@@ -16,7 +16,12 @@
 
 import type { Prisma } from '@prisma/client';
 import { log } from '../../utils/logger';
-import type { AsaasWebhookPayload, AsaasPaymentObject } from './asaas-types';
+import type {
+  AsaasWebhookPayload,
+  AsaasPaymentObject,
+  AsaasSubscriptionObject,
+  AsaasSubscriptionStatus,
+} from './asaas-types';
 import {
   canProviderWriteTenant,
   shouldPromoteBillingSource,
@@ -676,6 +681,276 @@ export const PAYMENT_DELETED: WebhookHandler = async (ctx) => {
     asaasPaymentId: payment.id,
     subscriptionId: sub?.id,
     // Subscription e Tenant intocados por decisão de design.
+  });
+};
+
+// ============================================================================
+// C5.2 — Subscription lifecycle handlers (sem payment.id no payload)
+// ============================================================================
+
+/**
+ * Mapeamento AsaasSubscriptionStatus → Subscription.status local.
+ *
+ * Exportado para teste e para eventual override em integrações futuras.
+ *
+ *   ACTIVE   → 'active'   — cache legado: 'active'
+ *   EXPIRED  → 'past_due' — cache legado: 'active' (política C4.1 preservada
+ *                           até C5.3 ativar bloqueio)
+ *   INACTIVE → 'suspended'— cache legado: 'suspended'
+ *
+ * Status Asaas desconhecidos/ausentes NÃO alteram Subscription.status local.
+ */
+export const ASAAS_SUB_STATUS_TO_LOCAL: Record<
+  AsaasSubscriptionStatus,
+  'active' | 'past_due' | 'suspended'
+> = {
+  ACTIVE: 'active',
+  EXPIRED: 'past_due',
+  INACTIVE: 'suspended',
+};
+
+/**
+ * Localiza Subscription local a partir de um objeto AsaasSubscriptionObject.
+ * Estratégia (idêntica a findLocalSubscription mas sem ir via payment):
+ *   1. por `asaasSubscriptionId` (provider='asaas' + id Asaas)
+ *   2. por `externalReference` (id local — fallback de C3)
+ */
+async function findLocalSubscriptionByAsaasRef(
+  tx: Prisma.TransactionClient,
+  asaasSub: AsaasSubscriptionObject,
+): Promise<{ id: string; tenantId: string; status: string } | null> {
+  const byAsaas = await tx.subscription.findFirst({
+    where: { provider: 'asaas', asaasSubscriptionId: asaasSub.id },
+    select: { id: true, tenantId: true, status: true },
+  });
+  if (byAsaas) return byAsaas;
+  if (asaasSub.externalReference) {
+    const byExt = await tx.subscription.findUnique({
+      where: { id: asaasSub.externalReference },
+      select: { id: true, tenantId: true, status: true },
+    });
+    if (byExt) return byExt;
+  }
+  return null;
+}
+
+/**
+ * Valor em reais (float do Asaas) → centavos inteiros.
+ * Retorna undefined se o valor não for um número finito (para NÃO sobrescrever
+ * amountCents local com 0 em updates parciais).
+ */
+function asaasValueToCentsOrUndefined(value: number | undefined): number | undefined {
+  if (typeof value !== 'number' || !isFinite(value)) return undefined;
+  return Math.round(value * 100);
+}
+
+/**
+ * SUBSCRIPTION_UPDATED — Asaas notifica mudança de status/value/cycle/dueDate
+ * da assinatura. Aplica projeção respeitando:
+ *   - não regride se local já 'cancelled' (regra C5.2.1)
+ *   - guard de billingSource antes de escrever Tenant
+ *   - idempotência: escrita só quando há diferença real
+ */
+export const SUBSCRIPTION_UPDATED: WebhookHandler = async (ctx) => {
+  const asaasSub = ctx.payload.subscription;
+  if (!asaasSub) {
+    log.warn('handler SUBSCRIPTION_UPDATED: payload sem subscription', {
+      eventId: ctx.eventId,
+    });
+    return;
+  }
+
+  const local = await findLocalSubscriptionByAsaasRef(ctx.tx, asaasSub);
+  if (!local) {
+    log.warn('handler SUBSCRIPTION_UPDATED: subscription local não encontrada', {
+      eventId: ctx.eventId,
+      asaasSubscriptionId: asaasSub.id,
+    });
+    return;
+  }
+
+  // Regra C5.2.1: cancelled é terminal absoluto.
+  if (SUBSCRIPTION_TERMINAL_STATUSES.has(local.status)) {
+    log.warn('handler SUBSCRIPTION_UPDATED: subscription local em estado terminal, no-op de status', {
+      eventId: ctx.eventId,
+      subscriptionId: local.id,
+      currentStatus: local.status,
+    });
+    // Preserva rastreabilidade: só toca lastAsaasEventAt + rawPayload de evento.
+    await ctx.tx.subscription.update({
+      where: { id: local.id },
+      data: { lastAsaasEventAt: new Date() },
+    });
+    return;
+  }
+
+  const now = new Date();
+  const mappedStatus = ASAAS_SUB_STATUS_TO_LOCAL[asaasSub.status];
+  const amountCents = asaasValueToCentsOrUndefined(asaasSub.value);
+  const nextDueDate = asaasDateToDate(asaasSub.nextDueDate);
+
+  const updateData: Prisma.SubscriptionUpdateInput = {
+    lastAsaasEventAt: now,
+  };
+  if (mappedStatus && mappedStatus !== local.status) {
+    updateData.status = mappedStatus;
+  }
+  if (amountCents !== undefined) {
+    updateData.amountCents = amountCents;
+  }
+  if (nextDueDate) {
+    updateData.currentPeriodEnd = nextDueDate;
+  }
+
+  const updatedSub = await ctx.tx.subscription.update({
+    where: { id: local.id },
+    data: updateData,
+    select: { id: true, status: true, tenantId: true },
+  });
+
+  // Sincroniza cache legado em Tenant (política past_due→active preservada).
+  const cacheValue = SUBSCRIPTION_STATUS_TO_TENANT_CACHE[updatedSub.status];
+  if (cacheValue) {
+    await writeTenantCacheWithGuard(
+      ctx,
+      updatedSub.tenantId,
+      cacheValue,
+      'SUBSCRIPTION_UPDATED',
+    );
+  }
+
+  log.info('handler SUBSCRIPTION_UPDATED ok', {
+    eventId: ctx.eventId,
+    subscriptionId: updatedSub.id,
+    asaasStatus: asaasSub.status,
+    localStatus: updatedSub.status,
+    tenantCache: cacheValue,
+  });
+};
+
+/**
+ * SUBSCRIPTION_DELETED — Asaas removeu a assinatura. Transição terminal.
+ *
+ *   - Subscription local: → 'cancelled' + cancelledAt=now (se não preenchido).
+ *   - Tenant cache: 'cancelled'.
+ *   - Idempotente: 2ª chamada mantém 'cancelled' e preserva cancelledAt original.
+ */
+export const SUBSCRIPTION_DELETED: WebhookHandler = async (ctx) => {
+  const asaasSub = ctx.payload.subscription;
+  if (!asaasSub) {
+    log.warn('handler SUBSCRIPTION_DELETED: payload sem subscription', {
+      eventId: ctx.eventId,
+    });
+    return;
+  }
+
+  const local = await findLocalSubscriptionByAsaasRef(ctx.tx, asaasSub);
+  if (!local) {
+    log.warn('handler SUBSCRIPTION_DELETED: subscription local não encontrada', {
+      eventId: ctx.eventId,
+      asaasSubscriptionId: asaasSub.id,
+    });
+    return;
+  }
+
+  const now = new Date();
+
+  // Busca cancelledAt atual para preservar idempotência.
+  const existing = await ctx.tx.subscription.findUnique({
+    where: { id: local.id },
+    select: { cancelledAt: true },
+  });
+
+  const updatedSub = await ctx.tx.subscription.update({
+    where: { id: local.id },
+    data: {
+      status: 'cancelled',
+      lastAsaasEventAt: now,
+      ...(existing?.cancelledAt ? {} : { cancelledAt: now }),
+    },
+    select: { id: true, status: true, tenantId: true },
+  });
+
+  const cacheValue = SUBSCRIPTION_STATUS_TO_TENANT_CACHE[updatedSub.status];
+  if (cacheValue) {
+    await writeTenantCacheWithGuard(
+      ctx,
+      updatedSub.tenantId,
+      cacheValue,
+      'SUBSCRIPTION_DELETED',
+    );
+  }
+
+  log.info('handler SUBSCRIPTION_DELETED ok', {
+    eventId: ctx.eventId,
+    subscriptionId: updatedSub.id,
+    tenantCache: cacheValue,
+  });
+};
+
+/**
+ * SUBSCRIPTION_INACTIVATED — assinatura suspensa/desativada no Asaas (não
+ * terminal — pode ser reativada). Projeção em 'suspended'.
+ *
+ *   - NÃO regride se local já 'cancelled' (regra C5.2.1).
+ *   - Se local já 'suspended', no-op de status (só lastAsaasEventAt).
+ */
+export const SUBSCRIPTION_INACTIVATED: WebhookHandler = async (ctx) => {
+  const asaasSub = ctx.payload.subscription;
+  if (!asaasSub) {
+    log.warn('handler SUBSCRIPTION_INACTIVATED: payload sem subscription', {
+      eventId: ctx.eventId,
+    });
+    return;
+  }
+
+  const local = await findLocalSubscriptionByAsaasRef(ctx.tx, asaasSub);
+  if (!local) {
+    log.warn('handler SUBSCRIPTION_INACTIVATED: subscription local não encontrada', {
+      eventId: ctx.eventId,
+      asaasSubscriptionId: asaasSub.id,
+    });
+    return;
+  }
+
+  const now = new Date();
+
+  if (SUBSCRIPTION_TERMINAL_STATUSES.has(local.status)) {
+    log.warn('handler SUBSCRIPTION_INACTIVATED: subscription local em estado terminal, no-op', {
+      eventId: ctx.eventId,
+      subscriptionId: local.id,
+      currentStatus: local.status,
+    });
+    await ctx.tx.subscription.update({
+      where: { id: local.id },
+      data: { lastAsaasEventAt: now },
+    });
+    return;
+  }
+
+  const updatedSub = await ctx.tx.subscription.update({
+    where: { id: local.id },
+    data: {
+      status: 'suspended',
+      lastAsaasEventAt: now,
+    },
+    select: { id: true, status: true, tenantId: true },
+  });
+
+  const cacheValue = SUBSCRIPTION_STATUS_TO_TENANT_CACHE[updatedSub.status];
+  if (cacheValue) {
+    await writeTenantCacheWithGuard(
+      ctx,
+      updatedSub.tenantId,
+      cacheValue,
+      'SUBSCRIPTION_INACTIVATED',
+    );
+  }
+
+  log.info('handler SUBSCRIPTION_INACTIVATED ok', {
+    eventId: ctx.eventId,
+    subscriptionId: updatedSub.id,
+    tenantCache: cacheValue,
   });
 };
 

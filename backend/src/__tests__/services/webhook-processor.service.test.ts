@@ -344,4 +344,46 @@ describe('buildWebhookProcessor — WebhookHandlerSpec (C5.0)', () => {
     expect(out.error).toBe('NO_PAYMENT_ID');
     expect(handler).not.toHaveBeenCalled();
   });
+
+  // C5.2 — registry default inclui SUBSCRIPTION_* com requiresPaymentId:false
+  it.each([
+    'SUBSCRIPTION_UPDATED',
+    'SUBSCRIPTION_DELETED',
+    'SUBSCRIPTION_INACTIVATED',
+  ])(
+    'registry default processa %s SEM payment.id (requiresPaymentId:false)',
+    async (eventType) => {
+      const db = makeDb();
+      db.asaasWebhookEvent.findUnique.mockResolvedValue({
+        id: `evt_${eventType}`,
+        eventType,
+        payload: {
+          event: eventType,
+          subscription: { id: 'asaas_sub_X' },
+        },
+        status: 'received',
+      });
+      // tx mínimo para o handler real rodar e dar no-op (subscription não encontrada).
+      db.$transaction.mockImplementation(async (cb: any) =>
+        cb({
+          asaasWebhookEvent: { update: jest.fn() },
+          subscription: {
+            findFirst: jest.fn().mockResolvedValue(null),
+            findUnique: jest.fn().mockResolvedValue(null),
+            update: jest.fn(),
+          },
+          tenant: {
+            update: jest.fn(),
+            findUnique: jest.fn().mockResolvedValue({ billingSource: null }),
+          },
+        }),
+      );
+
+      const proc = buildWebhookProcessor({ db });
+      const out = await proc.processOne(`evt_${eventType}`);
+
+      expect(out.outcome).toBe('processed');
+      expect(db.$transaction).toHaveBeenCalledTimes(1);
+    },
+  );
 });

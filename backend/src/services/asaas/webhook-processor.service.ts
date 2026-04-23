@@ -26,6 +26,9 @@ import {
   PAYMENT_REFUNDED,
   PAYMENT_CHARGEBACK_REQUESTED,
   PAYMENT_DELETED,
+  SUBSCRIPTION_UPDATED,
+  SUBSCRIPTION_DELETED,
+  SUBSCRIPTION_INACTIVATED,
   type WebhookHandler,
   type WebhookHandlerContext,
 } from './handlers';
@@ -113,6 +116,19 @@ export function buildWebhookProcessor(
       PAYMENT_REFUNDED,
       PAYMENT_CHARGEBACK_REQUESTED,
       PAYMENT_DELETED,
+      // C5.2 — subscription lifecycle (NÃO portam payment.id).
+      SUBSCRIPTION_UPDATED: {
+        handler: SUBSCRIPTION_UPDATED,
+        requiresPaymentId: false,
+      },
+      SUBSCRIPTION_DELETED: {
+        handler: SUBSCRIPTION_DELETED,
+        requiresPaymentId: false,
+      },
+      SUBSCRIPTION_INACTIVATED: {
+        handler: SUBSCRIPTION_INACTIVATED,
+        requiresPaymentId: false,
+      },
     };
 
   // Pré-normaliza o registry uma vez para eficiência em processBatch.
