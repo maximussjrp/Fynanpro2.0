@@ -75,6 +75,8 @@ model Tenant {
   triggerCategories      TriggerCategory[]
   userProfiles           UserProfile[]
   billingCustomers       BillingCustomer[]
+  subscriptions          Subscription[]
+  payments               PaymentRecord[]           @relation("TenantPayments")
 
   @@index([ownerId])
   @@index([subscriptionPlan])
@@ -790,4 +792,103 @@ model DomainEvent {
   @@index([eventType])
   @@index([aggregateType, aggregateId])
   @@index([createdAt])
+}
+
+// ============================================================
+// Fase A2A — SaaS Subscription Core (100% aditivo, flags OFF).
+//
+// Subscription: projeção local do estado da assinatura no Asaas.
+//   - Asaas é a fonte da verdade primária; Subscription é cache/histórico.
+//   - Permite histórico por tenant (várias linhas ao longo do tempo).
+//   - Invariante (enforcement em serviço, não DB): no máximo 1 row
+//     com status ∈ {pending, active, past_due} por tenant.
+//
+// PaymentRecord: cobrança individual, polimórfica via ownerType.
+//   - Idempotente por asaasPaymentId (@unique).
+//   - ownerType='tenant' → usa ownerTenantId (SaaS)
+//   - ownerType='user'   → reservado para curso/MLM (não usado em A2A).
+// ============================================================
+
+enum BillingProvider {
+  asaas
+  stripe
+}
+
+enum SubscriptionStatus {
+  pending
+  active
+  past_due
+  suspended
+  cancelled
+}
+
+enum PaymentStatus {
+  pending
+  paid
+  failed
+  refunded
+  chargeback
+}
+
+enum PaymentOwnerType {
+  tenant
+  user
+}
+
+model Subscription {
+  id                   String             @id @default(uuid())
+  tenantId             String
+  provider             BillingProvider    @default(asaas)
+  asaasSubscriptionId  String?
+  stripeSubscriptionId String?
+  plan                 String                               // "monthly" em A2A; outros ciclos em A2B+
+  status               SubscriptionStatus @default(pending)
+  cycle                String             @default("MONTHLY")
+  amountCents          Int
+  currency             String             @default("BRL")
+  startedAt            DateTime           @default(now())
+  currentPeriodStart   DateTime?
+  currentPeriodEnd     DateTime?
+  cancelledAt          DateTime?
+  metadata             Json?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  tenant               Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  payments             PaymentRecord[]
+
+  @@unique([provider, asaasSubscriptionId])
+  @@index([tenantId, status])
+  @@index([tenantId, createdAt])
+  @@index([status, currentPeriodEnd])
+}
+
+model PaymentRecord {
+  id              String            @id @default(uuid())
+  provider        BillingProvider   @default(asaas)
+  asaasPaymentId  String?           @unique
+  stripeInvoiceId String?           @unique
+  subscriptionId  String?
+  ownerType       PaymentOwnerType
+  ownerTenantId   String?
+  ownerUserId     String?
+  amountCents     Int
+  currency        String            @default("BRL")
+  status          PaymentStatus     @default(pending)
+  paymentMethod   String?                                    // PIX | BOLETO | CREDIT_CARD | ...
+  dueDate         DateTime?
+  paidAt          DateTime?
+  failedAt        DateTime?
+  refundedAt      DateTime?
+  rawPayload      Json?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  subscription    Subscription?     @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  tenant          Tenant?           @relation("TenantPayments", fields: [ownerTenantId], references: [id], onDelete: SetNull)
+
+  @@index([ownerType, ownerTenantId])
+  @@index([ownerType, ownerUserId])
+  @@index([subscriptionId])
+  @@index([status, dueDate])
 }

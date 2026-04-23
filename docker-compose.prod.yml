@@ -65,6 +65,8 @@ services:
       # Feature flags (default OFF no código; podem ser ligadas via .env)
       FF_ASAAS_ENABLED: ${FF_ASAAS_ENABLED:-false}
       FF_ASAAS_WEBHOOK_ENABLED: ${FF_ASAAS_WEBHOOK_ENABLED:-false}
+      FF_ASAAS_SUBSCRIPTION_ENABLED: ${FF_ASAAS_SUBSCRIPTION_ENABLED:-false}
+      FF_ASAAS_CONSUMER_ENABLED: ${FF_ASAAS_CONSUMER_ENABLED:-false}
       FF_CONSULTANT_ENABLED: ${FF_CONSULTANT_ENABLED:-false}
     depends_on:
       postgres:

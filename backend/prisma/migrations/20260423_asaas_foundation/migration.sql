@@ -60,10 +60,9 @@ CREATE TABLE "AsaasWebhookEvent" (
     CONSTRAINT "AsaasWebhookEvent_pkey" PRIMARY KEY ("id")
 );
 
--- Dedup: um evento do Asaas só entra uma vez.
+-- Dedup: um evento do Asaas só entra uma vez. Índice unique simples (Postgres trata múltiplos NULL como distintos — `@unique` no schema.prisma).
 CREATE UNIQUE INDEX "AsaasWebhookEvent_asaasEventId_key"
-    ON "AsaasWebhookEvent"("asaasEventId")
-    WHERE "asaasEventId" IS NOT NULL;
+    ON "AsaasWebhookEvent"("asaasEventId");
 
 CREATE INDEX "AsaasWebhookEvent_eventType_idx"     ON "AsaasWebhookEvent"("eventType");
 CREATE INDEX "AsaasWebhookEvent_status_idx"        ON "AsaasWebhookEvent"("status");

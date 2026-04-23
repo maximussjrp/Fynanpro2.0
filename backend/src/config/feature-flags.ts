@@ -24,7 +24,9 @@ export type FeatureFlagName =
   | 'auth.switchTenant'
   | 'rbac.newMiddleware'
   | 'asaas.enabled'
-  | 'asaas.webhook.enabled';
+  | 'asaas.webhook.enabled'
+  | 'asaas.subscription.enabled'
+  | 'asaas.consumer.enabled';
 
 const DEFAULTS: Record<FeatureFlagName, boolean> = {
   'consultant.enabled': false,
@@ -35,6 +37,8 @@ const DEFAULTS: Record<FeatureFlagName, boolean> = {
   'rbac.newMiddleware': false,
   'asaas.enabled': false,
   'asaas.webhook.enabled': false,
+  'asaas.subscription.enabled': false,
+  'asaas.consumer.enabled': false,
 };
 
 function envKey(flag: FeatureFlagName): string {
@@ -56,6 +60,8 @@ export const featureFlags: Record<FeatureFlagName, boolean> = {
   'rbac.newMiddleware': readFlag('rbac.newMiddleware'),
   'asaas.enabled': readFlag('asaas.enabled'),
   'asaas.webhook.enabled': readFlag('asaas.webhook.enabled'),
+  'asaas.subscription.enabled': readFlag('asaas.subscription.enabled'),
+  'asaas.consumer.enabled': readFlag('asaas.consumer.enabled'),
 };
 
 export function isFeatureEnabled(flag: FeatureFlagName): boolean {
