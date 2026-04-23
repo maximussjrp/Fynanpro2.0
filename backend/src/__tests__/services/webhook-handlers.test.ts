@@ -1,17 +1,27 @@
 /**
- * Asaas webhook handlers — unit tests (C4)
+ * Asaas webhook handlers — unit tests (C4 + C5.0 + C5.1)
  */
 
 import {
   PAYMENT_CREATED,
   PAYMENT_CONFIRMED,
   PAYMENT_RECEIVED,
+  PAYMENT_OVERDUE,
+  PAYMENT_REFUNDED,
+  PAYMENT_CHARGEBACK_REQUESTED,
+  PAYMENT_DELETED,
   SUBSCRIPTION_STATUS_TO_TENANT_CACHE,
 } from '../../services/asaas/handlers';
 
 function makeTx() {
   return {
-    paymentRecord: { upsert: jest.fn() },
+    paymentRecord: {
+      upsert: jest.fn(),
+      // C5.1 — handlers OVERDUE/REFUNDED/DELETED pré-consultam estado atual.
+      // Default: registro ainda não existe.
+      findUnique: jest.fn().mockResolvedValue(null),
+      update: jest.fn(),
+    },
     subscription: { findFirst: jest.fn(), findUnique: jest.fn(), update: jest.fn() },
     tenant: {
       update: jest.fn(),
@@ -413,5 +423,394 @@ describe('PAYMENT_CONFIRMED — billingSource guard (C5.0)', () => {
 
     expect(tx.tenant.update).not.toHaveBeenCalled();
     expect(invalidateTenantIds.size).toBe(0);
+  });
+});
+
+// ============================================================================
+// C5.1 — PAYMENT_OVERDUE / REFUNDED / CHARGEBACK_REQUESTED / DELETED
+// ============================================================================
+
+describe('PAYMENT_OVERDUE handler (C5.1)', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('cria PaymentRecord pending+overdueAt + Subscription past_due + cache legado active (C4.1 preservada)', async () => {
+    const tx = makeTx();
+    tx.subscription.findFirst.mockResolvedValue({ id: 'sub_local_1', tenantId: 't1' });
+    tx.subscription.update.mockResolvedValue({
+      id: 'sub_local_1',
+      status: 'past_due',
+      tenantId: 't1',
+    });
+
+    const invalidateTenantIds = new Set<string>();
+    await PAYMENT_OVERDUE({
+      tx,
+      payload: { event: 'PAYMENT_OVERDUE', payment: samplePayment as any },
+      eventId: 'evt_ov1',
+      invalidateTenantIds,
+    });
+
+    const upsertArg = tx.paymentRecord.upsert.mock.calls[0][0];
+    expect(upsertArg.create.status).toBe('pending');
+    expect(upsertArg.create.overdueAt).toBeInstanceOf(Date);
+    expect(upsertArg.update.overdueAt).toBeInstanceOf(Date);
+
+    expect(tx.subscription.update.mock.calls[0][0].data.status).toBe('past_due');
+    expect(tx.subscription.update.mock.calls[0][0].data.lastAsaasEventAt).toBeInstanceOf(Date);
+
+    // past_due → active no cache legado (política C4.1)
+    expect(tx.tenant.update.mock.calls[0][0].data.subscriptionStatus).toBe('active');
+    expect(invalidateTenantIds.has('t1')).toBe(true);
+  });
+
+  it('NÃO regride se PaymentRecord já está paid (out-of-order): só atualiza rawPayload', async () => {
+    const tx = makeTx();
+    tx.paymentRecord.findUnique.mockResolvedValue({ status: 'paid', overdueAt: null });
+    tx.subscription.findFirst.mockResolvedValue({ id: 'sub_local_1', tenantId: 't1' });
+
+    await PAYMENT_OVERDUE({
+      tx,
+      payload: { event: 'PAYMENT_OVERDUE', payment: samplePayment as any },
+      eventId: 'evt_ov_ooo',
+    });
+
+    expect(tx.paymentRecord.upsert).not.toHaveBeenCalled();
+    expect(tx.paymentRecord.update).toHaveBeenCalledTimes(1);
+    expect(tx.paymentRecord.update.mock.calls[0][0].data.rawPayload).toBeDefined();
+    expect(tx.subscription.update).not.toHaveBeenCalled();
+    expect(tx.tenant.update).not.toHaveBeenCalled();
+  });
+
+  it('idempotência: 2ª chamada preserva overdueAt original (não sobrescreve)', async () => {
+    const tx = makeTx();
+    const originalOverdue = new Date('2026-04-01T00:00:00Z');
+    tx.paymentRecord.findUnique.mockResolvedValue({ status: 'pending', overdueAt: originalOverdue });
+    tx.subscription.findFirst.mockResolvedValue({ id: 'sub_local_1', tenantId: 't1' });
+    tx.subscription.update.mockResolvedValue({
+      id: 'sub_local_1',
+      status: 'past_due',
+      tenantId: 't1',
+    });
+
+    await PAYMENT_OVERDUE({
+      tx,
+      payload: { event: 'PAYMENT_OVERDUE', payment: samplePayment as any },
+      eventId: 'evt_ov_idem',
+    });
+
+    const upsertArg = tx.paymentRecord.upsert.mock.calls[0][0];
+    // update path NÃO deve conter overdueAt (preserva original)
+    expect(upsertArg.update.overdueAt).toBeUndefined();
+  });
+
+  it('payment sem Subscription local → só PaymentRecord (não toca Subscription/Tenant)', async () => {
+    const tx = makeTx();
+    tx.subscription.findFirst.mockResolvedValue(null);
+
+    await PAYMENT_OVERDUE({
+      tx,
+      payload: {
+        event: 'PAYMENT_OVERDUE',
+        payment: { ...samplePayment, externalReference: undefined } as any,
+      },
+      eventId: 'evt_ov_orphan',
+    });
+
+    expect(tx.paymentRecord.upsert).toHaveBeenCalledTimes(1);
+    expect(tx.subscription.update).not.toHaveBeenCalled();
+    expect(tx.tenant.update).not.toHaveBeenCalled();
+  });
+
+  it('NÃO regride Subscription se já cancelled (estado terminal)', async () => {
+    const tx = makeTx();
+    tx.subscription.findFirst.mockResolvedValue({ id: 'sub_local_1', tenantId: 't1' });
+    tx.subscription.findUnique.mockResolvedValue({ status: 'cancelled' });
+
+    await PAYMENT_OVERDUE({
+      tx,
+      payload: { event: 'PAYMENT_OVERDUE', payment: samplePayment as any },
+      eventId: 'evt_ov_term',
+    });
+
+    expect(tx.subscription.update).not.toHaveBeenCalled();
+    expect(tx.tenant.update).not.toHaveBeenCalled();
+  });
+
+  it('guard: source=stripe → Subscription é atualizada, Tenant NÃO', async () => {
+    const tx = makeTx();
+    tx.subscription.findFirst.mockResolvedValue({ id: 'sub_local_1', tenantId: 't1' });
+    tx.subscription.update.mockResolvedValue({
+      id: 'sub_local_1',
+      status: 'past_due',
+      tenantId: 't1',
+    });
+    tx.tenant.findUnique.mockResolvedValue({ billingSource: 'stripe' });
+
+    const invalidateTenantIds = new Set<string>();
+    await PAYMENT_OVERDUE({
+      tx,
+      payload: { event: 'PAYMENT_OVERDUE', payment: samplePayment as any },
+      eventId: 'evt_ov_guard',
+      invalidateTenantIds,
+    });
+
+    expect(tx.subscription.update).toHaveBeenCalledTimes(1);
+    expect(tx.tenant.update).not.toHaveBeenCalled();
+    expect(invalidateTenantIds.size).toBe(0);
+  });
+});
+
+describe('PAYMENT_REFUNDED handler (C5.1)', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('PaymentRecord→refunded + refundedAt + Subscription→suspended + cache suspended', async () => {
+    const tx = makeTx();
+    tx.subscription.findFirst.mockResolvedValue({ id: 'sub_local_1', tenantId: 't1' });
+    tx.subscription.update.mockResolvedValue({
+      id: 'sub_local_1',
+      status: 'suspended',
+      tenantId: 't1',
+    });
+
+    const invalidateTenantIds = new Set<string>();
+    await PAYMENT_REFUNDED({
+      tx,
+      payload: { event: 'PAYMENT_REFUNDED', payment: samplePayment as any },
+      eventId: 'evt_ref1',
+      invalidateTenantIds,
+    });
+
+    const upsertArg = tx.paymentRecord.upsert.mock.calls[0][0];
+    expect(upsertArg.create.status).toBe('refunded');
+    expect(upsertArg.create.refundedAt).toBeInstanceOf(Date);
+    expect(upsertArg.update.status).toBe('refunded');
+
+    expect(tx.subscription.update.mock.calls[0][0].data.status).toBe('suspended');
+    expect(tx.tenant.update.mock.calls[0][0].data.subscriptionStatus).toBe('suspended');
+    expect(invalidateTenantIds.has('t1')).toBe(true);
+  });
+
+  it('idempotência: 2ª chamada preserva refundedAt original', async () => {
+    const tx = makeTx();
+    const originalRefund = new Date('2026-04-10T00:00:00Z');
+    tx.paymentRecord.findUnique.mockResolvedValue({ refundedAt: originalRefund });
+    tx.subscription.findFirst.mockResolvedValue({ id: 'sub_local_1', tenantId: 't1' });
+    tx.subscription.update.mockResolvedValue({
+      id: 'sub_local_1',
+      status: 'suspended',
+      tenantId: 't1',
+    });
+
+    await PAYMENT_REFUNDED({
+      tx,
+      payload: { event: 'PAYMENT_REFUNDED', payment: samplePayment as any },
+      eventId: 'evt_ref_idem',
+    });
+
+    const upsertArg = tx.paymentRecord.upsert.mock.calls[0][0];
+    expect(upsertArg.update.refundedAt).toBeUndefined();
+    expect(upsertArg.update.status).toBe('refunded');
+  });
+
+  it('payment sem Subscription local → só PaymentRecord', async () => {
+    const tx = makeTx();
+    tx.subscription.findFirst.mockResolvedValue(null);
+
+    await PAYMENT_REFUNDED({
+      tx,
+      payload: {
+        event: 'PAYMENT_REFUNDED',
+        payment: { ...samplePayment, externalReference: undefined } as any,
+      },
+      eventId: 'evt_ref_orphan',
+    });
+
+    expect(tx.paymentRecord.upsert).toHaveBeenCalledTimes(1);
+    expect(tx.subscription.update).not.toHaveBeenCalled();
+    expect(tx.tenant.update).not.toHaveBeenCalled();
+  });
+
+  it('guard: source=trial → Subscription atualizada, Tenant bloqueado', async () => {
+    const tx = makeTx();
+    tx.subscription.findFirst.mockResolvedValue({ id: 'sub_local_1', tenantId: 't1' });
+    tx.subscription.update.mockResolvedValue({
+      id: 'sub_local_1',
+      status: 'suspended',
+      tenantId: 't1',
+    });
+    tx.tenant.findUnique.mockResolvedValue({ billingSource: 'trial' });
+
+    const invalidateTenantIds = new Set<string>();
+    await PAYMENT_REFUNDED({
+      tx,
+      payload: { event: 'PAYMENT_REFUNDED', payment: samplePayment as any },
+      eventId: 'evt_ref_guard',
+      invalidateTenantIds,
+    });
+
+    expect(tx.subscription.update).toHaveBeenCalledTimes(1);
+    expect(tx.tenant.update).not.toHaveBeenCalled();
+    expect(invalidateTenantIds.size).toBe(0);
+  });
+
+  it('NÃO regride Subscription se já cancelled', async () => {
+    const tx = makeTx();
+    tx.subscription.findFirst.mockResolvedValue({ id: 'sub_local_1', tenantId: 't1' });
+    tx.subscription.findUnique.mockResolvedValue({ status: 'cancelled' });
+
+    await PAYMENT_REFUNDED({
+      tx,
+      payload: { event: 'PAYMENT_REFUNDED', payment: samplePayment as any },
+      eventId: 'evt_ref_term',
+    });
+
+    expect(tx.subscription.update).not.toHaveBeenCalled();
+    expect(tx.tenant.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('PAYMENT_CHARGEBACK_REQUESTED handler (C5.1)', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('PaymentRecord→chargeback + Subscription→suspended + cache suspended', async () => {
+    const tx = makeTx();
+    tx.subscription.findFirst.mockResolvedValue({ id: 'sub_local_1', tenantId: 't1' });
+    tx.subscription.update.mockResolvedValue({
+      id: 'sub_local_1',
+      status: 'suspended',
+      tenantId: 't1',
+    });
+
+    const invalidateTenantIds = new Set<string>();
+    await PAYMENT_CHARGEBACK_REQUESTED({
+      tx,
+      payload: { event: 'PAYMENT_CHARGEBACK_REQUESTED', payment: samplePayment as any },
+      eventId: 'evt_cb1',
+      invalidateTenantIds,
+    });
+
+    expect(tx.paymentRecord.upsert.mock.calls[0][0].create.status).toBe('chargeback');
+    expect(tx.paymentRecord.upsert.mock.calls[0][0].update.status).toBe('chargeback');
+    expect(tx.subscription.update.mock.calls[0][0].data.status).toBe('suspended');
+    expect(tx.tenant.update.mock.calls[0][0].data.subscriptionStatus).toBe('suspended');
+    expect(invalidateTenantIds.has('t1')).toBe(true);
+  });
+
+  it('payment sem Subscription local → só PaymentRecord', async () => {
+    const tx = makeTx();
+    tx.subscription.findFirst.mockResolvedValue(null);
+
+    await PAYMENT_CHARGEBACK_REQUESTED({
+      tx,
+      payload: {
+        event: 'PAYMENT_CHARGEBACK_REQUESTED',
+        payment: { ...samplePayment, externalReference: undefined } as any,
+      },
+      eventId: 'evt_cb_orphan',
+    });
+
+    expect(tx.paymentRecord.upsert).toHaveBeenCalledTimes(1);
+    expect(tx.subscription.update).not.toHaveBeenCalled();
+    expect(tx.tenant.update).not.toHaveBeenCalled();
+  });
+
+  it('guard: source=manual → Tenant bloqueado', async () => {
+    const tx = makeTx();
+    tx.subscription.findFirst.mockResolvedValue({ id: 'sub_local_1', tenantId: 't1' });
+    tx.subscription.update.mockResolvedValue({
+      id: 'sub_local_1',
+      status: 'suspended',
+      tenantId: 't1',
+    });
+    tx.tenant.findUnique.mockResolvedValue({ billingSource: 'manual' });
+
+    const invalidateTenantIds = new Set<string>();
+    await PAYMENT_CHARGEBACK_REQUESTED({
+      tx,
+      payload: { event: 'PAYMENT_CHARGEBACK_REQUESTED', payment: samplePayment as any },
+      eventId: 'evt_cb_guard',
+      invalidateTenantIds,
+    });
+
+    expect(tx.subscription.update).toHaveBeenCalledTimes(1);
+    expect(tx.tenant.update).not.toHaveBeenCalled();
+    expect(invalidateTenantIds.size).toBe(0);
+  });
+
+  it('NÃO regride Subscription se já cancelled', async () => {
+    const tx = makeTx();
+    tx.subscription.findFirst.mockResolvedValue({ id: 'sub_local_1', tenantId: 't1' });
+    tx.subscription.findUnique.mockResolvedValue({ status: 'cancelled' });
+
+    await PAYMENT_CHARGEBACK_REQUESTED({
+      tx,
+      payload: { event: 'PAYMENT_CHARGEBACK_REQUESTED', payment: samplePayment as any },
+      eventId: 'evt_cb_term',
+    });
+
+    expect(tx.subscription.update).not.toHaveBeenCalled();
+    expect(tx.tenant.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('PAYMENT_DELETED handler (C5.1)', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('PaymentRecord→failed+failedAt, Subscription INTOCADA, Tenant INTOCADO', async () => {
+    const tx = makeTx();
+    tx.subscription.findFirst.mockResolvedValue({ id: 'sub_local_1', tenantId: 't1' });
+
+    const invalidateTenantIds = new Set<string>();
+    await PAYMENT_DELETED({
+      tx,
+      payload: { event: 'PAYMENT_DELETED', payment: samplePayment as any },
+      eventId: 'evt_del1',
+      invalidateTenantIds,
+    });
+
+    const upsertArg = tx.paymentRecord.upsert.mock.calls[0][0];
+    expect(upsertArg.create.status).toBe('failed');
+    expect(upsertArg.create.failedAt).toBeInstanceOf(Date);
+    expect(upsertArg.update.status).toBe('failed');
+
+    // Crucial: Subscription e Tenant INTACTOS
+    expect(tx.subscription.update).not.toHaveBeenCalled();
+    expect(tx.tenant.update).not.toHaveBeenCalled();
+    expect(invalidateTenantIds.size).toBe(0);
+  });
+
+  it('idempotência: 2ª chamada preserva failedAt original', async () => {
+    const tx = makeTx();
+    const originalFailed = new Date('2026-04-05T00:00:00Z');
+    tx.paymentRecord.findUnique.mockResolvedValue({ failedAt: originalFailed });
+    tx.subscription.findFirst.mockResolvedValue({ id: 'sub_local_1', tenantId: 't1' });
+
+    await PAYMENT_DELETED({
+      tx,
+      payload: { event: 'PAYMENT_DELETED', payment: samplePayment as any },
+      eventId: 'evt_del_idem',
+    });
+
+    const upsertArg = tx.paymentRecord.upsert.mock.calls[0][0];
+    expect(upsertArg.update.failedAt).toBeUndefined();
+    expect(upsertArg.update.status).toBe('failed');
+  });
+
+  it('payment sem Subscription local → só PaymentRecord', async () => {
+    const tx = makeTx();
+    tx.subscription.findFirst.mockResolvedValue(null);
+
+    await PAYMENT_DELETED({
+      tx,
+      payload: {
+        event: 'PAYMENT_DELETED',
+        payment: { ...samplePayment, externalReference: undefined } as any,
+      },
+      eventId: 'evt_del_orphan',
+    });
+
+    expect(tx.paymentRecord.upsert).toHaveBeenCalledTimes(1);
+    expect(tx.subscription.update).not.toHaveBeenCalled();
+    expect(tx.tenant.update).not.toHaveBeenCalled();
   });
 });

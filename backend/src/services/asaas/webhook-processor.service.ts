@@ -22,6 +22,10 @@ import {
   PAYMENT_CREATED,
   PAYMENT_CONFIRMED,
   PAYMENT_RECEIVED,
+  PAYMENT_OVERDUE,
+  PAYMENT_REFUNDED,
+  PAYMENT_CHARGEBACK_REQUESTED,
+  PAYMENT_DELETED,
   type WebhookHandler,
   type WebhookHandlerContext,
 } from './handlers';
@@ -105,6 +109,10 @@ export function buildWebhookProcessor(
       PAYMENT_CREATED,
       PAYMENT_CONFIRMED,
       PAYMENT_RECEIVED,
+      PAYMENT_OVERDUE,
+      PAYMENT_REFUNDED,
+      PAYMENT_CHARGEBACK_REQUESTED,
+      PAYMENT_DELETED,
     };
 
   // Pré-normaliza o registry uma vez para eficiência em processBatch.

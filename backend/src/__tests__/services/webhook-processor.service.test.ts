@@ -59,6 +59,31 @@ describe('buildWebhookProcessor — default handler registry (C4.1)', () => {
     expect(db.$transaction).toHaveBeenCalledTimes(1);
   });
 
+  it.each([
+    ['PAYMENT_OVERDUE'],
+    ['PAYMENT_REFUNDED'],
+    ['PAYMENT_CHARGEBACK_REQUESTED'],
+    ['PAYMENT_DELETED'],
+  ])('C5.1: %s é roteado pelo default registry', async (eventType) => {
+    const db = makeDb();
+    db.__tx.subscription.findFirst.mockResolvedValue(null);
+    db.__tx.paymentRecord.upsert.mockResolvedValue({});
+    db.__tx.paymentRecord.findUnique = jest.fn().mockResolvedValue(null);
+    db.__tx.paymentRecord.update = jest.fn();
+    db.asaasWebhookEvent.findUnique.mockResolvedValue({
+      id: 'evt_c51',
+      eventType,
+      payload: { event: eventType, payment: { id: 'pay_c51' } },
+      status: 'received',
+    });
+
+    const proc = buildWebhookProcessor({ db });
+    const out = await proc.processOne('evt_c51');
+
+    expect(out.outcome).toBe('processed');
+    expect(db.$transaction).toHaveBeenCalledTimes(1);
+  });
+
   it('eventType desconhecido continua caindo em skipped', async () => {
     const db = makeDb();
     db.asaasWebhookEvent.findUnique.mockResolvedValue({

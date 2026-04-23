@@ -100,6 +100,66 @@ function asaasValueToCents(value: number | undefined): number {
 }
 
 /**
+ * C5.0/C5.1 — helper centralizado para aplicar o cache legado em
+ * `Tenant.subscriptionStatus` respeitando `billingSource` guard.
+ *
+ * Retorna `true` se escreveu (handler deve sinalizar invalidação),
+ * `false` se foi bloqueado pelo guard (apenas log WARN, SEM exceção).
+ *
+ * NUNCA lança: falha de guard é caminho esperado (tenant de outro provider
+ * ou zona protegida trial/manual). Só lança se houver erro de DB real.
+ */
+async function writeTenantCacheWithGuard(
+  ctx: WebhookHandlerContext,
+  tenantId: string,
+  cacheValue: string,
+  handlerName: string,
+): Promise<boolean> {
+  const tenantRow = await ctx.tx.tenant.findUnique({
+    where: { id: tenantId },
+    select: { billingSource: true },
+  });
+  const source = (tenantRow?.billingSource ?? null) as BillingSource;
+  if (!canProviderWriteTenant('asaas', source)) {
+    log.warn(`handler ${handlerName}: skip Tenant write (billingSource guard)`, {
+      eventId: ctx.eventId,
+      tenantId,
+      billingSource: source,
+      reason: 'PROVIDER_MISMATCH',
+    });
+    return false;
+  }
+  await ctx.tx.tenant.update({
+    where: { id: tenantId },
+    data: {
+      subscriptionStatus: cacheValue,
+      ...(shouldPromoteBillingSource(source)
+        ? { billingSource: 'asaas' }
+        : {}),
+    },
+  });
+  ctx.invalidateTenantIds?.add(tenantId);
+  return true;
+}
+
+/**
+ * Conjunto de status de PaymentRecord considerados TERMINAIS positivos
+ * para PAYMENT_OVERDUE. Se o registro já estiver em um desses, o handler
+ * de OVERDUE NÃO regride (log WARN out-of-order + só atualiza rawPayload).
+ */
+const PAYMENT_TERMINAL_STATUSES_FOR_OVERDUE = new Set<string>([
+  'paid',
+  'refunded',
+  'chargeback',
+]);
+
+/**
+ * Conjunto de status de Subscription considerados terminais.
+ * Handlers de C5.1 não regridem para `past_due`/`suspended` se já cancelled.
+ */
+const SUBSCRIPTION_TERMINAL_STATUSES = new Set<string>(['cancelled']);
+
+/**
  * PAYMENT_CREATED — apenas projeta o PaymentRecord como pending.
  * NÃO mexe em Subscription.status nem em Tenant.subscriptionStatus.
  */
@@ -222,30 +282,12 @@ export const PAYMENT_CONFIRMED: WebhookHandler = async (ctx) => {
   // Sincroniza cache legado em Tenant — respeitando billingSource guard (C5.0).
   const cacheValue = SUBSCRIPTION_STATUS_TO_TENANT_CACHE[updatedSub.status];
   if (cacheValue) {
-    const tenantRow = await ctx.tx.tenant.findUnique({
-      where: { id: updatedSub.tenantId },
-      select: { billingSource: true },
-    });
-    const source = (tenantRow?.billingSource ?? null) as BillingSource;
-    if (canProviderWriteTenant('asaas', source)) {
-      await ctx.tx.tenant.update({
-        where: { id: updatedSub.tenantId },
-        data: {
-          subscriptionStatus: cacheValue,
-          ...(shouldPromoteBillingSource(source)
-            ? { billingSource: 'asaas' }
-            : {}),
-        },
-      });
-      ctx.invalidateTenantIds?.add(updatedSub.tenantId);
-    } else {
-      log.warn('handler PAYMENT_CONFIRMED: skip Tenant write (billingSource guard)', {
-        eventId: ctx.eventId,
-        tenantId: updatedSub.tenantId,
-        billingSource: source,
-        reason: 'PROVIDER_MISMATCH',
-      });
-    }
+    await writeTenantCacheWithGuard(
+      ctx,
+      updatedSub.tenantId,
+      cacheValue,
+      'PAYMENT_CONFIRMED',
+    );
   }
 
   log.info('handler PAYMENT_CONFIRMED ok', {
@@ -271,3 +313,369 @@ export const PAYMENT_CONFIRMED: WebhookHandler = async (ctx) => {
  * upsert por chave única.
  */
 export const PAYMENT_RECEIVED: WebhookHandler = PAYMENT_CONFIRMED;
+
+/**
+ * PAYMENT_OVERDUE — pagamento vencido e ainda não pago.
+ *
+ * Política C5.1 (mantém política C4.1):
+ *   - past_due NO cache legado CONTINUA mapeando para 'active'
+ *     (SUBSCRIPTION_STATUS_TO_TENANT_CACHE.past_due = 'active'), portanto
+ *     NÃO há bloqueio de acesso ainda. A ativação do bloqueio fica para C5.2.
+ *
+ * Transições:
+ *   - PaymentRecord: NÃO regride se já terminal positivo (paid/refunded/chargeback);
+ *     caso contrário marca `overdueAt = now()` (auditabilidade explícita — o
+ *     enum PaymentStatus não tem valor `overdue`; o carimbo temporal é a
+ *     evidência rastreável requisitada).
+ *   - Subscription: → 'past_due' (exceto se já 'cancelled').
+ *   - Tenant cache: aplica mapping ('past_due' → 'active') via guard.
+ *
+ * Idempotência: chamadas repetidas mantêm o `overdueAt` original
+ * (o update NÃO sobrescreve se já preenchido), evitando reset espúrio
+ * por webhook retry do Asaas.
+ */
+export const PAYMENT_OVERDUE: WebhookHandler = async (ctx) => {
+  const payment = ctx.payload.payment!;
+  const sub = await findLocalSubscription(ctx.tx, payment);
+  const now = new Date();
+
+  // Busca estado atual para decidir se regride ou não.
+  const existing = await ctx.tx.paymentRecord.findUnique({
+    where: { asaasPaymentId: payment.id },
+    select: { status: true, overdueAt: true },
+  });
+
+  const outOfOrder =
+    existing &&
+    PAYMENT_TERMINAL_STATUSES_FOR_OVERDUE.has(existing.status as string);
+
+  if (outOfOrder) {
+    log.warn('handler PAYMENT_OVERDUE: out-of-order event, mantendo status atual', {
+      eventId: ctx.eventId,
+      asaasPaymentId: payment.id,
+      existingStatus: existing!.status,
+    });
+    // Só atualiza rawPayload (auditoria) sem mexer em status nem em Subscription.
+    await ctx.tx.paymentRecord.update({
+      where: { asaasPaymentId: payment.id },
+      data: { rawPayload: ctx.payload as any },
+    });
+    return;
+  }
+
+  await ctx.tx.paymentRecord.upsert({
+    where: { asaasPaymentId: payment.id },
+    create: {
+      provider: 'asaas',
+      asaasPaymentId: payment.id,
+      subscriptionId: sub?.id ?? null,
+      ownerType: 'tenant',
+      ownerTenantId: sub?.tenantId ?? null,
+      amountCents: asaasValueToCents(payment.value),
+      currency: 'BRL',
+      status: 'pending', // não há enum overdue — atraso é evidenciado por overdueAt
+      paymentMethod: payment.billingType,
+      dueDate: asaasDateToDate(payment.dueDate),
+      overdueAt: now,
+      rawPayload: ctx.payload as any,
+    },
+    update: {
+      subscriptionId: sub?.id ?? undefined,
+      ownerTenantId: sub?.tenantId ?? undefined,
+      paymentMethod: payment.billingType,
+      dueDate: asaasDateToDate(payment.dueDate),
+      // Preserva overdueAt original em re-entregas (idempotência):
+      // só preenche se ainda estava null.
+      ...(existing?.overdueAt ? {} : { overdueAt: now }),
+      rawPayload: ctx.payload as any,
+    },
+  });
+
+  if (!sub) {
+    log.info('handler PAYMENT_OVERDUE: payment sem subscription local', {
+      eventId: ctx.eventId,
+      asaasPaymentId: payment.id,
+    });
+    return;
+  }
+
+  // Checa estado atual da Subscription antes de regredir.
+  const currentSub = await ctx.tx.subscription.findUnique({
+    where: { id: sub.id },
+    select: { status: true },
+  });
+  if (currentSub && SUBSCRIPTION_TERMINAL_STATUSES.has(currentSub.status as string)) {
+    log.warn('handler PAYMENT_OVERDUE: subscription em estado terminal, não regride', {
+      eventId: ctx.eventId,
+      subscriptionId: sub.id,
+      currentStatus: currentSub.status,
+    });
+    return;
+  }
+
+  const updatedSub = await ctx.tx.subscription.update({
+    where: { id: sub.id },
+    data: {
+      status: 'past_due',
+      lastAsaasEventAt: now,
+    },
+    select: { id: true, status: true, tenantId: true },
+  });
+
+  const cacheValue = SUBSCRIPTION_STATUS_TO_TENANT_CACHE[updatedSub.status];
+  // past_due mapeia para 'active' (política C4.1 preservada).
+  if (cacheValue) {
+    await writeTenantCacheWithGuard(
+      ctx,
+      updatedSub.tenantId,
+      cacheValue,
+      'PAYMENT_OVERDUE',
+    );
+  }
+
+  log.info('handler PAYMENT_OVERDUE ok', {
+    eventId: ctx.eventId,
+    asaasPaymentId: payment.id,
+    subscriptionId: updatedSub.id,
+    subscriptionStatus: updatedSub.status,
+    tenantCache: cacheValue,
+    overdueAt: now.toISOString(),
+  });
+};
+
+/**
+ * PAYMENT_REFUNDED — pagamento estornado pelo Asaas.
+ *
+ * Transições:
+ *   - PaymentRecord: status='refunded', refundedAt=paymentDate || now.
+ *     Idempotente: refundedAt NÃO é sobrescrito se já preenchido.
+ *   - Subscription: status='suspended' (exceto se já 'cancelled').
+ *   - Tenant cache: 'suspended'.
+ */
+export const PAYMENT_REFUNDED: WebhookHandler = async (ctx) => {
+  const payment = ctx.payload.payment!;
+  const sub = await findLocalSubscription(ctx.tx, payment);
+  const refundedAt = asaasDateToDate(payment.paymentDate) ?? new Date();
+
+  const existing = await ctx.tx.paymentRecord.findUnique({
+    where: { asaasPaymentId: payment.id },
+    select: { refundedAt: true },
+  });
+
+  await ctx.tx.paymentRecord.upsert({
+    where: { asaasPaymentId: payment.id },
+    create: {
+      provider: 'asaas',
+      asaasPaymentId: payment.id,
+      subscriptionId: sub?.id ?? null,
+      ownerType: 'tenant',
+      ownerTenantId: sub?.tenantId ?? null,
+      amountCents: asaasValueToCents(payment.value),
+      currency: 'BRL',
+      status: 'refunded',
+      paymentMethod: payment.billingType,
+      dueDate: asaasDateToDate(payment.dueDate),
+      refundedAt,
+      rawPayload: ctx.payload as any,
+    },
+    update: {
+      subscriptionId: sub?.id ?? undefined,
+      ownerTenantId: sub?.tenantId ?? undefined,
+      paymentMethod: payment.billingType,
+      dueDate: asaasDateToDate(payment.dueDate),
+      status: 'refunded',
+      ...(existing?.refundedAt ? {} : { refundedAt }),
+      rawPayload: ctx.payload as any,
+    },
+  });
+
+  if (!sub) {
+    log.info('handler PAYMENT_REFUNDED: payment sem subscription local', {
+      eventId: ctx.eventId,
+      asaasPaymentId: payment.id,
+    });
+    return;
+  }
+
+  const currentSub = await ctx.tx.subscription.findUnique({
+    where: { id: sub.id },
+    select: { status: true },
+  });
+  if (currentSub && SUBSCRIPTION_TERMINAL_STATUSES.has(currentSub.status as string)) {
+    log.warn('handler PAYMENT_REFUNDED: subscription em estado terminal, não regride', {
+      eventId: ctx.eventId,
+      subscriptionId: sub.id,
+      currentStatus: currentSub.status,
+    });
+    return;
+  }
+
+  const now = new Date();
+  const updatedSub = await ctx.tx.subscription.update({
+    where: { id: sub.id },
+    data: {
+      status: 'suspended',
+      lastAsaasEventAt: now,
+    },
+    select: { id: true, status: true, tenantId: true },
+  });
+
+  const cacheValue = SUBSCRIPTION_STATUS_TO_TENANT_CACHE[updatedSub.status];
+  if (cacheValue) {
+    await writeTenantCacheWithGuard(
+      ctx,
+      updatedSub.tenantId,
+      cacheValue,
+      'PAYMENT_REFUNDED',
+    );
+  }
+
+  log.info('handler PAYMENT_REFUNDED ok', {
+    eventId: ctx.eventId,
+    asaasPaymentId: payment.id,
+    subscriptionId: updatedSub.id,
+    tenantCache: cacheValue,
+  });
+};
+
+/**
+ * PAYMENT_CHARGEBACK_REQUESTED — chargeback solicitado pela bandeira.
+ *
+ * Transições:
+ *   - PaymentRecord: status='chargeback'. NÃO usamos refundedAt nem
+ *     overdueAt; a evidência fica em rawPayload + status enum.
+ *   - Subscription: status='suspended' (exceto se já 'cancelled').
+ *   - Tenant cache: 'suspended'.
+ */
+export const PAYMENT_CHARGEBACK_REQUESTED: WebhookHandler = async (ctx) => {
+  const payment = ctx.payload.payment!;
+  const sub = await findLocalSubscription(ctx.tx, payment);
+
+  await ctx.tx.paymentRecord.upsert({
+    where: { asaasPaymentId: payment.id },
+    create: {
+      provider: 'asaas',
+      asaasPaymentId: payment.id,
+      subscriptionId: sub?.id ?? null,
+      ownerType: 'tenant',
+      ownerTenantId: sub?.tenantId ?? null,
+      amountCents: asaasValueToCents(payment.value),
+      currency: 'BRL',
+      status: 'chargeback',
+      paymentMethod: payment.billingType,
+      dueDate: asaasDateToDate(payment.dueDate),
+      rawPayload: ctx.payload as any,
+    },
+    update: {
+      subscriptionId: sub?.id ?? undefined,
+      ownerTenantId: sub?.tenantId ?? undefined,
+      paymentMethod: payment.billingType,
+      dueDate: asaasDateToDate(payment.dueDate),
+      status: 'chargeback',
+      rawPayload: ctx.payload as any,
+    },
+  });
+
+  if (!sub) {
+    log.info('handler PAYMENT_CHARGEBACK_REQUESTED: payment sem subscription local', {
+      eventId: ctx.eventId,
+      asaasPaymentId: payment.id,
+    });
+    return;
+  }
+
+  const currentSub = await ctx.tx.subscription.findUnique({
+    where: { id: sub.id },
+    select: { status: true },
+  });
+  if (currentSub && SUBSCRIPTION_TERMINAL_STATUSES.has(currentSub.status as string)) {
+    log.warn('handler PAYMENT_CHARGEBACK_REQUESTED: subscription em estado terminal, não regride', {
+      eventId: ctx.eventId,
+      subscriptionId: sub.id,
+      currentStatus: currentSub.status,
+    });
+    return;
+  }
+
+  const now = new Date();
+  const updatedSub = await ctx.tx.subscription.update({
+    where: { id: sub.id },
+    data: {
+      status: 'suspended',
+      lastAsaasEventAt: now,
+    },
+    select: { id: true, status: true, tenantId: true },
+  });
+
+  const cacheValue = SUBSCRIPTION_STATUS_TO_TENANT_CACHE[updatedSub.status];
+  if (cacheValue) {
+    await writeTenantCacheWithGuard(
+      ctx,
+      updatedSub.tenantId,
+      cacheValue,
+      'PAYMENT_CHARGEBACK_REQUESTED',
+    );
+  }
+
+  log.info('handler PAYMENT_CHARGEBACK_REQUESTED ok', {
+    eventId: ctx.eventId,
+    asaasPaymentId: payment.id,
+    subscriptionId: updatedSub.id,
+    tenantCache: cacheValue,
+  });
+};
+
+/**
+ * PAYMENT_DELETED — cobrança removida no Asaas (ex: cancelamento admin
+ * antes do vencimento). Decisão deliberada:
+ *   - Marca PaymentRecord como 'failed' (enum PaymentStatus não tem
+ *     'deleted'; 'failed' é o mais próximo semanticamente) + failedAt.
+ *   - NÃO mexe em Subscription nem em Tenant — a remoção de UMA cobrança
+ *     não deve rebaixar a assinatura. Se a intenção for cancelar a
+ *     assinatura, o evento correto é SUBSCRIPTION_DELETED (C5.x).
+ */
+export const PAYMENT_DELETED: WebhookHandler = async (ctx) => {
+  const payment = ctx.payload.payment!;
+  const sub = await findLocalSubscription(ctx.tx, payment);
+  const now = new Date();
+
+  const existing = await ctx.tx.paymentRecord.findUnique({
+    where: { asaasPaymentId: payment.id },
+    select: { failedAt: true },
+  });
+
+  await ctx.tx.paymentRecord.upsert({
+    where: { asaasPaymentId: payment.id },
+    create: {
+      provider: 'asaas',
+      asaasPaymentId: payment.id,
+      subscriptionId: sub?.id ?? null,
+      ownerType: 'tenant',
+      ownerTenantId: sub?.tenantId ?? null,
+      amountCents: asaasValueToCents(payment.value),
+      currency: 'BRL',
+      status: 'failed',
+      paymentMethod: payment.billingType,
+      dueDate: asaasDateToDate(payment.dueDate),
+      failedAt: now,
+      rawPayload: ctx.payload as any,
+    },
+    update: {
+      subscriptionId: sub?.id ?? undefined,
+      ownerTenantId: sub?.tenantId ?? undefined,
+      paymentMethod: payment.billingType,
+      dueDate: asaasDateToDate(payment.dueDate),
+      status: 'failed',
+      ...(existing?.failedAt ? {} : { failedAt: now }),
+      rawPayload: ctx.payload as any,
+    },
+  });
+
+  log.info('handler PAYMENT_DELETED ok', {
+    eventId: ctx.eventId,
+    asaasPaymentId: payment.id,
+    subscriptionId: sub?.id,
+    // Subscription e Tenant intocados por decisão de design.
+  });
+};
+
