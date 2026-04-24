@@ -1,0 +1,27 @@
+#!/bin/bash
+# E1 shadow — aplica FF_ASAAS_RECONCILER_* no .env de produção.
+# Idempotente: remove qualquer FF_ASAAS_RECONCILER_* antigo antes de appendar.
+set -eu
+ENV_FILE=/opt/utop/.env
+STAMP=$(date -u +%FT%TZ)
+
+cp "$ENV_FILE" "${ENV_FILE}.bak.${STAMP}"
+sed -i '/^FF_ASAAS_RECONCILER_/d' "$ENV_FILE"
+
+cat >> "$ENV_FILE" <<'EOF'
+
+# === RECONCILER ROLLOUT E1 (shadow) — aplicado em prod ===
+FF_ASAAS_RECONCILER_ENABLED=true
+FF_ASAAS_RECONCILER_MODE=shadow
+FF_ASAAS_RECONCILER_INTERVAL_MIN=60
+FF_ASAAS_RECONCILER_BATCH_SIZE=25
+FF_ASAAS_RECONCILER_CONCURRENCY=2
+FF_ASAAS_RECONCILER_MIN_INTERVAL_MS=250
+FF_ASAAS_RECONCILER_IN_SYNC_SAMPLING=0.01
+FF_ASAAS_RECONCILER_RATE_LIMIT_RETRIES=3
+FF_ASAAS_RECONCILER_RATE_LIMIT_BACKOFF_MS=2000
+EOF
+
+echo "--- .env após ajuste (FF_ASAAS_RECONCILER_*) ---"
+grep -E '^FF_ASAAS_RECONCILER' "$ENV_FILE"
+echo "--- backup criado: ${ENV_FILE}.bak.${STAMP} ---"
