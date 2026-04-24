@@ -846,7 +846,7 @@ model Subscription {
   provider             BillingProvider    @default(asaas)
   asaasSubscriptionId  String?
   stripeSubscriptionId String?
-  plan                 String                               // "monthly" em A2A; outros ciclos em A2B+
+  plan                 String // "monthly" em A2A; outros ciclos em A2B+
   status               SubscriptionStatus @default(pending)
   cycle                String             @default("MONTHLY")
   amountCents          Int
@@ -861,8 +861,8 @@ model Subscription {
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
 
-  tenant               Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  payments             PaymentRecord[]
+  tenant   Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  payments PaymentRecord[]
 
   @@unique([provider, asaasSubscriptionId])
   @@index([tenantId, status])
@@ -871,32 +871,110 @@ model Subscription {
 }
 
 model PaymentRecord {
-  id              String            @id @default(uuid())
-  provider        BillingProvider   @default(asaas)
-  asaasPaymentId  String?           @unique
-  stripeInvoiceId String?           @unique
+  id              String           @id @default(uuid())
+  provider        BillingProvider  @default(asaas)
+  asaasPaymentId  String?          @unique
+  stripeInvoiceId String?          @unique
   subscriptionId  String?
   ownerType       PaymentOwnerType
   ownerTenantId   String?
   ownerUserId     String?
   amountCents     Int
-  currency        String            @default("BRL")
-  status          PaymentStatus     @default(pending)
-  paymentMethod   String?                                    // PIX | BOLETO | CREDIT_CARD | ...
+  currency        String           @default("BRL")
+  status          PaymentStatus    @default(pending)
+  paymentMethod   String? // PIX | BOLETO | CREDIT_CARD | ...
   dueDate         DateTime?
   paidAt          DateTime?
   failedAt        DateTime?
   refundedAt      DateTime?
   overdueAt       DateTime?
   rawPayload      Json?
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
 
-  subscription    Subscription?     @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
-  tenant          Tenant?           @relation("TenantPayments", fields: [ownerTenantId], references: [id], onDelete: SetNull)
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  tenant       Tenant?       @relation("TenantPayments", fields: [ownerTenantId], references: [id], onDelete: SetNull)
 
   @@index([ownerType, ownerTenantId])
   @@index([ownerType, ownerUserId])
   @@index([subscriptionId])
   @@index([status, dueDate])
+}
+
+// ============================================================================
+// C5.4 — Asaas reconciler (operational signal for C5.3 gate)
+// ============================================================================
+
+enum ReconciliationRunMode {
+  shadow
+  dryrun
+  autofix
+}
+
+enum ReconciliationRunStatus {
+  success
+  partial
+  failed
+}
+
+enum ReconciliationFindingKind {
+  IN_SYNC
+  LOCAL_ACTIVE_REMOTE_EXPIRED
+  LOCAL_ACTIVE_REMOTE_INACTIVE
+  LOCAL_ACTIVE_REMOTE_DELETED
+  LOCAL_PAST_DUE_REMOTE_ACTIVE
+  LOCAL_SUSPENDED_REMOTE_ACTIVE
+  LOCAL_CANCELLED_REMOTE_ACTIVE
+  REMOTE_NOT_FOUND
+  LOCAL_NOT_FOUND
+  PAYMENT_LAG
+  UNKNOWN_REMOTE_STATUS
+}
+
+/// Auditável, append-only. Uma row por tick do cron.
+/// `lastSuccessfulRunAt` (consumido pelo gate da C5.3) é
+/// `MAX(finishedAt) WHERE status='success' AND mode IN ('dryrun','autofix')`.
+model ReconciliationRun {
+  id                   String                  @id @default(uuid())
+  mode                 ReconciliationRunMode
+  status               ReconciliationRunStatus
+  startedAt            DateTime                @default(now())
+  finishedAt           DateTime?
+  durationMs           Int?
+  subscriptionsScanned Int                     @default(0)
+  findingsCount        Int                     @default(0)
+  asaasApiCalls        Int                     @default(0)
+  asaasRateLimitHits   Int                     @default(0)
+  error                String?
+  createdAt            DateTime                @default(now())
+
+  findings ReconciliationFinding[]
+
+  @@index([status, finishedAt])
+  @@index([mode, startedAt])
+}
+
+/// Append-only. Retention 180d via GC job (fora do escopo C5.4).
+/// Em modo `shadow`, só IN_SYNC entra (amostragem); demais kinds ignorados.
+/// Em modo `dryrun`/`autofix`, todos os kinds entram; IN_SYNC amostrado por
+/// `FF_ASAAS_RECONCILER_IN_SYNC_SAMPLING`.
+model ReconciliationFinding {
+  id                      String                    @id @default(uuid())
+  runId                   String
+  tenantId                String
+  subscriptionId          String?
+  asaasSubscriptionId     String?
+  kind                    ReconciliationFindingKind
+  localStatus             String?
+  remoteStatus            String?
+  remoteLastPaymentStatus String?
+  remoteLastPaymentDate   DateTime?
+  detail                  Json?
+  createdAt               DateTime                  @default(now())
+
+  run ReconciliationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, kind, createdAt])
+  @@index([runId, kind])
+  @@index([kind, createdAt])
 }

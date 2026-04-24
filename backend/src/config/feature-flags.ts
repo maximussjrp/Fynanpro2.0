@@ -26,7 +26,9 @@ export type FeatureFlagName =
   | 'asaas.enabled'
   | 'asaas.webhook.enabled'
   | 'asaas.subscription.enabled'
-  | 'asaas.consumer.enabled';
+  | 'asaas.consumer.enabled'
+  | 'asaas.reconciler.enabled'
+  | 'asaas.reconciler.autofix';
 
 const DEFAULTS: Record<FeatureFlagName, boolean> = {
   'consultant.enabled': false,
@@ -39,6 +41,8 @@ const DEFAULTS: Record<FeatureFlagName, boolean> = {
   'asaas.webhook.enabled': false,
   'asaas.subscription.enabled': false,
   'asaas.consumer.enabled': false,
+  'asaas.reconciler.enabled': false,
+  'asaas.reconciler.autofix': false,
 };
 
 function envKey(flag: FeatureFlagName): string {
@@ -62,6 +66,8 @@ export const featureFlags: Record<FeatureFlagName, boolean> = {
   'asaas.webhook.enabled': readFlag('asaas.webhook.enabled'),
   'asaas.subscription.enabled': readFlag('asaas.subscription.enabled'),
   'asaas.consumer.enabled': readFlag('asaas.consumer.enabled'),
+  'asaas.reconciler.enabled': readFlag('asaas.reconciler.enabled'),
+  'asaas.reconciler.autofix': readFlag('asaas.reconciler.autofix'),
 };
 
 export function isFeatureEnabled(flag: FeatureFlagName): boolean {

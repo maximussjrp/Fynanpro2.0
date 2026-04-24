@@ -35,6 +35,7 @@ import { swaggerSpec } from './config/swagger';
 import { startTransactionGeneratorJob } from './jobs/transaction-generator.job';
 import { startAllJobs } from './jobs/notification.job';
 import { startAsaasConsumerJob } from './jobs/asaas-consumer.job';
+import { startAsaasReconcilerJob } from './jobs/asaas-reconciler.job';
 import { authService } from './services/auth.service';
 import { RegisterSchema, LoginSchema, RefreshTokenSchema, ChangePasswordSchema, SwitchTenantSchema } from './dtos/auth.dto';
 import { log, httpLogger } from './utils/logger';
@@ -1025,6 +1026,10 @@ app.listen(port, () => {
 
   // ✅ Fase A2A (C4) — Asaas webhook consumer (NO-OP enquanto flag OFF)
   startAsaasConsumerJob();
+
+  // ✅ Fase A2A (C5.4) — Asaas reconciler (NO-OP enquanto flag OFF).
+  // Startup guard: aborta se MODE=autofix sem FF_ASAAS_RECONCILER_AUTOFIX=true.
+  startAsaasReconcilerJob();
 });
 
 // Graceful shutdown
