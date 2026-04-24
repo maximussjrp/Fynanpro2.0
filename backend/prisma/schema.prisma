@@ -177,6 +177,12 @@ model BankAccount {
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
   deletedAt      DateTime?
+  // Sprint 1 — rastreabilidade de origem (aditivo)
+  source              String?
+  createdByAssistant  Boolean            @default(false)
+  sourceSessionId     String?
+  sourceMessageId     String?
+  assistantRunId      String?
   tenant         Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   owners         BankAccountOwner[]
   installments   Installment[]
@@ -186,6 +192,8 @@ model BankAccount {
 
   @@index([tenantId, isActive])
   @@index([tenantId, type])
+  @@index([tenantId, createdByAssistant])
+  @@index([sourceSessionId])
 }
 
 model PaymentMethod {
@@ -278,6 +286,12 @@ model Transaction {
   energyLoss            Decimal?       @db.Decimal(5, 4)
   energySource          String?
   energySurvival        Decimal?       @db.Decimal(5, 4)
+  // Sprint 1 — rastreabilidade de origem (aditivo)
+  source                String?
+  createdByAssistant    Boolean        @default(false)
+  sourceSessionId       String?
+  sourceMessageId       String?
+  assistantRunId        String?
   bankAccount           BankAccount?   @relation(fields: [bankAccountId], references: [id])
   category              Category?      @relation(fields: [categoryId], references: [id])
   parent                Transaction?   @relation("TransactionHierarchy", fields: [parentId], references: [id], onUpdate: NoAction)
@@ -308,6 +322,10 @@ model Transaction {
   @@index([tenantId, excludedFromEnergy])
   @@index([tenantId, needsReview])
   @@index([transferGroupId])
+  @@index([source])
+  @@index([tenantId, createdByAssistant])
+  @@index([sourceSessionId])
+  @@index([assistantRunId])
 }
 
 model RecurringBill {

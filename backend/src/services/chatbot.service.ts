@@ -1,6 +1,11 @@
 import { PrismaClient } from '@prisma/client';
+import { randomUUID } from 'crypto';
 import { log } from '../utils/logger';
 import { transactionService } from './transaction.service';
+import {
+  buildAssistantAttribution,
+  logAssistantAction,
+} from './assistant-audit.service';
 
 const prisma = new PrismaClient();
 
@@ -135,6 +140,9 @@ export interface ChatSession {
   history: ChatMessage[];
   createdAt: Date;
   updatedAt: Date;
+  // Sprint 1 — atribuição transitória da run atual (não persistida)
+  currentRunId?: string;
+  currentMessageId?: string | null;
 }
 
 // ==================== APRENDIZADO ====================
@@ -610,7 +618,8 @@ export class ChatbotService {
   }
   
   /**
-   * Salvar mensagem no histórico do banco
+   * Salvar mensagem no histórico do banco.
+   * Retorna o id da mensagem criada, ou null em caso de falha (fail-open).
    */
   async saveMessage(
     sessionId: string, 
@@ -618,19 +627,22 @@ export class ChatbotService {
     content: string,
     options?: string[],
     quickReplies?: string[]
-  ): Promise<void> {
+  ): Promise<string | null> {
     try {
-      await prisma.chatMessage.create({
+      const created = await prisma.chatMessage.create({
         data: {
           sessionId,
           role,
           content,
           options: options ? JSON.stringify(options) : null,
           quickReplies: quickReplies ? JSON.stringify(quickReplies) : null,
-        }
+        },
+        select: { id: true },
       });
+      return created.id;
     } catch (error) {
       log.error('Erro ao salvar mensagem do chatbot:', error);
+      return null;
     }
   }
   
@@ -1000,7 +1012,16 @@ export class ChatbotService {
   ): Promise<{ response: string; options?: string[]; quickReplies?: string[] }> {
     const session = await this.getOrCreateSession(tenantId, userId);
     const input = message.trim();
-    
+
+    // Sprint 1 — identificadores da run para rastreabilidade.
+    // runId agrupa todos os side-effects de uma mesma invocação de processMessage.
+    // userMessageId é salvo ANTES dos handlers para permitir correlacionar a
+    // Transaction/BankAccount criada à mensagem exata que a originou.
+    const runId = randomUUID();
+    const userMessageId = await this.saveMessage(session.id, 'user', input);
+    session.currentRunId = runId;
+    session.currentMessageId = userMessageId;
+
     // Adicionar mensagem do usuário ao histórico
     session.history.push({
       role: 'user',
@@ -1169,11 +1190,16 @@ export class ChatbotService {
     
     session.updatedAt = new Date();
     
-    // Salvar no banco de dados
-    await this.saveMessage(session.id, 'user', input);
+    // Salvar no banco de dados.
+    // (a mensagem do usuário já foi persistida no início, para que os handlers
+    //  pudessem correlacionar ações à messageId.)
     await this.saveMessage(session.id, 'assistant', result.response, result.options, result.quickReplies);
     await this.saveSession(session);
-    
+
+    // Limpa identificadores transitórios da run.
+    session.currentRunId = undefined;
+    session.currentMessageId = undefined;
+
     return result;
   }
   
@@ -1321,7 +1347,15 @@ export class ChatbotService {
     }
     
     session.context.tempAccount!.balance = value;
-    
+
+    // Sprint 1 — atribuição da Isis no BankAccount criado pelo onboarding.
+    const runId = session.currentRunId || randomUUID();
+    const attribution = buildAssistantAttribution({
+      sessionId: session.id,
+      messageId: session.currentMessageId || null,
+      runId,
+    });
+
     // Criar a conta no banco
     const account = await prisma.bankAccount.create({
       data: {
@@ -1332,6 +1366,25 @@ export class ChatbotService {
         currentBalance: value,
         initialBalance: value,
         isActive: true,
+        ...attribution,
+      },
+    });
+
+    // AuditLog fail-open
+    await logAssistantAction({
+      tenantId: session.tenantId,
+      userId: session.userId,
+      action: 'CHATBOT_BANK_ACCOUNT_CREATE',
+      resourceType: 'BankAccount',
+      resourceId: account.id,
+      sessionId: session.id,
+      messageId: session.currentMessageId || null,
+      runId,
+      details: {
+        name: account.name,
+        institution: account.institution,
+        initialBalance: Number(value),
+        profileType: session.context.tempAccount!.type,
       },
     });
     
@@ -3089,7 +3142,15 @@ export class ChatbotService {
     if (isPositive(normalized) || normalized.includes('confirm')) {
       // Salvar transação
       const tx = session.context.tempTransaction!;
-      
+
+      // Sprint 1 — atribuição da Isis na Transaction criada pelo chat.
+      const runId = session.currentRunId || randomUUID();
+      const attribution = buildAssistantAttribution({
+        sessionId: session.id,
+        messageId: session.currentMessageId || null,
+        runId,
+      });
+
       const transaction = await prisma.transaction.create({
         data: {
           tenantId: session.tenantId,
@@ -3105,6 +3166,26 @@ export class ChatbotService {
           status: 'completed',
           transactionType: 'single',
           isFixed: false,
+          ...attribution,
+        },
+      });
+
+      // AuditLog fail-open (não derruba o fluxo se falhar)
+      await logAssistantAction({
+        tenantId: session.tenantId,
+        userId: session.userId,
+        action: 'CHATBOT_TRANSACTION_CREATE',
+        resourceType: 'Transaction',
+        resourceId: transaction.id,
+        sessionId: session.id,
+        messageId: session.currentMessageId || null,
+        runId,
+        details: {
+          type: transaction.type,
+          amount: Number(tx.amount),
+          categoryId: tx.categoryId || null,
+          bankAccountId: tx.bankAccountId || null,
+          paymentMethodId: tx.paymentMethodId || null,
         },
       });
       
