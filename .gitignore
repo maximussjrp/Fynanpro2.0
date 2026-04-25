@@ -72,6 +72,8 @@ certbot/
 *.bak
 *.backup
 *.sql
+# Exception: Prisma migration SQL files MUST be versioned
+!backend/prisma/migrations/**/*.sql
 
 # Test files at root level (scripts de debug)
 check-*.js
