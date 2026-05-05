@@ -163,32 +163,32 @@ model CategorySemantics {
 }
 
 model BankAccount {
-  id             String             @id @default(uuid())
-  tenantId       String
-  name           String
-  type           String
-  institution    String?
-  currentBalance Decimal            @default(0) @db.Decimal(15, 2)
-  initialBalance Decimal            @default(0) @db.Decimal(15, 2)
-  isActive       Boolean            @default(true)
-  color          String?
-  icon           String?
-  order          Int                @default(0)
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
-  deletedAt      DateTime?
+  id                 String             @id @default(uuid())
+  tenantId           String
+  name               String
+  type               String
+  institution        String?
+  currentBalance     Decimal            @default(0) @db.Decimal(15, 2)
+  initialBalance     Decimal            @default(0) @db.Decimal(15, 2)
+  isActive           Boolean            @default(true)
+  color              String?
+  icon               String?
+  order              Int                @default(0)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  deletedAt          DateTime?
   // Sprint 1 — rastreabilidade de origem (aditivo)
-  source              String?
-  createdByAssistant  Boolean            @default(false)
-  sourceSessionId     String?
-  sourceMessageId     String?
-  assistantRunId      String?
-  tenant         Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  owners         BankAccountOwner[]
-  installments   Installment[]
-  paymentMethods PaymentMethod[]
-  recurringBills RecurringBill[]
-  transactions   Transaction[]
+  source             String?
+  createdByAssistant Boolean            @default(false)
+  sourceSessionId    String?
+  sourceMessageId    String?
+  assistantRunId     String?
+  tenant             Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  owners             BankAccountOwner[]
+  installments       Installment[]
+  paymentMethods     PaymentMethod[]
+  recurringBills     RecurringBill[]
+  transactions       Transaction[]
 
   @@index([tenantId, isActive])
   @@index([tenantId, type])
@@ -738,6 +738,18 @@ model ConsultantProfile {
   deletedAt   DateTime?
   user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  // Partners Phase 0 (aditivo, atrás de FF_PARTNERS_ENABLED — não consumido em runtime ainda)
+  referralLinks     ReferralLink[]
+  attributionsOwned ReferralAttribution[]
+  sponsorEdge       SponsorshipEdge?        @relation("SponsorEdgeOwner")
+  sponsoredEdges    SponsorshipEdge[]       @relation("SponsorEdgeSponsor")
+  enrollments       Enrollment[]
+  commissions       Commission[]
+  payouts           Payout[]
+  walletEntries     ConsultantWalletEntry[]
+  kyc               PartnerKyc?
+  ban               ConsultantBan?
+
   @@index([status])
   @@index([tier])
 }
@@ -995,4 +1007,404 @@ model ReconciliationFinding {
   @@index([tenantId, kind, createdAt])
   @@index([runId, kind])
   @@index([kind, createdAt])
+}
+
+// ============================================================
+// Fase 0 — UTOP Partners (100% aditivo, FF_PARTNERS_ENABLED OFF).
+// Nenhum código de runtime consome estes modelos ainda.
+// Roadmap: docs/revendedores-plano.md
+// ============================================================
+
+enum AttributionType {
+  client_signup
+  consultant_signup
+  manual_admin
+}
+
+enum AttributionTargetType {
+  client
+  consultant
+}
+
+enum CommissionEventType {
+  curso
+  primeira_mensalidade
+  recorrente
+  upgrade
+}
+
+enum CommissionStatus {
+  em_hold
+  aprovada
+  paga
+  bloqueada
+  estornada
+}
+
+enum CommissionBlockReason {
+  consultor_inadimplente
+  consultor_nao_certificado
+  kyc_pendente
+  dados_bancarios_pendentes
+  suspeita_fraude
+  cliente_em_disputa
+  upline_inativo
+}
+
+enum CommissionBatchStatus {
+  aberto
+  fechado
+  pago
+  cancelado
+}
+
+enum PayoutStatus {
+  pendente
+  exportado
+  pago
+  falhou
+}
+
+enum WalletEntryReason {
+  commission_paid
+  chargeback_debit
+  payout
+  manual_adjustment
+}
+
+enum EnrollmentStatus {
+  nao_iniciada
+  em_andamento
+  concluida
+  certificada
+}
+
+enum KycStatus {
+  pendente
+  em_analise
+  aprovado
+  rejeitado
+}
+
+enum KycDocumentType {
+  rg
+  cpf
+  comprovante_endereco
+  selfie
+}
+
+enum BanReason {
+  fraude_comprovada
+  chargeback_malicioso
+  falsidade_cadastral
+  violacao_conduta_grave
+  manipulacao_rede_ou_comissao
+}
+
+enum PartnerAuditAction {
+  consultant_approved
+  consultant_suspended
+  consultant_banned
+  sponsorship_changed
+  bank_data_changed
+  referral_link_regenerated
+  client_list_exported
+  commission_approved
+  commission_blocked
+  commission_reversed
+  batch_closed
+  batch_paid
+  payout_marked_paid
+  kyc_approved
+  kyc_rejected
+}
+
+model ReferralLink {
+  id            String    @id @default(uuid())
+  consultantId  String
+  slug          String    @unique
+  active        Boolean   @default(true)
+  regeneratedAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  consultant   ConsultantProfile     @relation(fields: [consultantId], references: [id], onDelete: Restrict)
+  attributions ReferralAttribution[]
+
+  @@index([consultantId])
+  @@index([active])
+  @@map("partner_referral_links")
+}
+
+/// Primeira-atribuição-vence. targetUserId SEMPRE referencia User.id
+/// (nunca ConsultantProfile.id ou ClientProfile.id). Validado em service.
+/// reattributionEligibleAt = janela de exclusividade (não expiração imediata).
+model ReferralAttribution {
+  id                      String                @id @default(uuid())
+  attributionType         AttributionType
+  targetType              AttributionTargetType
+  targetUserId            String
+  consultantId            String
+  linkId                  String?
+  ip                      String?
+  userAgent               String?               @db.VarChar(512)
+  attributedAt            DateTime              @default(now())
+  reattributionEligibleAt DateTime?
+  createdAt               DateTime              @default(now())
+  updatedAt               DateTime              @updatedAt
+
+  consultant ConsultantProfile @relation(fields: [consultantId], references: [id], onDelete: Restrict)
+  link       ReferralLink?     @relation(fields: [linkId], references: [id], onDelete: SetNull)
+
+  @@unique([targetType, targetUserId])
+  @@index([consultantId])
+  @@index([attributedAt])
+  @@map("partner_referral_attributions")
+}
+
+/// Verdade primária: consultantId + sponsorConsultantId.
+/// level (N1/N2/N3) é DERIVADO em runtime — nunca persistido.
+model SponsorshipEdge {
+  id                   String   @id @default(uuid())
+  consultantId         String   @unique
+  sponsorConsultantId  String?
+  changedAt            DateTime @default(now())
+  changedByAdminUserId String?
+  changeReason         String?  @db.VarChar(500)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  consultant ConsultantProfile  @relation("SponsorEdgeOwner", fields: [consultantId], references: [id], onDelete: Restrict)
+  sponsor    ConsultantProfile? @relation("SponsorEdgeSponsor", fields: [sponsorConsultantId], references: [id], onDelete: Restrict)
+
+  @@index([sponsorConsultantId])
+  @@map("partner_sponsorship_edges")
+}
+
+model Course {
+  id         String   @id @default(uuid())
+  name       String
+  priceCents Int
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  enrollments Enrollment[]
+
+  @@map("partner_courses")
+}
+
+/// status='certificada' duplica a existência de Certificate por design
+/// (permite checar elegibilidade sem JOIN). Certificate é a evidência auditável.
+model Enrollment {
+  id              String           @id @default(uuid())
+  consultantId    String
+  courseId        String
+  status          EnrollmentStatus @default(nao_iniciada)
+  progressPct     Int              @default(0)
+  startedAt       DateTime?
+  completedAt     DateTime?
+  paymentRecordId String?          @unique
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  consultant  ConsultantProfile @relation(fields: [consultantId], references: [id], onDelete: Restrict)
+  course      Course            @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  certificate Certificate?
+
+  @@unique([consultantId, courseId])
+  @@index([status])
+  @@map("partner_enrollments")
+}
+
+model Certificate {
+  id           String   @id @default(uuid())
+  enrollmentId String   @unique
+  code         String   @unique
+  issuedAt     DateTime @default(now())
+  createdAt    DateTime @default(now())
+
+  enrollment Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Restrict)
+
+  @@map("partner_certificates")
+}
+
+/// status NUNCA inclui 'prevista'. Comissão prevista = view calculada.
+/// Vínculo comissão↔batch é exclusivo via CommissionBatchItem.
+model Commission {
+  id                      String                 @id @default(uuid())
+  paymentRecordId         String
+  beneficiaryConsultantId String
+  level                   Int
+  eventType               CommissionEventType
+  percentBps              Int
+  amountCents             Int
+  status                  CommissionStatus       @default(em_hold)
+  blockReason             CommissionBlockReason?
+  holdUntil               DateTime
+  approvedAt              DateTime?
+  paidAt                  DateTime?
+  reversedAt              DateTime?
+  createdAt               DateTime               @default(now())
+  updatedAt               DateTime               @updatedAt
+
+  beneficiary ConsultantProfile     @relation(fields: [beneficiaryConsultantId], references: [id], onDelete: Restrict)
+  batchItems  CommissionBatchItem[]
+
+  @@unique([paymentRecordId, beneficiaryConsultantId, level])
+  @@index([status, holdUntil])
+  @@index([beneficiaryConsultantId, status])
+  @@index([paymentRecordId])
+  @@map("partner_commissions")
+}
+
+model CommissionBatch {
+  id                  String                @id @default(uuid())
+  referenceMonth      String                @unique
+  status              CommissionBatchStatus @default(aberto)
+  totalCents          Int                   @default(0)
+  closedAt            DateTime?
+  paidAt              DateTime?
+  closedByAdminUserId String?
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+
+  items   CommissionBatchItem[]
+  payouts Payout[]
+
+  @@index([status])
+  @@map("partner_commission_batches")
+}
+
+model CommissionBatchItem {
+  id           String   @id @default(uuid())
+  batchId      String
+  commissionId String   @unique
+  payoutId     String?
+  createdAt    DateTime @default(now())
+
+  batch      CommissionBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  commission Commission      @relation(fields: [commissionId], references: [id], onDelete: Restrict)
+  payout     Payout?         @relation(fields: [payoutId], references: [id], onDelete: SetNull)
+
+  @@index([batchId])
+  @@index([payoutId])
+  @@map("partner_commission_batch_items")
+}
+
+/// SNAPSHOT IMUTÁVEL: pixKey/pixKeyType gravados no fechamento do batch.
+/// Service NUNCA relê do perfil do consultor depois disso.
+model Payout {
+  id              String       @id @default(uuid())
+  batchId         String
+  consultantId    String
+  amountCents     Int
+  pixKey          String       @db.VarChar(140)
+  pixKeyType      String       @db.VarChar(20)
+  status          PayoutStatus @default(pendente)
+  asaasTransferId String?
+  paidAt          DateTime?
+  failureReason   String?      @db.VarChar(500)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  batch         CommissionBatch         @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  consultant    ConsultantProfile       @relation(fields: [consultantId], references: [id], onDelete: Restrict)
+  items         CommissionBatchItem[]
+  walletEntries ConsultantWalletEntry[]
+
+  @@unique([batchId, consultantId])
+  @@index([status])
+  @@index([consultantId])
+  @@map("partner_payouts")
+}
+
+/// Saldo do consultor = SUM(deltaCents). Saldo negativo trava saques (§0.3).
+model ConsultantWalletEntry {
+  id                   String            @id @default(uuid())
+  consultantId         String
+  deltaCents           Int
+  reason               WalletEntryReason
+  refType              String            @db.VarChar(40)
+  refId                String?
+  payoutId             String?
+  description          String?           @db.VarChar(500)
+  createdByAdminUserId String?
+  createdAt            DateTime          @default(now())
+
+  consultant ConsultantProfile @relation(fields: [consultantId], references: [id], onDelete: Restrict)
+  payout     Payout?           @relation(fields: [payoutId], references: [id], onDelete: SetNull)
+
+  @@index([consultantId, createdAt])
+  @@index([reason])
+  @@map("partner_wallet_entries")
+}
+
+model PartnerKyc {
+  id                    String    @id @default(uuid())
+  consultantId          String    @unique
+  status                KycStatus @default(pendente)
+  reviewedAt            DateTime?
+  reviewedByAdminUserId String?
+  rejectReason          String?   @db.VarChar(500)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  consultant ConsultantProfile    @relation(fields: [consultantId], references: [id], onDelete: Restrict)
+  documents  PartnerKycDocument[]
+
+  @@index([status])
+  @@map("partner_kyc")
+}
+
+model PartnerKycDocument {
+  id               String          @id @default(uuid())
+  kycId            String
+  type             KycDocumentType
+  storageKey       String          @db.VarChar(500)
+  originalFileName String?         @db.VarChar(255)
+  mimeType         String          @db.VarChar(100)
+  sizeBytes        Int
+  checksumSha256   String?         @db.VarChar(64)
+  uploadedAt       DateTime        @default(now())
+
+  kyc PartnerKyc @relation(fields: [kycId], references: [id], onDelete: Cascade)
+
+  @@index([kycId])
+  @@index([checksumSha256])
+  @@map("partner_kyc_documents")
+}
+
+/// Append-only. Sem update/delete em service layer.
+model PartnerAuditLog {
+  id          String             @id @default(uuid())
+  action      PartnerAuditAction
+  actorUserId String
+  subjectType String             @db.VarChar(40)
+  subjectId   String
+  payload     Json
+  ip          String?
+  userAgent   String?            @db.VarChar(512)
+  createdAt   DateTime           @default(now())
+
+  @@index([subjectType, subjectId])
+  @@index([action, createdAt])
+  @@index([actorUserId, createdAt])
+  @@map("partner_audit_logs")
+}
+
+/// POLÍTICA: banimento é TERMINAL e ÚNICO por consultor (forçado por @unique).
+/// Reversão = ato administrativo registrado em PartnerAuditLog + DELETE.
+/// Não existe "ban inativo".
+model ConsultantBan {
+  id                  String    @id @default(uuid())
+  consultantId        String    @unique
+  reason              BanReason
+  notes               String    @db.VarChar(1000)
+  bannedByAdminUserId String
+  bannedAt            DateTime  @default(now())
+
+  consultant ConsultantProfile @relation(fields: [consultantId], references: [id], onDelete: Restrict)
+
+  @@map("partner_consultant_bans")
 }
