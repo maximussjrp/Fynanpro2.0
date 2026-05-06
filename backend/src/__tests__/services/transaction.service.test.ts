@@ -371,6 +371,86 @@ describe('TransactionService', () => {
         )
       ).rejects.toThrow('Transação não encontrada');
     });
+
+    it('deve sincronizar dueDate ao reagendar transação pendente', async () => {
+      const mockExistingTransaction = {
+        id: 'trans-123',
+        tenantId: 'tenant-123',
+        type: 'expense',
+        amount: 100,
+        status: 'pending',
+        bankAccountId: 'bank-123',
+        categoryId: 'cat-1',
+        transactionDate: new Date('2026-04-01T00:00:00.000Z'),
+        dueDate: new Date('2026-04-01T00:00:00.000Z'),
+      };
+
+      (prisma.transaction.findFirst as jest.Mock).mockResolvedValue(mockExistingTransaction);
+      (prisma.bankAccount.findFirst as jest.Mock).mockResolvedValue({
+        id: 'bank-123',
+        currentBalance: 1000,
+        tenantId: 'tenant-123',
+      });
+
+      const updateMock = jest.fn().mockResolvedValue({ ...mockExistingTransaction, transactionDate: new Date('2026-05-20T00:00:00.000Z'), dueDate: new Date('2026-05-20T00:00:00.000Z') });
+      (prisma.$transaction as jest.Mock).mockImplementation(async (fn) => {
+        const mockTx = {
+          transaction: { update: updateMock },
+          bankAccount: { update: jest.fn() },
+        };
+        return fn(mockTx);
+      });
+
+      await transactionService.update(
+        'trans-123',
+        { transactionDate: '2026-05-20' },
+        'tenant-123'
+      );
+
+      const updateCall = updateMock.mock.calls[0][0];
+      expect(updateCall.data.transactionDate).toBeInstanceOf(Date);
+      expect(updateCall.data.dueDate).toBeInstanceOf(Date);
+      expect(updateCall.data.transactionDate.getTime()).toBe(updateCall.data.dueDate.getTime());
+    });
+
+    it('NÃO deve alterar dueDate ao reagendar transação já paga', async () => {
+      const mockExistingTransaction = {
+        id: 'trans-123',
+        tenantId: 'tenant-123',
+        type: 'expense',
+        amount: 100,
+        status: 'completed',
+        bankAccountId: 'bank-123',
+        categoryId: 'cat-1',
+        transactionDate: new Date('2026-04-01T00:00:00.000Z'),
+        dueDate: new Date('2026-03-15T00:00:00.000Z'),
+      };
+
+      (prisma.transaction.findFirst as jest.Mock).mockResolvedValue(mockExistingTransaction);
+      (prisma.bankAccount.findFirst as jest.Mock).mockResolvedValue({
+        id: 'bank-123',
+        currentBalance: 1000,
+        tenantId: 'tenant-123',
+      });
+
+      const updateMock = jest.fn().mockResolvedValue(mockExistingTransaction);
+      (prisma.$transaction as jest.Mock).mockImplementation(async (fn) => {
+        const mockTx = {
+          transaction: { update: updateMock },
+          bankAccount: { update: jest.fn() },
+        };
+        return fn(mockTx);
+      });
+
+      await transactionService.update(
+        'trans-123',
+        { transactionDate: '2026-05-20' },
+        'tenant-123'
+      );
+
+      const updateCall = updateMock.mock.calls[0][0];
+      expect(updateCall.data.dueDate).toBeUndefined();
+    });
   });
 
   describe('delete()', () => {

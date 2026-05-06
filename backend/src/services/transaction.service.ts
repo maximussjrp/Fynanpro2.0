@@ -567,6 +567,13 @@ export class TransactionService {
         }
 
         // Update transaction
+        // Quando o usuário reagenda uma transação ainda não paga (transactionDate),
+        // mantemos dueDate sincronizado para que o cálculo de "atrasado" use a nova data.
+        // Se já está completed, dueDate é histórico e NÃO deve ser tocado.
+        const newTransactionDate = data.transactionDate ? parseLocalDate(data.transactionDate) : existingTransaction.transactionDate;
+        const finalStatusForDates = data.status !== undefined ? data.status : existingTransaction.status;
+        const shouldSyncDueDate = !!data.transactionDate && finalStatusForDates !== 'completed';
+
         const updated = await tx.transaction.update({
           where: { id },
           data: {
@@ -576,7 +583,8 @@ export class TransactionService {
             paymentMethodId: data.paymentMethodId !== undefined ? data.paymentMethodId : existingTransaction.paymentMethodId,
             amount: data.amount !== undefined ? data.amount : existingTransaction.amount,
             description: data.description !== undefined ? data.description : existingTransaction.description,
-            transactionDate: data.transactionDate ? parseLocalDate(data.transactionDate) : existingTransaction.transactionDate,
+            transactionDate: newTransactionDate,
+            ...(shouldSyncDueDate ? { dueDate: newTransactionDate } : {}),
             status: data.status !== undefined ? data.status : existingTransaction.status,
             notes: data.notes !== undefined ? data.notes : existingTransaction.notes,
             tags: data.tags !== undefined ? data.tags : existingTransaction.tags,

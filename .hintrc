@@ -1,0 +1,23 @@
+{
+  "extends": ["development"],
+  "hints": {
+    "axe/text-alternatives": "off",
+    "axe/forms": "off",
+    "axe/name-role-value": "off",
+    "axe/aria": "off",
+    "axe/color": "off",
+    "axe/keyboard": "off",
+    "axe/language": "off",
+    "axe/other": "off",
+    "axe/parsing": "off",
+    "axe/semantics": "off",
+    "axe/sensory-and-visual-cues": "off",
+    "axe/structure": "off",
+    "axe/tables": "off",
+    "axe/time-and-media": "off",
+    "no-inline-styles": "off",
+    "button-type": "off",
+    "compat-api/css": "off",
+    "compat-api/html": "off"
+  }
+}
