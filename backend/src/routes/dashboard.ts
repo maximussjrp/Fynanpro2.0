@@ -5,6 +5,7 @@ import { successResponse, errorResponse } from '../utils/response';
 import { log } from '../utils/logger';
 import { cacheService, CacheTTL, CacheNamespace } from '../services/cache.service';
 import { parsePeriod } from '../utils/date-helpers';
+import { overdueWhere } from '../utils/overdue';
 
 const router = Router();
 
@@ -39,16 +40,25 @@ router.get('/balance-summary', async (req: AuthRequest, res) => {
           lte: periodEnd,
         },
         deletedAt: null,
+        // Sprint 2: ignora transações de contas soft-deleted (defesa em
+        // profundidade — a deleção de conta já é bloqueada se houver
+        // transações, mas inativá-las/desligar não garante isso).
+        OR: [
+          { bankAccountId: null },
+          { bankAccount: { is: { deletedAt: null } } },
+        ],
       },
       select: {
         type: true,
         amount: true,
         status: true,
         transactionDate: true,
+        recurringBillId: true, // Sprint 2: usado para evitar dupla contagem com pendingOccurrences
       },
     });
 
-    // Buscar ocorrências pendentes de recorrências no período
+    // Buscar ocorrências pendentes/atrasadas de recorrências no período
+    // (Sprint 2 / atrasado único: status IN [pending, overdue])
     const pendingOccurrences = await prisma.recurringBillOccurrence.findMany({
       where: {
         tenantId,
@@ -56,7 +66,8 @@ router.get('/balance-summary', async (req: AuthRequest, res) => {
           gte: periodStart,
           lte: periodEnd,
         },
-        status: 'pending',
+        status: { in: ['pending', 'overdue'] },
+        deletedAt: null,
       },
       include: {
         recurringBill: {
@@ -67,19 +78,15 @@ router.get('/balance-summary', async (req: AuthRequest, res) => {
       },
     });
 
-    console.log('[BALANCE-SUMMARY] Período:', startDate, 'até', endDate);
-    console.log('[BALANCE-SUMMARY] Ocorrências pendentes encontradas:', pendingOccurrences.length);
-    pendingOccurrences.forEach(occ => {
-      console.log('  - ID:', occ.id, '| Vencimento:', occ.dueDate, '| Valor:', occ.amount, '| Tipo:', occ.recurringBill?.type);
-    });
-
     // RECEITAS
     const receivedIncome = transactions
       .filter(t => t.type === 'income' && t.status === 'completed')
       .reduce((sum, t) => sum + Number(t.amount), 0);
 
+    // Sprint 2: pending transactions de origem recorrente são IGNORADAS aqui —
+    // sua projeção já vem de pendingOccurrences (fonte única de verdade).
     const pendingIncomeTransactions = transactions
-      .filter(t => t.type === 'income' && t.status === 'pending')
+      .filter(t => t.type === 'income' && t.status === 'pending' && !t.recurringBillId)
       .reduce((sum, t) => sum + Number(t.amount), 0);
 
     const pendingIncomeOccurrences = pendingOccurrences
@@ -94,8 +101,9 @@ router.get('/balance-summary', async (req: AuthRequest, res) => {
       .filter(t => t.type === 'expense' && t.status === 'completed')
       .reduce((sum, t) => sum + Number(t.amount), 0);
 
+    // Sprint 2: idem para despesas — não somar pendentes recorrentes 2x.
     const pendingExpenseTransactions = transactions
-      .filter(t => t.type === 'expense' && t.status === 'pending')
+      .filter(t => t.type === 'expense' && t.status === 'pending' && !t.recurringBillId)
       .reduce((sum, t) => sum + Number(t.amount), 0);
 
     const pendingExpenseOccurrences = pendingOccurrences
@@ -191,6 +199,11 @@ router.get('/expense-ranking', async (req: AuthRequest, res) => {
         },
         status: 'completed',
         deletedAt: null,
+        // Sprint 2: ignora despesas de contas soft-deleted
+        OR: [
+          { bankAccountId: null },
+          { bankAccount: { is: { deletedAt: null } } },
+        ],
       },
       select: {
         amount: true,
@@ -430,12 +443,19 @@ router.get('/income-vs-expenses', async (req: AuthRequest, res) => {
       },
     });
 
-    // Contas fixas (recorrentes) para projeção
-    const recurringBills = await prisma.recurringBill.findMany({
+    // Sprint 2 / Projected values: usar OCORRÊNCIAS (RecurringBillOccurrence)
+    // como única fonte de verdade — não somar masters separadamente.
+    // O master só é usado se NÃO houver ocorrência gerada para o mês,
+    // o que é tratado como cenário de gap (não duplicado aqui).
+    const projectedOccurrences = await prisma.recurringBillOccurrence.findMany({
       where: {
         tenantId,
-        status: 'active',
+        dueDate: { gte: start, lte: end },
+        status: { in: ['pending', 'overdue'] },
         deletedAt: null,
+      },
+      include: {
+        recurringBill: { select: { type: true, status: true, deletedAt: true } },
       },
     });
 
@@ -513,20 +533,27 @@ router.get('/income-vs-expenses', async (req: AuthRequest, res) => {
       }
     });
 
-    // Adicionar contas fixas recorrentes (projeção)
-    const currentMonth = new Date().toISOString().substring(0, 7);
-    Object.keys(monthlyData).forEach(month => {
-      if (month >= currentMonth) {
-        recurringBills.forEach(bill => {
-          if (bill.amount) {
-            const amount = Number(bill.amount);
-            if (bill.type === 'income') {
-              monthlyData[month].projectedIncome = (monthlyData[month].projectedIncome || 0) + amount;
-            } else if (bill.type === 'expense') {
-              monthlyData[month].projectedExpense = (monthlyData[month].projectedExpense || 0) + amount;
-            }
-          }
-        });
+    // Sprint 2 / Projected values: somar OCORRÊNCIAS pendentes/atrasadas no
+    // próprio mês (não masters multiplicados por mês). Cada ocorrência
+    // pertence a um mês específico e tem amount próprio.
+    projectedOccurrences.forEach(occ => {
+      const bill = occ.recurringBill;
+      if (!bill || bill.deletedAt) return;
+      const month = occ.dueDate.toISOString().substring(0, 7);
+      if (!monthlyData[month]) {
+        monthlyData[month] = {
+          month,
+          realizedIncome: 0,
+          realizedExpense: 0,
+          projectedIncome: 0,
+          projectedExpense: 0,
+        };
+      }
+      const amount = Number(occ.amount);
+      if (bill.type === 'income') {
+        monthlyData[month].projectedIncome = (monthlyData[month].projectedIncome || 0) + amount;
+      } else if (bill.type === 'expense') {
+        monthlyData[month].projectedExpense = (monthlyData[month].projectedExpense || 0) + amount;
       }
     });
 
@@ -895,20 +922,12 @@ router.get('/today-summary', async (req: AuthRequest, res) => {
       },
     });
 
-    // TRANSAÇÕES ATRASADAS (status overdue OU (data < hoje e status pending))
+    // Sprint 2: critério único de "atrasado" via overdueWhere().
     const overdueTransactions = await prisma.transaction.findMany({
       where: {
         tenantId,
         type: 'expense',
-        OR: [
-          { status: 'overdue' },
-          {
-            status: 'pending',
-            transactionDate: {
-              lt: today,
-            },
-          },
-        ],
+        ...overdueWhere('transactionDate'),
         deletedAt: null,
       },
       select: {

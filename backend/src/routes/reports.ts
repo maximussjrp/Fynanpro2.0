@@ -81,39 +81,52 @@ router.get('/cash-flow', authenticateToken, async (req: AuthRequest, res: Respon
       balance: data.income - data.expense
     }));
 
-    // Buscar contas recorrentes para projeção
-    const recurringBills = await prisma.recurringBill.findMany({
-      where: {
-        tenantId,
-        deletedAt: null
-      }
-    });
-
-    // Projeção simples para os próximos 3 meses
-    const projection = [];
+    // Sprint 2 / Projected values: usar OCORRÊNCIAS por mês.
+    // Antes: somava `recurringBill.amount` (master) uniformemente em
+    // 3 meses → duplicava se já houvesse ocorrência gerada e ignorava
+    // que cada ocorrência pode ter amount próprio.
+    const projectionMonths: { from: Date; to: Date; key: string }[] = [];
     const lastMonth = new Date(end);
     for (let i = 1; i <= 3; i++) {
-      const projDate = new Date(lastMonth.getFullYear(), lastMonth.getMonth() + i, 1);
-      const key = `${projDate.getFullYear()}-${String(projDate.getMonth() + 1).padStart(2, '0')}`;
-      
+      const from = new Date(lastMonth.getFullYear(), lastMonth.getMonth() + i, 1);
+      const to = new Date(lastMonth.getFullYear(), lastMonth.getMonth() + i + 1, 0, 23, 59, 59, 999);
+      const key = `${from.getFullYear()}-${String(from.getMonth() + 1).padStart(2, '0')}`;
+      projectionMonths.push({ from, to, key });
+    }
+
+    const projectionRangeStart = projectionMonths[0]?.from;
+    const projectionRangeEnd = projectionMonths[projectionMonths.length - 1]?.to;
+
+    const projectedOccs = projectionRangeStart && projectionRangeEnd
+      ? await prisma.recurringBillOccurrence.findMany({
+          where: {
+            tenantId,
+            dueDate: { gte: projectionRangeStart, lte: projectionRangeEnd },
+            status: { in: ['pending', 'overdue'] },
+            deletedAt: null,
+          },
+          include: { recurringBill: { select: { type: true, deletedAt: true } } },
+        })
+      : [];
+
+    const projection = projectionMonths.map(({ from, to, key }) => {
       let projectedIncome = 0;
       let projectedExpense = 0;
-
-      recurringBills.forEach(bill => {
-        if (bill.type === 'income') {
-          projectedIncome += Number(bill.amount);
-        } else {
-          projectedExpense += Number(bill.amount);
-        }
+      projectedOccs.forEach(occ => {
+        if (occ.dueDate < from || occ.dueDate > to) return;
+        const bill = occ.recurringBill;
+        if (!bill || bill.deletedAt) return;
+        const amt = Number(occ.amount);
+        if (bill.type === 'income') projectedIncome += amt;
+        else projectedExpense += amt;
       });
-
-      projection.push({
+      return {
         date: key,
         projectedIncome,
         projectedExpense,
-        projectedBalance: projectedIncome - projectedExpense
-      });
-    }
+        projectedBalance: projectedIncome - projectedExpense,
+      };
+    });
 
     res.json({
       success: true,

@@ -536,7 +536,16 @@ router.post('/transfer/execute', async (req: AuthRequest, res: Response) => {
           transactionDate: transferDate,
           status: 'completed',
           notes: `Transferência de ${fromAccount.name}`,
+          linkedTransactionId: outTransaction.id, // Sprint 2: vínculo
         },
+      });
+
+      // 2b. Sprint 2: linkar a perna de saída de volta para a entrada,
+      // garantindo que ambas se referenciam mutuamente. Update/delete
+      // de uma perna ficam capazes de cascatear para a outra.
+      await tx.transaction.update({
+        where: { id: outTransaction.id },
+        data: { linkedTransactionId: inTransaction.id },
       });
 
       // 3. Decrementar saldo da conta origem

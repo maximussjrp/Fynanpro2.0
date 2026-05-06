@@ -96,17 +96,44 @@ export function startRecurringBillsJob() {
             const nextMonth = new Date(lastDueDate);
             nextMonth.setMonth(nextMonth.getMonth() + 1);
 
+            // Sprint 2 / Idempotência: NUNCA criar duplicata para a mesma
+            // (recurringBillId, dueDate). Há um índice único parcial em prod
+            // (migration 20260506_reliability_sprint2). Pre-check evita o erro
+            // P2002 e mantém logs limpos.
+            const dup = await prisma.recurringBillOccurrence.findFirst({
+              where: {
+                recurringBillId: bill.id,
+                dueDate: nextMonth,
+                deletedAt: null,
+              },
+              select: { id: true },
+            });
+            if (dup) {
+              log.info('Ocorrência já existe, pulando', { billId: bill.id, dueDate: nextMonth.toISOString() });
+              continue;
+            }
+
             // Criar nova ocorrência
             if (bill.amount) {
-              await prisma.recurringBillOccurrence.create({
-                data: {
-                  tenantId: bill.tenantId,
-                  recurringBillId: bill.id,
-                  dueDate: nextMonth,
-                  amount: bill.amount,
-                  status: 'pending',
-                },
-              });
+              try {
+                await prisma.recurringBillOccurrence.create({
+                  data: {
+                    tenantId: bill.tenantId,
+                    recurringBillId: bill.id,
+                    dueDate: nextMonth,
+                    amount: bill.amount,
+                    status: 'pending',
+                  },
+                });
+              } catch (e: any) {
+                // Race condition: outro worker criou a ocorrência entre o
+                // pre-check e o create. Índice único parou — ignorar.
+                if (e?.code === 'P2002') {
+                  log.warn('Ocorrência duplicada barrada por unique index (race)', { billId: bill.id });
+                  continue;
+                }
+                throw e;
+              }
             }
 
             generatedCount++;

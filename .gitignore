@@ -93,6 +93,11 @@ force-*.ts
 delete-*.ts
 consolidate-*.ts
 migrate_*.js
+
+# Exceções: arquivos do código-fonte da aplicação devem ser versionados
+# mesmo quando casarem com os padrões de scripts acima.
+!backend/src/**
+!frontend/src/**
 setup-*.js
 hash.js
 

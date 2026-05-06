@@ -401,23 +401,39 @@ router.post('/recurring', authenticateToken, async (req: AuthRequest, res) => {
       },
     });
     
-    // Gerar ocorrências para o resto do ano
+    // Gerar ocorrências para o resto do ano (idempotente — Sprint 2)
     const currentYear = new Date().getFullYear();
     const currentMonth = startMonth ? startMonth - 1 : new Date().getMonth();
     const finalMonth = endMonth ? endMonth - 1 : 11;
     
     for (let month = currentMonth; month <= finalMonth; month++) {
       const dueDate = new Date(currentYear, month, dueDay);
-      
-      await prisma.recurringBillOccurrence.create({
-        data: {
-          tenantId,
+
+      // Idempotência: pula se já existe ocorrência para (recurringBillId, dueDate).
+      const existing = await prisma.recurringBillOccurrence.findFirst({
+        where: {
           recurringBillId: recurring.id,
           dueDate,
-          amount,
-          status: 'pending',
+          deletedAt: null,
         },
+        select: { id: true },
       });
+      if (existing) continue;
+
+      try {
+        await prisma.recurringBillOccurrence.create({
+          data: {
+            tenantId,
+            recurringBillId: recurring.id,
+            dueDate,
+            amount,
+            status: 'pending',
+          },
+        });
+      } catch (e: any) {
+        // Índice único parcial em prod barra duplicatas concorrentes; ignora.
+        if (e?.code !== 'P2002') throw e;
+      }
     }
     
     return successResponse(res, {

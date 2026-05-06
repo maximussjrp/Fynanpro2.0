@@ -460,6 +460,31 @@ export class TransactionService {
         throw new Error('Transação não encontrada');
       }
 
+      // Sprint 2 / Transferências ligadas: editar UMA perna isoladamente
+      // criaria divergência permanente (valor / data / descrição diferentes
+      // entre as 2 pernas e os 2 saldos de conta). Política conservadora:
+      // bloquear update direto. Para alterar uma transferência o usuário
+      // deve deletar (cascade automático) e recriar.
+      // Exceção: campos NÃO-financeiros (notes, categoryId) ainda podem
+      // ser editados sem causar divergência — não vetar nesses casos.
+      if (
+        existingTransaction.type === 'transfer' &&
+        (existingTransaction as any).linkedTransactionId
+      ) {
+        const touchesFinancials =
+          data.amount !== undefined ||
+          data.transactionDate !== undefined ||
+          data.bankAccountId !== undefined ||
+          (data as any).destinationAccountId !== undefined ||
+          data.type !== undefined ||
+          data.status !== undefined;
+        if (touchesFinancials) {
+          throw new Error(
+            'TRANSFER_LINKED_IMMUTABLE: transferências ligadas não podem ter valor, data, conta ou status alterados isoladamente. Exclua a transferência e recrie.'
+          );
+        }
+      }
+
       // Validate category if provided
       if (data.categoryId !== undefined && data.categoryId !== null) {
         const category = await prisma.category.findFirst({
@@ -891,6 +916,20 @@ export class TransactionService {
         throw new Error('Transação não encontrada');
       }
 
+      // Sprint 2 / Transferências ligadas: se for transfer com perna ligada,
+      // incluir a perna oposta na operação para evitar órfãos. Idempotente:
+      // se a outra perna já estiver deletada (deletedAt != null), pula.
+      let linkedTransferLeg: any = null;
+      if (transaction.type === 'transfer' && (transaction as any).linkedTransactionId) {
+        linkedTransferLeg = await prisma.transaction.findFirst({
+          where: {
+            id: (transaction as any).linkedTransactionId,
+            tenantId,
+            deletedAt: null,
+          },
+        });
+      }
+
       // Se cascade, buscar transações filhas também
       let childTransactions: any[] = [];
       let hasPaidTransactions = false;
@@ -949,7 +988,9 @@ export class TransactionService {
           }
         }
         
-        const allTransactions = finalShouldDeleteParent ? [transaction, ...childTransactions] : childTransactions;
+        const baseList = finalShouldDeleteParent ? [transaction, ...childTransactions] : childTransactions;
+        // Sprint 2: cascateia para a perna ligada de transferência
+        const allTransactions = linkedTransferLeg ? [...baseList, linkedTransferLeg] : baseList;
         
         for (const txn of allTransactions) {
           // Revert balance change if completed
