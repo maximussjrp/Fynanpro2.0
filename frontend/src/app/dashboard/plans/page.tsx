@@ -1,7 +1,5 @@
 'use client';
 
-import { FounderCard } from '@/components/FounderUrgency';
-
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Check, Loader2, Crown, Zap, ExternalLink, AlertCircle, CheckCircle2, Sparkles, Calendar, Clock } from 'lucide-react';
@@ -52,7 +50,7 @@ export default function PlansPage() {
 
   const fetchPlans = async () => {
     try {
-      // Sprint B — gateway único Asaas. Sem fallback para Stripe.
+      // Gateway oficial: Asaas (PIX/cartão). Sem founder/oferta limitada.
       const response = await api.get('/subscription/plans');
 
       if (response.data.success) {
@@ -92,7 +90,7 @@ export default function PlansPage() {
     setMessage(null);
 
     try {
-      // Sprint B — checkout via Asaas (PIX por padrão).
+      // Checkout via Asaas (PIX por padrão).
       // Se Asaas estiver desabilitado em prod (FF off), o backend retorna 500
       // com mensagem clara — exibimos para o usuário.
       const response = await api.post('/subscription/checkout', {
@@ -126,8 +124,7 @@ export default function PlansPage() {
   };
 
   const handleManageSubscription = async () => {
-    // Sprint B — sem portal externo no Asaas. Redireciona para a página
-    // interna de cobrança que mostra status, cobranças e CTA.
+    // Página interna de cobrança (status, cobranças e CTA).
     router.push('/dashboard/settings/billing');
   };
 
@@ -212,11 +209,6 @@ export default function PlansPage() {
             <span>{message.text}</span>
           </div>
         )}
-
-        {/* Plano Fundador em Destaque */}
-        <div className="mb-8">
-          <FounderCard onSelect={() => handleSelectPlan("founder")} isProcessing={processing && selectedPlan === "founder"} />
-        </div>
 
         {/* Grid de Planos */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -325,7 +317,7 @@ export default function PlansPage() {
             </div>
             <div className="flex items-center gap-2">
               <Check className="w-5 h-5 text-green-500" />
-              <span>Pagamento seguro via Stripe</span>
+              <span>Pagamento via PIX (Asaas)</span>
             </div>
             <div className="flex items-center gap-2">
               <Check className="w-5 h-5 text-green-500" />

@@ -143,16 +143,21 @@ class EmailService {
               
               <p style="margin: 0 0 30px; color: #475569; font-size: 16px; line-height: 1.6; text-align: center;">
                 Olá, <strong>${data.userName}</strong>!<br><br>
-                Clique no botão abaixo para verificar seu email e ativar sua conta no UTOP.
+                Use o botão abaixo para confirmar seu e-mail e ativar sua conta no UTOP.
               </p>
               
-              <!-- Botão -->
-              <div style="text-align: center; margin-bottom: 30px;">
-                <a href="${data.verificationLink}" 
-                   style="display: inline-block; padding: 16px 48px; background: linear-gradient(135deg, #1F4FD8, #2ECC9A); color: white; text-decoration: none; border-radius: 12px; font-weight: 600; font-size: 16px;">
-                  Verificar Email
-                </a>
-              </div>
+              <!-- Botão (table-based bulletproof p/ Outlook + dark mode) -->
+              <table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="margin: 0 auto 30px;">
+                <tr>
+                  <td align="center" bgcolor="#1F4FD8" style="border-radius: 12px; background-color: #1F4FD8;">
+                    <a href="${data.verificationLink}"
+                       target="_blank"
+                       style="display: inline-block; padding: 16px 48px; background-color: #1F4FD8; color: #ffffff; text-decoration: none; border-radius: 12px; font-weight: 700; font-size: 16px; line-height: 1; mso-padding-alt: 0; border: 1px solid #1F4FD8;">
+                      <span style="color: #ffffff; text-decoration: none;">Confirmar meu e-mail</span>
+                    </a>
+                  </td>
+                </tr>
+              </table>
               
               <p style="margin: 0; color: #94A3B8; font-size: 14px; text-align: center;">
                 Se você não criou uma conta no UTOP, ignore este email.
@@ -173,7 +178,7 @@ class EmailService {
           <tr>
             <td align="center" style="padding-top: 30px;">
               <p style="margin: 0; color: #94A3B8; font-size: 12px;">
-                © 2025 UTOP - Seu dinheiro em equilíbrio
+                © 2026 UTOP - Seu dinheiro em equilíbrio
               </p>
             </td>
           </tr>
@@ -189,7 +194,7 @@ class EmailService {
       to,
       subject: '✉️ Confirme seu email - UTOP',
       html,
-      text: `Olá ${data.userName}! Clique no link para verificar seu email: ${data.verificationLink}`
+      text: `Olá ${data.userName}! Confirme seu e-mail abrindo o link: ${data.verificationLink}`
     });
   }
 

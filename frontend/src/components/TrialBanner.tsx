@@ -112,7 +112,12 @@ export default function TrialBanner({ tenantId }: TrialBannerProps) {
   if (wasDismissedToday || dismissed) return null;
 
   const isTrial = status.plan === 'trial';
-  const daysRemaining = status.daysRemaining ?? 30;
+  // Sem fallback hardcoded: se a API não devolver dias restantes,
+  // não exibimos número enganoso (ex: "30 dias" quando o trial é de 14).
+  if (status.daysRemaining == null || Number.isNaN(status.daysRemaining)) {
+    return null;
+  }
+  const daysRemaining = status.daysRemaining;
   
   // PLANO PAGO: só mostrar se faltar 7 dias ou menos para vencer
   if (!isTrial && daysRemaining > 7) {
