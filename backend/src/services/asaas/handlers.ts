@@ -8,7 +8,7 @@
  *
  * MAPEAMENTO Subscription.status → Tenant.subscriptionStatus (cache legado):
  *   - active     → 'active'
- *   - past_due   → 'active'   ← política C4 (não bloquear ainda)
+ *   - past_due   → 'past_due'  ← Sprint 3 (estado distinto, n/ bloqueia mas sinaliza)
  *   - suspended  → 'suspended'
  *   - cancelled  → 'cancelled'
  *   - pending    → não toca no Tenant (mantém estado anterior)
@@ -27,6 +27,7 @@ import {
   shouldPromoteBillingSource,
   type BillingSource,
 } from './billing-source.guard';
+import { advancePeriod } from '../billing/billing-cycle';
 
 export interface WebhookHandlerContext {
   tx: Prisma.TransactionClient;
@@ -49,16 +50,18 @@ export type WebhookHandler = (ctx: WebhookHandlerContext) => Promise<void>;
 /**
  * Tabela de mapeamento. Exportada para teste.
  *
- * Política C4: `past_due` mapeia para `active` no cache legado
- * (`Tenant.subscriptionStatus`) até definirmos a política de bloqueio
- * em fase posterior. Não bloquear acesso por past_due AINDA.
+ * Sprint Corretivo 3: `past_due` agora MAPEIA PARA 'past_due' (estado
+ * próprio), não mais 'active'. O middleware permite passagem (não
+ * bloqueia), mas o front recebe X-Subscription-State='past_due' para
+ * exibir banner. O job `subscription-lifecycle` flipa para 'suspended'
+ * após PAST_DUE_GRACE_DAYS (3 dias) sem retomada de pagamento.
  */
 export const SUBSCRIPTION_STATUS_TO_TENANT_CACHE: Record<
   string,
   string | null
 > = {
   active: 'active',
-  past_due: 'active', // ← decisão explícita da fase
+  past_due: 'past_due', // Sprint 3: estado distinto, não mais 'active'
   suspended: 'suspended',
   cancelled: 'cancelled',
   pending: null, // null = não tocar no Tenant
@@ -269,9 +272,23 @@ export const PAYMENT_CONFIRMED: WebhookHandler = async (ctx) => {
     return;
   }
 
-  // Atualiza Subscription → active, calcula próximo período (mensal +30d).
+  // Sprint Corretivo 3: avança `currentPeriodEnd` pelo CICLO real da
+  // Subscription, não por hardcode de "+30d". Estratégia:
+  //   1. Se subscription tem currentPeriodEnd no futuro → avança a partir
+  //      dele (cobertura contínua, sem "sumir" dias do período anterior).
+  //   2. Senão → avança a partir de agora.
+  // O webhook SUBSCRIPTION_UPDATED do Asaas (sempre disparado em sequência)
+  // re-sincroniza com o nextDueDate exato do provedor.
   const now = new Date();
-  const nextPeriodEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+  const currentSubData = await ctx.tx.subscription.findUnique({
+    where: { id: sub.id },
+    select: { cycle: true, currentPeriodEnd: true },
+  });
+  const baseForAdvance =
+    currentSubData?.currentPeriodEnd && currentSubData.currentPeriodEnd > now
+      ? currentSubData.currentPeriodEnd
+      : now;
+  const nextPeriodEnd = advancePeriod(baseForAdvance, currentSubData?.cycle);
 
   const updatedSub = await ctx.tx.subscription.update({
     where: { id: sub.id },
@@ -322,10 +339,12 @@ export const PAYMENT_RECEIVED: WebhookHandler = PAYMENT_CONFIRMED;
 /**
  * PAYMENT_OVERDUE — pagamento vencido e ainda não pago.
  *
- * Política C5.1 (mantém política C4.1):
- *   - past_due NO cache legado CONTINUA mapeando para 'active'
- *     (SUBSCRIPTION_STATUS_TO_TENANT_CACHE.past_due = 'active'), portanto
- *     NÃO há bloqueio de acesso ainda. A ativação do bloqueio fica para C5.2.
+ * Política Sprint Corretivo 3:
+ *   - Cache `Tenant.subscriptionStatus` agora mapeia `past_due` para
+ *     `'past_due'` (não mais 'active'). Middleware permite passagem porém
+ *     sinaliza o estado via header `X-Subscription-State` para o front.
+ *   - Job `subscription-lifecycle` flipa para 'suspended' após
+ *     PAST_DUE_GRACE_DAYS (3) sem retomada (ver lastAsaasEventAt).
  *
  * Transições:
  *   - PaymentRecord: NÃO regride se já terminal positivo (paid/refunded/chargeback);
@@ -428,7 +447,8 @@ export const PAYMENT_OVERDUE: WebhookHandler = async (ctx) => {
   });
 
   const cacheValue = SUBSCRIPTION_STATUS_TO_TENANT_CACHE[updatedSub.status];
-  // past_due mapeia para 'active' (política C4.1 preservada).
+  // Sprint 3: past_due mapeia para 'past_due' (cache distinto). Middleware
+  // permite acesso mas sinaliza o estado.
   if (cacheValue) {
     await writeTenantCacheWithGuard(
       ctx,
@@ -694,8 +714,7 @@ export const PAYMENT_DELETED: WebhookHandler = async (ctx) => {
  * Exportado para teste e para eventual override em integrações futuras.
  *
  *   ACTIVE   → 'active'   — cache legado: 'active'
- *   EXPIRED  → 'past_due' — cache legado: 'active' (política C4.1 preservada
- *                           até C5.3 ativar bloqueio)
+ *   EXPIRED  → 'past_due' — cache legado: 'past_due' (Sprint 3, sinaliza ao front)
  *   INACTIVE → 'suspended'— cache legado: 'suspended'
  *
  * Status Asaas desconhecidos/ausentes NÃO alteram Subscription.status local.
@@ -829,11 +848,15 @@ export const SUBSCRIPTION_UPDATED: WebhookHandler = async (ctx) => {
 };
 
 /**
- * SUBSCRIPTION_DELETED — Asaas removeu a assinatura. Transição terminal.
+ * SUBSCRIPTION_DELETED — Asaas removeu a assinatura. Transição terminal NO
+ * PROVEDOR, mas no UTOP respeitamos o período pago:
  *
- *   - Subscription local: → 'cancelled' + cancelledAt=now (se não preenchido).
- *   - Tenant cache: 'cancelled'.
- *   - Idempotente: 2ª chamada mantém 'cancelled' e preserva cancelledAt original.
+ *   - Sempre grava `cancelledAt` (se ainda não tiver sido setado).
+ *   - Se `currentPeriodEnd` no futuro → mantém `status='active'` (cancelamento
+ *     agendado). O job `subscription-lifecycle` flipa para 'cancelled' quando
+ *     o período expirar. Tenant cache NÃO é alterado.
+ *   - Se já vencido / null → flipa para 'cancelled' imediatamente + cache.
+ *   - Idempotente: 2ª chamada respeita estado terminal.
  */
 export const SUBSCRIPTION_DELETED: WebhookHandler = async (ctx) => {
   const asaasSub = ctx.payload.subscription;
@@ -855,36 +878,60 @@ export const SUBSCRIPTION_DELETED: WebhookHandler = async (ctx) => {
 
   const now = new Date();
 
-  // Busca cancelledAt atual para preservar idempotência.
   const existing = await ctx.tx.subscription.findUnique({
     where: { id: local.id },
-    select: { cancelledAt: true },
+    select: {
+      cancelledAt: true,
+      currentPeriodEnd: true,
+      status: true,
+    },
   });
+
+  // Se já está cancelled, no-op (idempotente).
+  if (existing?.status === 'cancelled') {
+    await ctx.tx.subscription.update({
+      where: { id: local.id },
+      data: { lastAsaasEventAt: now },
+    });
+    log.info('handler SUBSCRIPTION_DELETED: já cancelled, no-op', {
+      eventId: ctx.eventId,
+      subscriptionId: local.id,
+    });
+    return;
+  }
+
+  // Período ainda válido → cancelamento agendado (preserva acesso).
+  const isWithinPaidPeriod =
+    existing?.currentPeriodEnd != null && existing.currentPeriodEnd > now;
 
   const updatedSub = await ctx.tx.subscription.update({
     where: { id: local.id },
     data: {
-      status: 'cancelled',
+      status: isWithinPaidPeriod ? 'active' : 'cancelled',
       lastAsaasEventAt: now,
       ...(existing?.cancelledAt ? {} : { cancelledAt: now }),
     },
     select: { id: true, status: true, tenantId: true },
   });
 
-  const cacheValue = SUBSCRIPTION_STATUS_TO_TENANT_CACHE[updatedSub.status];
-  if (cacheValue) {
-    await writeTenantCacheWithGuard(
-      ctx,
-      updatedSub.tenantId,
-      cacheValue,
-      'SUBSCRIPTION_DELETED',
-    );
+  // Só sincroniza cache do tenant se REALMENTE cancelou (período já vencido).
+  if (!isWithinPaidPeriod) {
+    const cacheValue = SUBSCRIPTION_STATUS_TO_TENANT_CACHE[updatedSub.status];
+    if (cacheValue) {
+      await writeTenantCacheWithGuard(
+        ctx,
+        updatedSub.tenantId,
+        cacheValue,
+        'SUBSCRIPTION_DELETED',
+      );
+    }
   }
 
   log.info('handler SUBSCRIPTION_DELETED ok', {
     eventId: ctx.eventId,
     subscriptionId: updatedSub.id,
-    tenantCache: cacheValue,
+    scheduledForPeriodEnd: isWithinPaidPeriod,
+    status: updatedSub.status,
   });
 };
 

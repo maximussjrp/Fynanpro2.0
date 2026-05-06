@@ -47,9 +47,9 @@ const samplePayment = {
   externalReference: undefined,
 };
 
-describe('SUBSCRIPTION_STATUS_TO_TENANT_CACHE — política C4', () => {
-  it('past_due mapeia para active (não bloquear)', () => {
-    expect(SUBSCRIPTION_STATUS_TO_TENANT_CACHE.past_due).toBe('active');
+describe('SUBSCRIPTION_STATUS_TO_TENANT_CACHE — política Sprint 3', () => {
+  it('past_due mapeia para past_due (cache distinto, grace de 3d controlado pelo job)', () => {
+    expect(SUBSCRIPTION_STATUS_TO_TENANT_CACHE.past_due).toBe('past_due');
   });
 
   it('active → active', () => {
@@ -462,8 +462,8 @@ describe('PAYMENT_OVERDUE handler (C5.1)', () => {
     expect(tx.subscription.update.mock.calls[0][0].data.status).toBe('past_due');
     expect(tx.subscription.update.mock.calls[0][0].data.lastAsaasEventAt).toBeInstanceOf(Date);
 
-    // past_due → active no cache legado (política C4.1)
-    expect(tx.tenant.update.mock.calls[0][0].data.subscriptionStatus).toBe('active');
+    // Sprint 3: past_due → past_due no cache legado (cache distinto)
+    expect(tx.tenant.update.mock.calls[0][0].data.subscriptionStatus).toBe('past_due');
     expect(invalidateTenantIds.has('t1')).toBe(true);
   });
 
@@ -837,9 +837,9 @@ describe('ASAAS_SUB_STATUS_TO_LOCAL mapping (C5.2)', () => {
   it('ACTIVE → active', () => {
     expect(ASAAS_SUB_STATUS_TO_LOCAL.ACTIVE).toBe('active');
   });
-  it('EXPIRED → past_due (cache legado cruza past_due→active por política C4.1)', () => {
+  it('EXPIRED → past_due (cache distinto past_due→past_due, Sprint 3)', () => {
     expect(ASAAS_SUB_STATUS_TO_LOCAL.EXPIRED).toBe('past_due');
-    expect(SUBSCRIPTION_STATUS_TO_TENANT_CACHE.past_due).toBe('active');
+    expect(SUBSCRIPTION_STATUS_TO_TENANT_CACHE.past_due).toBe('past_due');
   });
   it('INACTIVE → suspended', () => {
     expect(ASAAS_SUB_STATUS_TO_LOCAL.INACTIVE).toBe('suspended');
@@ -885,7 +885,7 @@ describe('SUBSCRIPTION_UPDATED handler (C5.2)', () => {
     expect(invalidateTenantIds.has('t1')).toBe(true);
   });
 
-  it('EXPIRED → Subscription past_due + cache legado active (política C4.1 PRESERVADA)', async () => {
+  it('EXPIRED → Subscription past_due + cache past_due (Sprint 3)', async () => {
     const tx = makeTx();
     tx.subscription.findFirst.mockResolvedValue({
       id: 'sub_local_1',
@@ -908,8 +908,8 @@ describe('SUBSCRIPTION_UPDATED handler (C5.2)', () => {
     });
 
     expect(tx.subscription.update.mock.calls[0][0].data.status).toBe('past_due');
-    // Política C4.1: past_due → 'active' no cache legado, sem bloqueio.
-    expect(tx.tenant.update.mock.calls[0][0].data.subscriptionStatus).toBe('active');
+    // Sprint 3: past_due → 'past_due' no cache (cache distinto, job decide grace).
+    expect(tx.tenant.update.mock.calls[0][0].data.subscriptionStatus).toBe('past_due');
   });
 
   it('INACTIVE → Subscription suspended + cache suspended', async () => {

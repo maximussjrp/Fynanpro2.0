@@ -502,35 +502,60 @@ export const paymentService = {
   },
 
   /**
-   * Cancelar assinatura
+   * Cancelar assinatura (Sprint Corretivo 3 — cancela com manutenção de acesso
+   * até o fim do período pago).
+   *
+   * Semântica:
+   *   - Cancela no Asaas (provedor para de cobrar).
+   *   - Subscription local: status FICA 'active' + grava `cancelledAt = now`.
+   *   - Job `subscription-lifecycle` flipa para 'cancelled' quando
+   *     `currentPeriodEnd` passar.
+   *   - Tenant.subscriptionStatus continua 'active' (acesso preservado).
    */
   async cancelSubscription(tenantId: string, reason?: string) {
     const subscription = await prisma.subscription.findFirst({
-      where: { tenantId, status: { in: ['active', 'pending', 'overdue'] } }
+      where: { tenantId, status: { in: ['active', 'pending', 'past_due'] } },
+      orderBy: { createdAt: 'desc' },
     });
 
     if (!subscription || !subscription.asaasSubscriptionId) {
       throw new Error('Assinatura não encontrada');
     }
 
-    // Cancelar no Asaas
+    // Cancelar no Asaas (provedor para de cobrar imediatamente).
     await asaasRequest(`/subscriptions/${subscription.asaasSubscriptionId}`, 'DELETE');
 
-    // Atualizar banco
-    await prisma.subscription.update({
+    // Marca cancelamento agendado: cancelledAt setado, status='active'
+    // mantido. Acesso preserva-se até currentPeriodEnd; depois disso o job
+    // de lifecycle flipa para 'cancelled' E sincroniza o cache do tenant.
+    const updated = await prisma.subscription.update({
       where: { id: subscription.id },
       data: {
-        status: 'cancelled',
         cancelledAt: new Date(),
         cancellationReason: reason,
-      }
+      },
+      select: {
+        id: true,
+        status: true,
+        cancelledAt: true,
+        currentPeriodEnd: true,
+      },
     });
 
-    // Downgrade para básico no final do período
-    // (mantém acesso até o final do período pago)
-    log.info('Assinatura cancelada', { tenantId, reason });
+    log.info('Assinatura agendada para cancelamento no fim do período', {
+      tenantId,
+      subscriptionId: subscription.id,
+      currentPeriodEnd: updated.currentPeriodEnd,
+      reason,
+    });
 
-    return { success: true, message: 'Assinatura cancelada com sucesso' };
+    return {
+      success: true,
+      message: 'Assinatura cancelada. Você mantém acesso até o final do período pago.',
+      accessUntil: updated.currentPeriodEnd?.toISOString() ?? null,
+      cancelledAt: updated.cancelledAt?.toISOString() ?? null,
+      status: updated.status,
+    };
   },
 
   /**

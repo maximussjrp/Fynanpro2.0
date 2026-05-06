@@ -682,9 +682,19 @@ router.get('/subscriptions', async (req: AuthRequest, res: Response) => {
 router.post('/subscriptions/:tenantId/cancel', async (req: AuthRequest, res: Response) => {
   try {
     const { reason } = req.body;
+    // Sprint 3 fix: rota recebe tenantId, mas adminService.cancelSubscription
+    // espera subscriptionId. Resolvemos antes de chamar.
+    const sub = await prisma.subscription.findFirst({
+      where: { tenantId: req.params.tenantId, status: { in: ['active', 'past_due', 'pending'] } },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true },
+    });
+    if (!sub) {
+      return errorResponse(res, 'NOT_FOUND', 'Assinatura ativa não encontrada para o tenant', 404);
+    }
     const result = await adminService.cancelSubscription(
-      req.params.tenantId, 
-      req.userId!, 
+      sub.id,
+      req.userId!,
       reason || 'Cancelada pelo admin',
       req.ip
     );

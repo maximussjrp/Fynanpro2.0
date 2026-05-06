@@ -1,6 +1,15 @@
 /**
  * Middleware de Verificação de Assinatura
- * Bloqueia acesso quando trial expirou ou assinatura está suspensa/cancelada
+ * Bloqueia acesso quando trial expirou ou assinatura está suspensa/cancelada.
+ *
+ * SPRINT CORRETIVO 3 — middleware é READ-ONLY:
+ *   - NÃO mais grava `subscriptionStatus='suspended'` quando detecta trial
+ *     vencido. Essa transição agora é feita pelo job `subscription-lifecycle`
+ *     (atômico, fora do request cycle, sem race com webhook).
+ *   - past_due distinguido de active: passa, mas é exposto via header
+ *     `X-Subscription-State` para o front exibir banner.
+ *   - cancelamento agendado (cancelledAt setado + status='active' +
+ *     currentPeriodEnd no futuro) MANTÉM acesso até o fim do período.
  *
  * C5.0: cache extraído para `services/billing/tenant-billing-cache.ts`
  * (evita dependência circular com handlers do webhook Asaas).
@@ -21,6 +30,12 @@ export { invalidateTenantBillingCache as clearSubscriptionCache };
 
 const prisma = new PrismaClient();
 
+/** Estados em que o tenant CONTINUA tendo acesso. */
+const ALLOWED_CACHE_STATES = new Set(['active', 'past_due']);
+
+/** Estados em que o tenant é BLOQUEADO. */
+const BLOCKED_CACHE_STATES = new Set(['suspended', 'cancelled']);
+
 /**
  * Middleware que verifica se a assinatura está ativa
  * Retorna 402 (Payment Required) se bloqueado
@@ -40,16 +55,20 @@ export const subscriptionMiddleware = async (
     // Verificar cache primeiro
     const cached = getCachedSubscription(tenantId);
     if (cached) {
-      if (cached.status === 'suspended' || cached.status === 'cancelled') {
+      if (BLOCKED_CACHE_STATES.has(cached.status)) {
         return res.status(402).json({
           success: false,
           error: {
-            code: 'SUBSCRIPTION_REQUIRED',
+            code: cached.status === 'cancelled'
+              ? 'SUBSCRIPTION_CANCELLED'
+              : 'SUBSCRIPTION_REQUIRED',
             message: 'Sua assinatura expirou ou foi suspensa. Por favor, atualize seu plano.',
-            subscriptionStatus: cached.status
-          }
+            subscriptionStatus: cached.status,
+          },
         });
       }
+      // Sinaliza past_due para o front (sem bloquear).
+      res.setHeader('X-Subscription-State', cached.status);
       return next();
     }
 
@@ -59,8 +78,8 @@ export const subscriptionMiddleware = async (
       select: {
         subscriptionPlan: true,
         subscriptionStatus: true,
-        trialEndsAt: true
-      }
+        trialEndsAt: true,
+      },
     });
 
     if (!tenant) {
@@ -73,54 +92,56 @@ export const subscriptionMiddleware = async (
       });
     }
 
-    // Verificar se é trial e se expirou
-    if (tenant.subscriptionPlan === 'trial' && tenant.trialEndsAt) {
-      const now = new Date();
-      const trialEnd = new Date(tenant.trialEndsAt);
-      
-      if (now > trialEnd) {
-        // Trial expirou - atualizar status para suspended
-        await prisma.tenant.update({
-          where: { id: tenantId },
-          data: { subscriptionStatus: 'suspended' }
-        });
+    // SPRINT 3: detectar trial vencido em LEITURA. Bloqueia acesso na
+    // resposta deste request, MAS NÃO escreve no DB — o job
+    // `subscription-lifecycle` é o único responsável por flipar o estado.
+    // Evita race condition entre múltiplos requests concorrentes e webhook
+    // de pagamento que poderia chegar entre o read e o write.
+    const isTrialExpiredButNotYetFlipped =
+      tenant.subscriptionPlan === 'trial' &&
+      tenant.subscriptionStatus === 'active' &&
+      tenant.trialEndsAt !== null &&
+      tenant.trialEndsAt < new Date();
 
-        // Atualizar cache
-        setCachedSubscription(tenantId, 'suspended');
-
-        log.info('Trial expirado - acesso bloqueado', { tenantId });
-
-        return res.status(402).json({
-          success: false,
-          error: {
-            code: 'TRIAL_EXPIRED',
-            message: 'Seu período de teste expirou. Assine um plano para continuar.',
-            subscriptionStatus: 'suspended',
-            trialExpired: true
-          }
-        });
-      }
+    if (isTrialExpiredButNotYetFlipped) {
+      // NÃO escreve no DB e NÃO popula cache (deixa o job fazer).
+      return res.status(402).json({
+        success: false,
+        error: {
+          code: 'TRIAL_EXPIRED',
+          message: 'Seu período de teste expirou. Assine um plano para continuar.',
+          subscriptionStatus: 'suspended',
+          trialExpired: true,
+        },
+      });
     }
 
     // Verificar status da assinatura
-    if (tenant.subscriptionStatus === 'suspended' || tenant.subscriptionStatus === 'cancelled') {
-      // Atualizar cache
+    if (BLOCKED_CACHE_STATES.has(tenant.subscriptionStatus)) {
+      // Atualizar cache (read-through). Esta NÃO é uma escrita de domínio,
+      // apenas reflete o que já está no DB.
       setCachedSubscription(tenantId, tenant.subscriptionStatus);
 
       return res.status(402).json({
         success: false,
         error: {
-          code: 'SUBSCRIPTION_SUSPENDED',
-          message: tenant.subscriptionStatus === 'cancelled' 
+          code: tenant.subscriptionStatus === 'cancelled'
+            ? 'SUBSCRIPTION_CANCELLED'
+            : 'SUBSCRIPTION_SUSPENDED',
+          message: tenant.subscriptionStatus === 'cancelled'
             ? 'Sua assinatura foi cancelada. Reative para continuar.'
             : 'Sua assinatura está suspensa. Regularize o pagamento para continuar.',
-          subscriptionStatus: tenant.subscriptionStatus
-        }
+          subscriptionStatus: tenant.subscriptionStatus,
+        },
       });
     }
 
-    // Assinatura ativa - atualizar cache
-    setCachedSubscription(tenantId, 'active');
+    // Estado permitido (active OU past_due) — atualiza cache.
+    const allowed = ALLOWED_CACHE_STATES.has(tenant.subscriptionStatus)
+      ? tenant.subscriptionStatus
+      : 'active';
+    setCachedSubscription(tenantId, allowed);
+    res.setHeader('X-Subscription-State', allowed);
 
     return next();
   } catch (error) {

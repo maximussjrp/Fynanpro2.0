@@ -37,6 +37,7 @@ import { startTransactionGeneratorJob } from './jobs/transaction-generator.job';
 import { startAllJobs } from './jobs/notification.job';
 import { startAsaasConsumerJob } from './jobs/asaas-consumer.job';
 import { startTrialExpiryNotificationJob } from './jobs/trial-expiry-notification.job';
+import { startSubscriptionLifecycleJob } from './jobs/subscription-lifecycle.job';
 import { startAsaasReconcilerJob } from './jobs/asaas-reconciler.job';
 import { authService } from './services/auth.service';
 import { RegisterSchema, LoginSchema, RefreshTokenSchema, ChangePasswordSchema, SwitchTenantSchema } from './dtos/auth.dto';
@@ -1055,6 +1056,14 @@ app.listen(port, () => {
   // Sem RESEND_API_KEY o EmailService entra em modo simulação; o job
   // ainda registra Notification para auditoria/idempotência.
   startTrialExpiryNotificationJob();
+
+  // ✅ Sprint Corretivo 3 — lifecycle horário:
+  //   - expira trials (Tenant.subscriptionStatus active → suspended)
+  //   - past_due → suspended após grace de 3 dias
+  //   - efetiva cancelamentos agendados (cancelledAt setado +
+  //     currentPeriodEnd vencido)
+  // Substitui a escrita reativa que estava no middleware (causava race).
+  startSubscriptionLifecycleJob();
 });
 
 // Graceful shutdown
