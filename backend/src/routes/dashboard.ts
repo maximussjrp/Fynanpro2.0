@@ -4,6 +4,7 @@ import { prisma } from '../main';
 import { successResponse, errorResponse } from '../utils/response';
 import { log } from '../utils/logger';
 import { cacheService, CacheTTL, CacheNamespace } from '../services/cache.service';
+import { parsePeriod } from '../utils/date-helpers';
 
 const router = Router();
 
@@ -28,12 +29,14 @@ router.get('/balance-summary', async (req: AuthRequest, res) => {
     }
 
     // Buscar todas as transações do período
+    const { start: periodStart, end: periodEnd } = parsePeriod(startDate as string, endDate as string);
     const transactions = await prisma.transaction.findMany({
       where: {
         tenantId,
+        type: { in: ['income', 'expense'] }, // Reliability: exclui 'transfer'
         transactionDate: {
-          gte: new Date(startDate as string),
-          lte: new Date(endDate as string),
+          gte: periodStart,
+          lte: periodEnd,
         },
         deletedAt: null,
       },
@@ -50,8 +53,8 @@ router.get('/balance-summary', async (req: AuthRequest, res) => {
       where: {
         tenantId,
         dueDate: {
-          gte: new Date(startDate as string),
-          lte: new Date(endDate as string),
+          gte: periodStart,
+          lte: periodEnd,
         },
         status: 'pending',
       },
@@ -177,13 +180,14 @@ router.get('/expense-ranking', async (req: AuthRequest, res) => {
     }
 
     // Buscar despesas agrupadas por categoria
+    const { start: rankStart, end: rankEnd } = parsePeriod(startDate as string, endDate as string);
     const expenses = await prisma.transaction.findMany({
       where: {
         tenantId,
         type: 'expense',
         transactionDate: {
-          gte: new Date(startDate as string),
-          lte: new Date(endDate as string),
+          gte: rankStart,
+          lte: rankEnd,
         },
         status: 'completed',
         deletedAt: null,
@@ -227,6 +231,8 @@ router.get('/expense-ranking', async (req: AuthRequest, res) => {
     // Agrupar por categoria principal (nível 1)
     const categoryTotals: any = {};
     let totalExpense = 0;
+    let uncategorizedTotal = 0;
+    let uncategorizedCount = 0;
 
     expenses.forEach(transaction => {
       const amount = Number(transaction.amount);
@@ -243,8 +249,22 @@ router.get('/expense-ranking', async (req: AuthRequest, res) => {
         }
         categoryTotals[rootCategoryName].total += amount;
         categoryTotals[rootCategoryName].count += 1;
+      } else {
+        // Reliability: transações sem categoria viram bucket próprio.
+        // Antes eram silenciosamente excluídas do ranking (mas incluídas no totalExpense),
+        // o que inflava o percentual das categorias com nome.
+        uncategorizedTotal += amount;
+        uncategorizedCount += 1;
       }
     });
+
+    if (uncategorizedTotal > 0) {
+      categoryTotals['__uncategorized__'] = {
+        name: 'Sem categoria',
+        total: uncategorizedTotal,
+        count: uncategorizedCount,
+      };
+    }
 
     // Converter para array e ordenar por valor
     const ranking = Object.values(categoryTotals)
@@ -301,10 +321,7 @@ router.get('/income-ranking', async (req: AuthRequest, res) => {
       where: {
         tenantId,
         type: 'income',
-        transactionDate: {
-          gte: new Date(startDate as string),
-          lte: new Date(endDate as string),
-        },
+        transactionDate: (() => { const p = parsePeriod(startDate as string, endDate as string); return { gte: p.start, lte: p.end }; })(),
         status: 'completed',
         deletedAt: null,
       },
@@ -397,8 +414,8 @@ router.get('/income-vs-expenses', async (req: AuthRequest, res) => {
       return errorResponse(res, 'VALIDATION_ERROR', 'startDate e endDate são obrigatórios', 400);
     }
 
-    const start = new Date(startDate as string);
-    const end = new Date(endDate as string);
+    const start = parsePeriod(startDate as string, endDate as string).start;
+    const end = parsePeriod(startDate as string, endDate as string).end;
 
     // Transações realizadas
     const transactions = await prisma.transaction.findMany({

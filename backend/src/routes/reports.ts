@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { AuthRequest, authenticateToken } from '../middleware/auth';
 import { log } from '../utils/logger';
+import { parsePeriod } from '../utils/date-helpers';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -19,8 +20,8 @@ router.get('/cash-flow', authenticateToken, async (req: AuthRequest, res: Respon
       });
     }
 
-    const start = startDate ? new Date(startDate as string) : new Date(new Date().getFullYear(), 0, 1);
-    const end = endDate ? new Date(endDate as string) : new Date();
+    const start = startDate ? parsePeriod(startDate as string).start : new Date(new Date().getFullYear(), 0, 1);
+    const end = endDate ? parsePeriod(undefined, endDate as string).end : new Date();
 
     // Buscar todas as transações do período
     const transactions = await prisma.transaction.findMany({
@@ -150,8 +151,8 @@ router.get('/category-analysis', authenticateToken, async (req: AuthRequest, res
       });
     }
 
-    const start = startDate ? new Date(startDate as string) : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-    const end = endDate ? new Date(endDate as string) : new Date();
+    const start = startDate ? parsePeriod(startDate as string).start : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    const end = endDate ? parsePeriod(undefined, endDate as string).end : new Date();
 
     // Buscar transações agrupadas por categoria
     const transactions = await prisma.transaction.findMany({
@@ -260,8 +261,8 @@ router.get('/hierarchical-categories', authenticateToken, async (req: AuthReques
       });
     }
 
-    const start = startDate ? new Date(startDate as string) : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-    const end = endDate ? new Date(endDate as string) : new Date();
+    const start = startDate ? parsePeriod(startDate as string).start : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    const end = endDate ? parsePeriod(undefined, endDate as string).end : new Date();
 
     // Buscar TODAS as categorias do tenant com hierarquia
     const allCategories = await prisma.category.findMany({
@@ -307,7 +308,7 @@ router.get('/hierarchical-categories', authenticateToken, async (req: AuthReques
       }
       
       const data = categoryTotals.get(t.categoryId)!;
-      if (t.type === 'INCOME') {
+      if (t.type === 'income') {
         data.income += Number(t.amount);
       } else {
         data.expense += Number(t.amount);
@@ -378,15 +379,15 @@ router.get('/hierarchical-categories', authenticateToken, async (req: AuthReques
         });
     };
 
-    // Separar por tipo (INCOME e EXPENSE)
-    const incomeCategories = buildTree(null, 1).filter(c => c.type === 'INCOME');
-    const expenseCategories = buildTree(null, 1).filter(c => c.type === 'EXPENSE');
+    // Separar por tipo (income e expense) — valores conforme schema Category.type
+    const incomeCategories = buildTree(null, 1).filter(c => c.type === 'income');
+    const expenseCategories = buildTree(null, 1).filter(c => c.type === 'expense');
 
     // Calcular totais gerais
     let totalIncome = 0;
     let totalExpense = 0;
     transactions.forEach(t => {
-      if (t.type === 'INCOME') {
+      if (t.type === 'income') {
         totalIncome += Number(t.amount);
       } else {
         totalExpense += Number(t.amount);
@@ -438,8 +439,8 @@ router.get('/payment-methods', authenticateToken, async (req: AuthRequest, res: 
       });
     }
 
-    const start = startDate ? new Date(startDate as string) : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-    const end = endDate ? new Date(endDate as string) : new Date();
+    const start = startDate ? parsePeriod(startDate as string).start : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    const end = endDate ? parsePeriod(undefined, endDate as string).end : new Date();
 
     const transactions = await prisma.transaction.findMany({
       where: {
@@ -525,8 +526,8 @@ router.get('/income-vs-expense', authenticateToken, async (req: AuthRequest, res
       });
     }
 
-    const start = startDate ? new Date(startDate as string) : new Date(new Date().getFullYear(), 0, 1);
-    const end = endDate ? new Date(endDate as string) : new Date();
+    const start = startDate ? parsePeriod(startDate as string).start : new Date(new Date().getFullYear(), 0, 1);
+    const end = endDate ? parsePeriod(undefined, endDate as string).end : new Date();
 
     const transactions = await prisma.transaction.findMany({
       where: {
@@ -614,8 +615,8 @@ router.get('/trends', authenticateToken, async (req: AuthRequest, res: Response)
       });
     }
 
-    const start = startDate ? new Date(startDate as string) : new Date(new Date().getFullYear() - 1, 0, 1);
-    const end = endDate ? new Date(endDate as string) : new Date();
+    const start = startDate ? parsePeriod(startDate as string).start : new Date(new Date().getFullYear() - 1, 0, 1);
+    const end = endDate ? parsePeriod(undefined, endDate as string).end : new Date();
 
     const where: any = {
       tenantId,
@@ -1233,7 +1234,7 @@ router.get('/energy-flow', authenticateToken, async (req: AuthRequest, res: Resp
     }
 
     let start: Date;
-    let end = endDate ? new Date(endDate as string) : new Date();
+    let end = endDate ? parsePeriod(undefined, endDate as string).end : new Date();
 
     // Se period foi passado, calcular datas baseado nele
     if (period) {
@@ -1259,7 +1260,7 @@ router.get('/energy-flow', authenticateToken, async (req: AuthRequest, res: Resp
           start = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate());
       }
     } else {
-      start = startDate ? new Date(startDate as string) : new Date(new Date().getFullYear(), 0, 1);
+      start = startDate ? parsePeriod(startDate as string).start : new Date(new Date().getFullYear(), 0, 1);
     }
 
     if (groupBy === 'single') {
@@ -1351,8 +1352,8 @@ router.get('/insights', authenticateToken, async (req: AuthRequest, res: Respons
       });
     }
 
-    const start = startDate ? new Date(startDate as string) : new Date(new Date().getFullYear(), new Date().getMonth() - 3, 1);
-    const end = endDate ? new Date(endDate as string) : new Date();
+    const start = startDate ? parsePeriod(startDate as string).start : new Date(new Date().getFullYear(), new Date().getMonth() - 3, 1);
+    const end = endDate ? parsePeriod(undefined, endDate as string).end : new Date();
 
     const insights = await energyReportsService.generateInsights(tenantId, start, end);
 

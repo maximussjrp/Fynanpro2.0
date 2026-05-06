@@ -141,3 +141,57 @@ export function diffInDays(date1: Date, date2: Date): number {
   const diffTime = d1.getTime() - d2.getTime();
   return Math.floor(diffTime / (1000 * 60 * 60 * 24));
 }
+
+/**
+ * Fuso horário oficial do UTOP (Brasília, sem DST: UTC-3).
+ * Usado para parsing de filtros de período vindos do frontend.
+ */
+const BRT_OFFSET = '-03:00';
+
+/**
+ * Parse seguro de período (filtro de dashboard/relatórios).
+ *
+ * Recebe strings `YYYY-MM-DD` (ou ISO completo) vindas do query-string e
+ * devolve um intervalo `{start, end}` cobrindo o dia inteiro no fuso de
+ * Brasília (UTC-3), evitando o bug clássico:
+ *   `new Date('2026-05-06')` → 06/05 00:00 UTC = 05/05 21:00 BRT
+ *   (perde 3h no início e 24h no fim do período).
+ *
+ * Regras:
+ *   - String `YYYY-MM-DD` → ancora explicitamente em `T00:00:00-03:00`
+ *     (start) e `T23:59:59.999-03:00` (end).
+ *   - String ISO completa (com hora) → respeita o que veio.
+ *   - `undefined` → start = -infinito, end = +infinito (sem filtro).
+ *
+ * Sempre retorna instâncias `Date` em UTC absoluto (Prisma serializa em UTC).
+ */
+export function parsePeriod(
+  startInput?: string | string[] | undefined,
+  endInput?: string | string[] | undefined,
+): { start: Date; end: Date } {
+  const start = parseStartBoundary(coerceString(startInput));
+  const end = parseEndBoundary(coerceString(endInput));
+  return { start, end };
+}
+
+function coerceString(v: string | string[] | undefined): string | undefined {
+  if (Array.isArray(v)) return v[0];
+  if (typeof v === 'string' && v.trim() !== '') return v.trim();
+  return undefined;
+}
+
+function isDateOnly(s: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(s);
+}
+
+function parseStartBoundary(s: string | undefined): Date {
+  if (!s) return new Date(0); // 1970-01-01 — “sem filtro” na ponta inicial
+  if (isDateOnly(s)) return new Date(`${s}T00:00:00.000${BRT_OFFSET}`);
+  return new Date(s);
+}
+
+function parseEndBoundary(s: string | undefined): Date {
+  if (!s) return new Date('9999-12-31T23:59:59.999Z'); // “sem filtro” na ponta final
+  if (isDateOnly(s)) return new Date(`${s}T23:59:59.999${BRT_OFFSET}`);
+  return new Date(s);
+}
