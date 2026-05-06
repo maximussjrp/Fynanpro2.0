@@ -28,7 +28,10 @@ export type FeatureFlagName =
   | 'asaas.subscription.enabled'
   | 'asaas.consumer.enabled'
   | 'asaas.reconciler.enabled'
-  | 'asaas.reconciler.autofix';
+  | 'asaas.reconciler.autofix'
+  | 'partners.enabled'
+  | 'partners.kyc.enabled'
+  | 'partners.referral.enabled';
 
 const DEFAULTS: Record<FeatureFlagName, boolean> = {
   'consultant.enabled': false,
@@ -43,6 +46,9 @@ const DEFAULTS: Record<FeatureFlagName, boolean> = {
   'asaas.consumer.enabled': false,
   'asaas.reconciler.enabled': false,
   'asaas.reconciler.autofix': false,
+  'partners.enabled': false,
+  'partners.kyc.enabled': false,
+  'partners.referral.enabled': false,
 };
 
 function envKey(flag: FeatureFlagName): string {
@@ -68,6 +74,9 @@ export const featureFlags: Record<FeatureFlagName, boolean> = {
   'asaas.consumer.enabled': readFlag('asaas.consumer.enabled'),
   'asaas.reconciler.enabled': readFlag('asaas.reconciler.enabled'),
   'asaas.reconciler.autofix': readFlag('asaas.reconciler.autofix'),
+  'partners.enabled': readFlag('partners.enabled'),
+  'partners.kyc.enabled': readFlag('partners.kyc.enabled'),
+  'partners.referral.enabled': readFlag('partners.referral.enabled'),
 };
 
 export function isFeatureEnabled(flag: FeatureFlagName): boolean {

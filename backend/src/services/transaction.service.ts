@@ -6,6 +6,7 @@ import { prisma } from '../utils/prisma-client';
 import { log } from '../utils/logger';
 import { CreateTransactionDTO, UpdateTransactionDTO, TransactionFiltersDTO } from '../dtos/transaction.dto';
 import { cacheService, CacheNamespace } from './cache.service';
+import type { AssistantAttribution } from './assistant-audit.service';
 
 /**
  * Helper para converter string de data (YYYY-MM-DD) para Date local
@@ -266,11 +267,24 @@ export class TransactionService {
 
   /**
    * Cria uma nova transação com validação e atualização de saldo
+   *
+   * @param options.attribution  Quando presente (ex.: criação via tool do
+   *   assistant), grava os campos de rastreabilidade em Transaction
+   *   (source, createdByAssistant, sourceSessionId, sourceMessageId,
+   *   assistantRunId). Mantém fluxo normal quando ausente.
+   * @param options.userProfileId  Perfil (e-Financeira) associado à transação.
+   * @param options.isFixed        Flag "gasto fixo"; default do schema é true,
+   *   mas o chatbot de lançamento pontual precisa gravar false.
    */
   async create(
     data: CreateTransactionDTO,
     userId: string,
-    tenantId: string
+    tenantId: string,
+    options?: {
+      attribution?: AssistantAttribution;
+      userProfileId?: string | null;
+      isFixed?: boolean;
+    }
   ): Promise<any> {
     try {
       log.info('TransactionService.create', { data, userId, tenantId });
@@ -356,6 +370,11 @@ export class TransactionService {
             status: finalStatus,
             notes: data.notes || null,
             tags: data.tags || null,
+            ...(options?.userProfileId !== undefined
+              ? { userProfileId: options.userProfileId }
+              : {}),
+            ...(options?.isFixed !== undefined ? { isFixed: options.isFixed } : {}),
+            ...(options?.attribution || {}),
           },
           include: {
             category: true,
@@ -422,12 +441,18 @@ export class TransactionService {
     try {
       log.info('TransactionService.update', { id, data, tenantId });
 
-      // Find existing transaction
+      // Find existing transaction.
+      // Templates de recorrência (transactionType='recurring' parent) são gravados com
+      // deletedAt = NOW() propositalmente para não aparecer no histórico — mas eles
+      // ainda devem ser editáveis pela tela de Contas Recorrentes.
       const existingTransaction = await prisma.transaction.findFirst({
         where: {
           id,
           tenantId,
-          deletedAt: null,
+          OR: [
+            { deletedAt: null },
+            { transactionType: 'recurring', parentId: null },
+          ],
         },
       });
 
@@ -568,6 +593,40 @@ export class TransactionService {
 
         return updated;
       });
+
+      // Se editou o template de recorrência, propaga campos editáveis para as
+      // ocorrências futuras (filhos) que ainda não foram pagas/efetivadas.
+      if (
+        existingTransaction.transactionType === 'recurring' &&
+        !existingTransaction.parentId
+      ) {
+        const propagateData: any = {};
+        if (data.type !== undefined) propagateData.type = data.type;
+        if (data.categoryId !== undefined) propagateData.categoryId = data.categoryId;
+        if (data.paymentMethodId !== undefined) propagateData.paymentMethodId = data.paymentMethodId;
+        if (data.bankAccountId !== undefined) propagateData.bankAccountId = data.bankAccountId;
+        if (data.amount !== undefined) propagateData.amount = data.amount;
+        if (data.description !== undefined) propagateData.description = data.description;
+        if (data.notes !== undefined) propagateData.notes = data.notes;
+        if (data.tags !== undefined) propagateData.tags = data.tags;
+
+        if (Object.keys(propagateData).length > 0) {
+          const result = await prisma.transaction.updateMany({
+            where: {
+              parentId: id,
+              tenantId,
+              deletedAt: null,
+              status: { in: ['pending', 'scheduled'] },
+            },
+            data: propagateData,
+          });
+          log.info('TransactionService.update propagated to recurring children', {
+            parentId: id,
+            updated: result.count,
+            fields: Object.keys(propagateData),
+          });
+        }
+      }
 
       log.info('TransactionService.update success', { id, tenantId });
 

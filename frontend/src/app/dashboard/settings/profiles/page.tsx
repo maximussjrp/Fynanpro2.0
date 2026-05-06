@@ -210,6 +210,24 @@ export default function ProfilesPage() {
           </button>
         </div>
 
+        {/* ⚠️ MÓDULO SUSPENSO */}
+        <div className="bg-amber-50 border-2 border-amber-400 rounded-xl p-4 mb-6">
+          <div className="flex gap-3">
+            <AlertTriangle className="w-6 h-6 text-amber-600 flex-shrink-0" />
+            <div>
+              <h3 className="font-bold text-amber-900">
+                ⚠️ Módulo e-Financeira / Perfis Fiscais SUSPENSO
+              </h3>
+              <p className="text-sm text-amber-800 mt-1">
+                Este módulo está temporariamente desativado para revisão por inconsistências
+                no cálculo do limite mensal e da projeção. <strong>Ninguém deve mexer ou editar
+                este módulo sem autorização do Max.</strong> Os monitoramentos fiscais e o widget
+                do dashboard estão pausados — os dados de perfis permanecem preservados.
+              </p>
+            </div>
+          </div>
+        </div>
+
         {/* Info Box */}
         <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-xl p-4 mb-6">
           <div className="flex gap-3">

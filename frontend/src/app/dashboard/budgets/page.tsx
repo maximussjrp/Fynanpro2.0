@@ -86,9 +86,7 @@ export default function BudgetsPage() {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await response.json();
-      console.log('Resposta completa da API:', data);
       if (data.success && data.data.categories) {
-        console.log('Categorias encontradas:', data.data.categories);
         setCategories(data.data.categories);
       } else {
         console.error('Formato inesperado de resposta:', data);

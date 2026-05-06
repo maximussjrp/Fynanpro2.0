@@ -6,6 +6,12 @@ import {
   buildAssistantAttribution,
   logAssistantAction,
 } from './assistant-audit.service';
+import { toolRegistry, registerDefaultTools } from '../agent/tools';
+import { runOrchestrator } from '../agent/orchestrator';
+
+// Garante que as tools default do agent estejam registradas antes do
+// primeiro uso pelo chatbot. Idempotente.
+registerDefaultTools();
 
 const prisma = new PrismaClient();
 
@@ -2185,10 +2191,123 @@ export class ChatbotService {
   }
   
   // ==================== HANDLERS DE ASSISTÊNCIA ====================
-  
+
+  /**
+   * Sprint 3 — integra o orquestrador LLM no IDLE.
+   *
+   * Retorna a resposta se o orquestrador realmente decidir algo útil
+   * (respond / clarify / tool executada / tool write com confirmação
+   * preparada). Retorna `null` para sinalizar ao `handleIdle` que
+   * deve continuar no fluxo determinístico.
+   *
+   * Toda invocação é tenant-scoped e atrás da flag
+   * `LLM_ORCHESTRATOR_ENABLED=true`. Nunca interfere no onboarding.
+   */
+  private async tryOrchestrator(
+    session: ChatSession,
+    input: string,
+  ): Promise<{ response: string; options?: string[]; quickReplies?: string[] } | null> {
+    // Histórico curto: últimas 6 mensagens do próprio histórico in-memory
+    const recentHistory = (session.history || [])
+      .slice(-6)
+      .map(h => ({
+        role: h.role === 'user' ? ('user' as const) : ('assistant' as const),
+        content: h.content,
+      }));
+
+    const out = await runOrchestrator({
+      tenantId: session.tenantId,
+      userId: session.userId,
+      message: input,
+      source: 'chatbot',
+      sessionId: session.id,
+      messageId: session.currentMessageId || null,
+      runId: session.currentRunId || null,
+      recentHistory,
+      onboardingActive: false, // já estamos no IDLE
+      state: session.state,
+    });
+
+    // Fallback explícito → chatbot determinístico continua.
+    if (out.decision.action === 'fallback') {
+      return null;
+    }
+
+    // respond / clarify → texto direto.
+    if (out.decision.action === 'respond' || out.decision.action === 'clarify') {
+      if (out.responseText) {
+        return { response: out.responseText };
+      }
+      return null;
+    }
+
+    // invoke_tool (write) → preparar confirmação e reusar handleConfirming.
+    // HOOK: Sprint 3 NÃO executa writes direto pelo orquestrador; deixamos
+    // o caminho existente de confirmação assumir para preservar paridade
+    // com o fluxo determinístico e a trilha de auditoria.
+    if (
+      out.decision.action === 'invoke_tool' &&
+      out.decision.toolName === 'create_transaction' &&
+      out.decision.needsConfirmation
+    ) {
+      const ti = (out.decision.toolInput ?? {}) as Record<string, any>;
+      // Só aceita se campos mínimos estiverem presentes; caso contrário fallback.
+      if (
+        typeof ti.type === 'string' &&
+        (ti.type === 'income' || ti.type === 'expense') &&
+        typeof ti.amount === 'number' &&
+        typeof ti.description === 'string'
+      ) {
+        session.context.tempTransaction = {
+          type: ti.type,
+          amount: ti.amount,
+          description: ti.description,
+          categoryId: typeof ti.categoryId === 'string' ? ti.categoryId : undefined,
+          bankAccountId:
+            typeof ti.bankAccountId === 'string' ? ti.bankAccountId : undefined,
+          paymentMethodId:
+            typeof ti.paymentMethodId === 'string' ? ti.paymentMethodId : undefined,
+          userProfileId:
+            typeof ti.userProfileId === 'string' ? ti.userProfileId : undefined,
+        };
+        session.state = ChatState.CONFIRMING;
+        const preview =
+          out.responseText ||
+          `Quer que eu registre: ${ti.type === 'income' ? 'receita' : 'despesa'} de R$ ${Number(ti.amount).toFixed(2)} — ${ti.description}?`;
+        return { response: preview, quickReplies: ['Sim', 'Não'] };
+      }
+      return null; // fallback
+    }
+
+    // invoke_tool (read executado): responseText já veio da decisão
+    if (out.decision.action === 'invoke_tool' && out.responseText) {
+      return { response: out.responseText };
+    }
+
+    return null;
+  }
+
   private async handleIdle(session: ChatSession, input: string) {
     const normalized = input.toLowerCase().trim();
-    
+
+    // Sprint 3 — Orquestrador LLM mínimo, atrás de flag.
+    // Só entra no IDLE (onboarding fica 100% determinístico).
+    // Em caso de fallback OU qualquer erro, cai silenciosamente para o
+    // fluxo determinístico abaixo.
+    if (process.env.LLM_ORCHESTRATOR_ENABLED === 'true') {
+      try {
+        const handled = await this.tryOrchestrator(session, input);
+        if (handled) return handled;
+      } catch (err: any) {
+        // Qualquer escape não previsto: log e siga determinístico.
+        log.warn('chatbot.orchestrator.unhandled_error', {
+          sessionId: session.id,
+          runId: session.currentRunId || null,
+          error: err?.message || String(err),
+        });
+      }
+    }
+
     // Comando Menu - mostrar todas as funcionalidades
     if (MENU_PATTERNS.test(normalized)) {
       return this.showMenu(session);
@@ -3140,67 +3259,66 @@ export class ChatbotService {
     }
     
     if (isPositive(normalized) || normalized.includes('confirm')) {
-      // Salvar transação
+      // Salvar transação — via tool layer (Sprint 2.1).
+      // Unifica o caminho de escrita do chatbot com o TransactionService:
+      // atribuição, AuditLog, validação de categoria/conta/pagamento e
+      // atualização atômica de saldo passam a ser responsabilidade única
+      // da tool `create_transaction`.
       const tx = session.context.tempTransaction!;
-
-      // Sprint 1 — atribuição da Isis na Transaction criada pelo chat.
       const runId = session.currentRunId || randomUUID();
-      const attribution = buildAssistantAttribution({
-        sessionId: session.id,
-        messageId: session.currentMessageId || null,
-        runId,
-      });
 
-      const transaction = await prisma.transaction.create({
-        data: {
+      const toolResult = await toolRegistry.invoke<{
+        id: string | null;
+        type: string;
+      }>(
+        'create_transaction',
+        {
+          type: tx.type || 'expense',
+          amount: tx.amount!,
+          description: tx.description || '',
+          categoryId: tx.categoryId!,
+          bankAccountId: tx.bankAccountId!,
+          paymentMethodId: tx.paymentMethodId,
+          userProfileId: tx.userProfileId,
+          status: 'completed',
+          isFixed: false,
+        },
+        {
           tenantId: session.tenantId,
           userId: session.userId,
-          type: tx.type || 'expense',
-          categoryId: tx.categoryId,
-          bankAccountId: tx.bankAccountId,
-          paymentMethodId: tx.paymentMethodId,
-          userProfileId: tx.userProfileId || null, // Perfil para e-Financeira
-          amount: tx.amount!,
-          description: tx.description,
-          transactionDate: new Date(),
-          status: 'completed',
-          transactionType: 'single',
-          isFixed: false,
-          ...attribution,
+          source: 'chatbot',
+          sessionId: session.id,
+          messageId: session.currentMessageId || null,
+          runId,
         },
-      });
+      );
 
-      // AuditLog fail-open (não derruba o fluxo se falhar)
-      await logAssistantAction({
-        tenantId: session.tenantId,
-        userId: session.userId,
-        action: 'CHATBOT_TRANSACTION_CREATE',
-        resourceType: 'Transaction',
-        resourceId: transaction.id,
-        sessionId: session.id,
-        messageId: session.currentMessageId || null,
-        runId,
-        details: {
-          type: transaction.type,
-          amount: Number(tx.amount),
-          categoryId: tx.categoryId || null,
-          bankAccountId: tx.bankAccountId || null,
-          paymentMethodId: tx.paymentMethodId || null,
-        },
-      });
-      
-      // Atualizar saldo da conta
-      if (tx.bankAccountId) {
-        const multiplier = tx.type === 'income' ? 1 : -1;
-        await prisma.bankAccount.update({
-          where: { id: tx.bankAccountId },
-          data: {
-            currentBalance: {
-              increment: tx.amount! * multiplier,
-            },
-          },
+      if (!toolResult.ok) {
+        const failure = toolResult as {
+          ok: false;
+          kind: string;
+          code: string;
+          message: string;
+        };
+        log.error('chatbot.handleConfirming: falha ao criar transação via tool', {
+          sessionId: session.id,
+          runId,
+          kind: failure.kind,
+          code: failure.code,
+          message: failure.message,
         });
+        return {
+          response:
+            '❌ Ops, não consegui registrar agora. Pode tentar de novo em um instante?',
+          quickReplies: ['Tentar de novo', 'Cancelar'],
+        };
       }
+
+      const success = toolResult as {
+        ok: true;
+        data: { id: string; type: string };
+      };
+      const transaction = { id: success.data.id, type: success.data.type };
       
       // Atualizar padrões aprendidos
       if (tx.description && tx.categoryId) {
@@ -3237,11 +3355,11 @@ export class ChatbotService {
       
       const emoji = tx.type === 'income' ? '🎉' : '✅';
       
-      // Verificar limites e-Financeira para o perfil
-      let eFinanceiraWarning = '';
-      if (tx.userProfileId) {
-        eFinanceiraWarning = await this.checkEFinanceiraLimit(session.tenantId, tx.userProfileId, tx.amount!);
-      }
+      // ⚠️ MÓDULO e-Financeira SUSPENSO — não emitir warnings até revisão (autorização do Max)
+      const eFinanceiraWarning = '';
+      // if (tx.userProfileId) {
+      //   eFinanceiraWarning = await this.checkEFinanceiraLimit(session.tenantId, tx.userProfileId, tx.amount!);
+      // }
       
       let responseMessage = `${emoji} **Lançamento registrado!**\n\n` +
           `${tx.type === 'income' ? '💵' : '💸'} ${tx.description}: R$ ${formatMoney(tx.amount!)}\n\n` +

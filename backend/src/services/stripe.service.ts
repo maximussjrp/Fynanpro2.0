@@ -6,6 +6,7 @@
 import Stripe from 'stripe';
 import { PrismaClient } from '@prisma/client';
 import { log } from '../utils/logger';
+import { MONTHLY_PLAN_PRICE_REAIS, QUARTERLY_PLAN_PRICE_REAIS, QUARTERLY_PLAN_PRICE_PER_MONTH_REAIS, QUARTERLY_PLAN_SAVINGS_REAIS, SEMIANNUAL_PLAN_PRICE_REAIS, SEMIANNUAL_PLAN_PRICE_PER_MONTH_REAIS, SEMIANNUAL_PLAN_SAVINGS_REAIS, YEARLY_PLAN_PRICE_REAIS, YEARLY_PLAN_PRICE_PER_MONTH_REAIS, YEARLY_PLAN_SAVINGS_REAIS } from '../config/pricing';
 
 const prisma = new PrismaClient();
 
@@ -82,7 +83,8 @@ export const PLANS = {
   monthly: {
     id: 'monthly',
     name: 'Mensal',
-    price: 39.90,
+    // Fonte única de verdade: backend/src/config/pricing.ts (R$ 79,90).
+    price: MONTHLY_PLAN_PRICE_REAIS,
     period: 'month',
     periodLabel: 'por mês',
     stripePriceId: STRIPE_PRICE_IDS.monthly,
@@ -105,14 +107,14 @@ export const PLANS = {
   quarterly: {
     id: 'quarterly',
     name: 'Trimestral',
-    price: 107.70,
-    pricePerMonth: 35.90,
+    price: QUARTERLY_PLAN_PRICE_REAIS,
+    pricePerMonth: QUARTERLY_PLAN_PRICE_PER_MONTH_REAIS,
     period: '3months',
     periodLabel: 'a cada 3 meses',
-    savings: 'Economize R$ 12',
+    savings: `Economize R$ ${QUARTERLY_PLAN_SAVINGS_REAIS.toFixed(2).replace('.', ',')}`,
     stripePriceId: STRIPE_PRICE_IDS.quarterly,
     features: [
-      'Economize R$ 12 no trimestre',
+      `Economize R$ ${QUARTERLY_PLAN_SAVINGS_REAIS.toFixed(2).replace('.', ',')} no trimestre`,
       'Acesso completo ao sistema',
       'Contas bancárias ilimitadas',
       'Transações ilimitadas',
@@ -130,14 +132,14 @@ export const PLANS = {
   semiannual: {
     id: 'semiannual',
     name: 'Semestral',
-    price: 191.40,
-    pricePerMonth: 31.90,
+    price: SEMIANNUAL_PLAN_PRICE_REAIS,
+    pricePerMonth: SEMIANNUAL_PLAN_PRICE_PER_MONTH_REAIS,
     period: '6months',
     periodLabel: 'a cada 6 meses',
-    savings: 'Economize R$ 48',
+    savings: `Economize R$ ${SEMIANNUAL_PLAN_SAVINGS_REAIS.toFixed(2).replace('.', ',')}`,
     stripePriceId: STRIPE_PRICE_IDS.semiannual,
     features: [
-      'Economize R$ 48 em 6 meses',
+      `Economize R$ ${SEMIANNUAL_PLAN_SAVINGS_REAIS.toFixed(2).replace('.', ',')} em 6 meses`,
       'Acesso completo ao sistema',
       'Contas bancárias ilimitadas',
       'Transações ilimitadas',
@@ -155,14 +157,14 @@ export const PLANS = {
   yearly: {
     id: 'yearly',
     name: 'Anual',
-    price: 335.00,
-    pricePerMonth: 27.92,
+    price: YEARLY_PLAN_PRICE_REAIS,
+    pricePerMonth: YEARLY_PLAN_PRICE_PER_MONTH_REAIS,
     period: 'year',
     periodLabel: 'por ano',
-    savings: 'Economize R$ 144',
+    savings: `Economize R$ ${YEARLY_PLAN_SAVINGS_REAIS.toFixed(2).replace('.', ',')}`,
     stripePriceId: STRIPE_PRICE_IDS.yearly,
     features: [
-      'Economize R$ 144 no ano',
+      `Economize R$ ${YEARLY_PLAN_SAVINGS_REAIS.toFixed(2).replace('.', ',')} no ano`,
       'Acesso completo ao sistema',
       'Contas bancárias ilimitadas',
       'Transações ilimitadas',

@@ -42,10 +42,10 @@ interface Tenant {
 
 const PLANS = [
   { id: 'trial', name: 'Trial (Grátis)', price: 0 },
-  { id: 'monthly', name: 'Mensal', price: 39.90 },
-  { id: 'quarterly', name: 'Trimestral', price: 107.70 },
-  { id: 'semiannual', name: 'Semestral', price: 191.40 },
-  { id: 'yearly', name: 'Anual', price: 335.00 },
+  { id: 'monthly', name: 'Mensal', price: 79.90 },
+  { id: 'quarterly', name: 'Trimestral', price: 197.00 },
+  { id: 'semiannual', name: 'Semestral', price: 357.00 },
+  { id: 'yearly', name: 'Anual', price: 597.00 },
 ];
 
 const STATUS_LABELS: Record<string, { label: string; color: string; icon: any }> = {

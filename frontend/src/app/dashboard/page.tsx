@@ -169,7 +169,8 @@ export default function Dashboard() {
     loadFormData();
     loadTodaySummary();
     loadEnergyCoverage();
-    loadFiscalMovement();
+    // ⚠️ MÓDULO e-Financeira SUSPENSO — não chamar até revisão (autorização do Max)
+    // loadFiscalMovement();
     
     // DESABILITADO: Wizard de contas recorrentes não é mais utilizado
     // const hasSeenWizard = localStorage.getItem('hasSeenRecurringBillsWizard');
@@ -203,6 +204,8 @@ export default function Dashboard() {
   };
 
   const loadFiscalMovement = async () => {
+    // ⚠️ SUSPENSO — não chamar. Endpoint desativado até revisão.
+    return;
     try {
       const response = await api.get('/dashboard/fiscal-movement');
       setFiscalMovement(response.data.data);
@@ -216,8 +219,6 @@ export default function Dashboard() {
       setLoading(true);
       const params = { startDate, endDate };
 
-      console.log('Carregando dashboard com período:', params);
-
       // Carregar todos os dados em paralelo usando API client
       const [balance, expenseRank, incomeRank, incomeVsExp] = await Promise.all([
         api.get('/dashboard/balance-summary', { params }),
@@ -225,9 +226,6 @@ export default function Dashboard() {
         api.get('/dashboard/income-ranking', { params }),
         api.get('/dashboard/income-vs-expenses', { params }),
       ]);
-
-      console.log('Resposta income-vs-expenses:', incomeVsExp.data);
-      console.log('chartData extraído:', incomeVsExp.data.data?.chartData);
 
       setDashboardData({
         balanceSummary: balance.data.data,
@@ -245,19 +243,11 @@ export default function Dashboard() {
 
   const loadFormData = async () => {
     try {
-      console.log('Carregando categorias, contas e meios de pagamento...');
-
       const [categoriesRes, accountsRes, paymentsRes] = await Promise.all([
         api.get('/categories?isActive=true'),
         api.get('/bank-accounts?isActive=true'),
         api.get('/payment-methods?isActive=true'),
       ]);
-
-      console.log('Dados carregados:', {
-        categorias: categoriesRes.data.data.categories?.length || 0,
-        contas: accountsRes.data.data.accounts?.length || 0,
-        meios: paymentsRes.data.data.paymentMethods?.length || 0,
-      });
 
       setCategories(categoriesRes.data.data.categories || []);
       setBankAccounts(accountsRes.data.data.accounts || []);
@@ -406,6 +396,17 @@ export default function Dashboard() {
   const incomeData = dashboardData.incomeRanking;
   const chartData = dashboardData.incomeVsExpenses?.chartData || [];
 
+  // Empty state: nenhuma receita ou despesa registrada no período.
+  // Sinaliza que o tenant ainda não usou o sistema → mostra CTA forte
+  // em vez de cards zerados que parecem app quebrado.
+  const totalIncomeForEmpty = Number(balance?.totalIncome ?? 0);
+  const totalExpenseForEmpty = Number(balance?.totalExpense ?? 0);
+  const hasNoActivity =
+    !loading &&
+    totalIncomeForEmpty === 0 &&
+    totalExpenseForEmpty === 0 &&
+    chartData.length === 0;
+
   return (
     <DashboardLayoutWrapper>
       {/* Content */}
@@ -418,6 +419,46 @@ export default function Dashboard() {
 
         {/* Banner de Trial/Planos */}
         <TrialBanner tenantId={tenant?.id} />
+
+        {/* Empty state forte para usuários sem nenhuma transação */}
+        {hasNoActivity && (
+          <div className="mb-6 rounded-2xl bg-gradient-to-br from-[#1F4FD8] to-[#2ECC9A] p-6 sm:p-8 text-white shadow-lg">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6">
+              <div className="flex-shrink-0 w-14 h-14 rounded-full bg-white/15 flex items-center justify-center">
+                <Zap className="text-white" size={28} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h2 className="text-xl sm:text-2xl font-bold mb-1">
+                  Vamos colocar suas finanças no lugar
+                </h2>
+                <p className="text-sm sm:text-base text-white/90 mb-4">
+                  Comece registrando seu primeiro lançamento. Em poucos minutos
+                  você já enxerga para onde seu dinheiro vai e quanto sobra.
+                </p>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <button
+                    onClick={() => setShowTransactionModal(true)}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-white text-[#1F4FD8] font-semibold px-4 py-2.5 hover:bg-white/90 transition shadow-sm"
+                  >
+                    <ArrowUpRight size={18} />
+                    Registrar primeiro lançamento
+                  </button>
+                  <button
+                    onClick={() => router.push('/dashboard/bank-accounts')}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-white/10 text-white font-medium px-4 py-2.5 hover:bg-white/20 transition border border-white/30"
+                  >
+                    <Wallet size={18} />
+                    Conferir minhas contas
+                  </button>
+                </div>
+                <p className="text-xs text-white/75 mt-3">
+                  Você já tem uma <strong>Conta Principal</strong> e categorias
+                  prontas para começar.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Banner de Onboarding de Energia - quando coverage < 85% */}
         {energyCoverage && energyCoverage.validatedPercent < 85 && (

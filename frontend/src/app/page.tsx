@@ -7,12 +7,14 @@ import {
   ArrowRight, Check, LayoutDashboard, PieChart, Bell, Upload, Calendar,
   TrendingUp, Shield, Zap, Target, ChevronDown, Star, Menu, X, MessageCircle, BarChart3, FileSpreadsheet
 } from 'lucide-react';
+import { MONTHLY_PLAN_PRICE_REAIS, QUARTERLY_PLAN_PRICE_REAIS, QUARTERLY_PLAN_PRICE_PER_MONTH_REAIS, QUARTERLY_PLAN_SAVINGS_REAIS, SEMIANNUAL_PLAN_PRICE_REAIS, SEMIANNUAL_PLAN_PRICE_PER_MONTH_REAIS, SEMIANNUAL_PLAN_SAVINGS_REAIS, YEARLY_PLAN_PRICE_REAIS, YEARLY_PLAN_PRICE_PER_MONTH_REAIS, YEARLY_PLAN_SAVINGS_REAIS, formatBRL } from '@/lib/pricing';
 
 const PLANS = {
   trial: { name: 'Trial', price: 0, period: '14 dias', features: ['Todas as funcionalidades', 'Sem cartão de crédito', 'Cancele quando quiser'] },
-  monthly: { name: 'Mensal', price: 39.90, period: '/mês', features: ['Contas ilimitadas', 'Transações ilimitadas', 'Relatórios avançados', 'Suporte por email'] },
-  semiannual: { name: 'Semestral', price: 191.40, pricePerMonth: 31.90, period: '/semestre', savings: 'Economize R$ 48', features: ['Tudo do Mensal', 'Suporte prioritário', 'Economia de 20%'] },
-  yearly: { name: 'Anual', price: 335.00, pricePerMonth: 27.92, period: '/ano', savings: 'Economize R$ 144', popular: true, features: ['Melhor custo-benefício', 'Economia de 30%', 'Suporte prioritário'] },
+  monthly: { name: 'Mensal', price: MONTHLY_PLAN_PRICE_REAIS, period: '/mês', features: ['Contas ilimitadas', 'Transações ilimitadas', 'Relatórios avançados', 'Suporte por email'] },
+  quarterly: { name: 'Trimestral', price: QUARTERLY_PLAN_PRICE_REAIS, pricePerMonth: QUARTERLY_PLAN_PRICE_PER_MONTH_REAIS, period: '/trimestre', savings: `Economize ${formatBRL(QUARTERLY_PLAN_SAVINGS_REAIS)}`, features: ['Tudo do Mensal', 'Suporte prioritário'] },
+  semiannual: { name: 'Semestral', price: SEMIANNUAL_PLAN_PRICE_REAIS, pricePerMonth: SEMIANNUAL_PLAN_PRICE_PER_MONTH_REAIS, period: '/semestre', savings: `Economize ${formatBRL(SEMIANNUAL_PLAN_SAVINGS_REAIS)}`, features: ['Tudo do Mensal', 'Suporte prioritário'] },
+  yearly: { name: 'Anual', price: YEARLY_PLAN_PRICE_REAIS, pricePerMonth: YEARLY_PLAN_PRICE_PER_MONTH_REAIS, period: '/ano', savings: `Economize ${formatBRL(YEARLY_PLAN_SAVINGS_REAIS)}`, popular: true, features: ['Melhor custo-benefício', 'Suporte prioritário'] },
 };
 
 export default function LandingPage() {
@@ -312,16 +314,16 @@ export default function LandingPage() {
             {/* Mensal */}
             <div className="bg-[#F8FAFC] rounded-2xl p-6 border border-[#E2E8F0]">
               <h3 className="text-lg font-bold text-[#0F172A] mb-2">Mensal</h3>
-              <div className="mb-4"><span className="text-3xl font-bold">R$ 39,90</span><span className="text-[#64748B] text-sm ml-2">/mês</span></div>
+              <div className="mb-4"><span className="text-3xl font-bold">{formatBRL(PLANS.monthly.price)}</span><span className="text-[#64748B] text-sm ml-2">/mês</span></div>
               <ul className="space-y-3 mb-6">{PLANS.monthly.features.map((f,i) => <li key={i} className="flex items-center gap-2 text-sm text-[#475569]"><Check className="w-4 h-4 text-[#C9A962]" />{f}</li>)}</ul>
               <Link href="/login" className="block w-full text-center py-3 rounded-xl font-semibold border-2 border-[#E2E8F0] text-[#475569] hover:border-[#C9A962]">Assinar</Link>
             </div>
             {/* Semestral */}
             <div className="bg-[#F8FAFC] rounded-2xl p-6 border border-[#E2E8F0]">
-              <div className="inline-block bg-[#DCFCE7] text-[#22C55E] text-xs font-semibold px-2 py-1 rounded-full mb-2">Economize R$ 48</div>
+              <div className="inline-block bg-[#DCFCE7] text-[#22C55E] text-xs font-semibold px-2 py-1 rounded-full mb-2">{PLANS.semiannual.savings}</div>
               <h3 className="text-lg font-bold text-[#0F172A] mb-2">Semestral</h3>
-              <div className="mb-4"><span className="text-3xl font-bold">R$ 31,90</span><span className="text-[#64748B] text-sm ml-2">/mês</span></div>
-              <p className="text-xs text-[#64748B] mb-4">R$ 191,40 a cada 6 meses</p>
+              <div className="mb-4"><span className="text-3xl font-bold">{formatBRL(PLANS.semiannual.pricePerMonth)}</span><span className="text-[#64748B] text-sm ml-2">/mês</span></div>
+              <p className="text-xs text-[#64748B] mb-4">{formatBRL(PLANS.semiannual.price)} a cada 6 meses</p>
               <ul className="space-y-3 mb-6">{PLANS.semiannual.features.map((f,i) => <li key={i} className="flex items-center gap-2 text-sm text-[#475569]"><Check className="w-4 h-4 text-[#C9A962]" />{f}</li>)}</ul>
               <Link href="/login" className="block w-full text-center py-3 rounded-xl font-semibold border-2 border-[#E2E8F0] text-[#475569] hover:border-[#C9A962]">Assinar</Link>
             </div>
@@ -329,9 +331,9 @@ export default function LandingPage() {
             <div className="bg-gradient-to-br from-[#1A1A1A] to-[#2A2A2A] rounded-2xl p-6 border-2 border-[#C9A962] relative">
               <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-[#C9A962] text-[#1A1A1A] text-xs font-bold px-4 py-1 rounded-full flex items-center gap-1"><Star className="w-3 h-3" />POPULAR</div>
               <h3 className="text-lg font-bold text-white mb-2 mt-2">Anual</h3>
-              <div className="mb-4"><span className="text-3xl font-bold text-[#C9A962]">R$ 27,92</span><span className="text-gray-400 text-sm ml-2">/mês</span></div>
-              <p className="text-xs text-gray-400 mb-2">R$ 335,00 por ano</p>
-              <div className="inline-block bg-[#C9A962]/20 text-[#C9A962] text-xs font-semibold px-2 py-1 rounded-full mb-4">Economize R$ 144</div>
+              <div className="mb-4"><span className="text-3xl font-bold text-[#C9A962]">{formatBRL(PLANS.yearly.pricePerMonth)}</span><span className="text-gray-400 text-sm ml-2">/mês</span></div>
+              <p className="text-xs text-gray-400 mb-2">{formatBRL(PLANS.yearly.price)} por ano</p>
+              <div className="inline-block bg-[#C9A962]/20 text-[#C9A962] text-xs font-semibold px-2 py-1 rounded-full mb-4">{PLANS.yearly.savings}</div>
               <ul className="space-y-3 mb-6">{PLANS.yearly.features.map((f,i) => <li key={i} className="flex items-center gap-2 text-sm text-gray-300"><Check className="w-4 h-4 text-[#C9A962]" />{f}</li>)}</ul>
               <Link href="/login" className="block w-full text-center py-3 rounded-xl font-semibold bg-[#C9A962] text-[#1A1A1A] hover:bg-[#B8983D]">Assinar</Link>
             </div>

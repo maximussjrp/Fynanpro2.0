@@ -27,7 +27,9 @@ import {
   X,
   Trash2,
   Download,
-  Upload
+  Upload,
+  RefreshCw,
+  AlertTriangle
 } from 'lucide-react';
 
 interface UserSettings {
@@ -64,6 +66,9 @@ export default function SettingsPage() {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [resetConfirmText, setResetConfirmText] = useState('');
+  const [resetting, setResetting] = useState(false);
   
   const [userSettings, setUserSettings] = useState<UserSettings>({
     fullName: user?.fullName || '',
@@ -185,10 +190,37 @@ export default function SettingsPage() {
     }
   };
 
+  const handleFactoryReset = async () => {
+    if (resetConfirmText !== 'RESETAR') {
+      toast.error('Digite RESETAR para confirmar.');
+      return;
+    }
+    try {
+      setResetting(true);
+      const res = await api.post('/data-management/factory-reset', { confirm: 'RESETAR' });
+      const deleted = res.data?.data?.deleted || res.data?.deleted || {};
+      const total = Object.values(deleted).reduce((s: number, n: any) => s + (Number(n) || 0), 0);
+      toast.success(`Sistema resetado! ${total} registros apagados. Categorias padrão restauradas.`);
+      setShowResetModal(false);
+      setResetConfirmText('');
+      // Recarrega a aplicação para refletir o estado limpo
+      setTimeout(() => {
+        window.location.href = '/dashboard';
+      }, 1500);
+    } catch (err: any) {
+      const msg = err?.response?.data?.error?.message || err?.response?.data?.message || 'Erro ao resetar o sistema.';
+      toast.error(msg);
+    } finally {
+      setResetting(false);
+    }
+  };
+
   const tabs = [
     { id: 'profile', label: 'Perfil', icon: User },
-    { id: 'fiscal-profiles', label: 'Perfis Fiscais', icon: Users, href: '/dashboard/settings/profiles' },
+    // ⚠️ SUSPENSO — Perfis Fiscais (e-Financeira) desativado até revisão. Não reabilitar sem aprovação do Max.
+    // { id: 'fiscal-profiles', label: 'Perfis Fiscais', icon: Users, href: '/dashboard/settings/profiles' },
     { id: 'tenant', label: 'Empresa', icon: Building2 },
+    { id: 'billing', label: 'Plano e Cobrança', icon: CreditCard, href: '/dashboard/settings/billing' },
     { id: 'notifications', label: 'Notificações', icon: Bell },
     { id: 'security', label: 'Segurança', icon: Shield },
     { id: 'appearance', label: 'Aparência', icon: Palette },
@@ -227,8 +259,8 @@ export default function SettingsPage() {
                   <button
                     key={tab.id}
                     onClick={() => {
-                      if ('href' in tab && tab.href) {
-                        router.push(tab.href);
+                      if ('href' in tab && (tab as any).href) {
+                        router.push((tab as any).href);
                       } else {
                         setActiveTab(tab.id as any);
                       }
@@ -606,6 +638,28 @@ export default function SettingsPage() {
                     <p className="text-sm text-gray-500 mb-4">
                       Ações irreversíveis que afetam sua conta permanentemente
                     </p>
+
+                    <div className="p-4 border border-orange-200 bg-orange-50 rounded-lg mb-4">
+                      <div className="flex items-start gap-3 mb-3">
+                        <RefreshCw className="w-6 h-6 text-orange-600 mt-0.5" />
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-gray-800">Restaurar Configurações de Fábrica</h4>
+                          <p className="text-sm text-gray-600 mt-1">
+                            Apaga TODOS os dados financeiros (transações, contas bancárias, cartões, parcelas,
+                            recorrências, orçamentos, categorias personalizadas, perfis fiscais, importações e
+                            notificações) e restaura as categorias padrão. Sua conta e login são mantidos.
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setShowResetModal(true)}
+                        className="flex items-center gap-2 px-4 py-2 bg-orange-100 text-orange-700 rounded-lg hover:bg-orange-200 transition-colors"
+                      >
+                        <RefreshCw className="w-4 h-4" />
+                        Resetar Sistema
+                      </button>
+                    </div>
+
                     <button
                       onClick={handleDeleteAccount}
                       className="flex items-center gap-2 px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors"
@@ -613,6 +667,75 @@ export default function SettingsPage() {
                       <Trash2 className="w-4 h-4" />
                       Excluir Minha Conta
                     </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Modal: Confirmar reset de fábrica */}
+              {showResetModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                  <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="p-2 bg-red-100 rounded-lg">
+                        <AlertTriangle className="w-6 h-6 text-red-600" />
+                      </div>
+                      <h3 className="text-lg font-bold text-gray-800">Restaurar Configurações de Fábrica</h3>
+                    </div>
+                    <div className="space-y-3 mb-4 text-sm text-gray-600">
+                      <p className="font-semibold text-red-600">
+                        Esta ação é IRREVERSÍVEL.
+                      </p>
+                      <p>Serão apagados permanentemente:</p>
+                      <ul className="list-disc list-inside space-y-1 text-gray-600">
+                        <li>Todas as transações e lançamentos</li>
+                        <li>Contas bancárias e cartões de crédito</li>
+                        <li>Parcelas, recorrências e orçamentos</li>
+                        <li>Categorias personalizadas (padrões serão restauradas)</li>
+                        <li>Perfis fiscais (CPF/CNPJ)</li>
+                        <li>Notificações e histórico</li>
+                      </ul>
+                      <p className="text-xs text-gray-500 pt-2">
+                        Sua conta de login, e-mail e senha são mantidos.
+                      </p>
+                    </div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Digite <span className="font-bold text-red-600">RESETAR</span> para confirmar:
+                    </label>
+                    <input
+                      type="text"
+                      value={resetConfirmText}
+                      onChange={(e) => setResetConfirmText(e.target.value)}
+                      placeholder="RESETAR"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 mb-4"
+                      autoFocus
+                      disabled={resetting}
+                    />
+                    <div className="flex gap-2 justify-end">
+                      <button
+                        onClick={() => { setShowResetModal(false); setResetConfirmText(''); }}
+                        disabled={resetting}
+                        className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        onClick={handleFactoryReset}
+                        disabled={resetting || resetConfirmText !== 'RESETAR'}
+                        className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                      >
+                        {resetting ? (
+                          <>
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                            Resetando...
+                          </>
+                        ) : (
+                          <>
+                            <RefreshCw className="w-4 h-4" />
+                            Confirmar Reset
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}

@@ -196,7 +196,7 @@ export default function useInstallments() {
         apiClient.get('/payment-methods'),
       ]);
 
-      const oldPurchases = purchasesRes.data.installments || [];
+      const oldPurchases = purchasesRes.data?.data?.purchases || purchasesRes.data?.purchases || purchasesRes.data?.installments || [];
       
       // NOVO: Extrair RecurringBills que parecem parcelamentos
       // Padrão: "Nome - Parcela X/Y" ou nomes que terminam com "X/Y"

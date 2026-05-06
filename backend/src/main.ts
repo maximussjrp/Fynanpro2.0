@@ -23,6 +23,7 @@ import subscriptionRoutes from './routes/subscription';
 import energyGovernanceRoutes from './routes/energy-governance';
 import userProfileRoutes from './routes/user-profiles';
 import lgpdRoutes from './routes/lgpd.routes';
+import dataManagementRoutes from './routes/data-management';
 // Phase 2A — Consultant / Client Base (behind feature flag `consultant.enabled`)
 import consultantRoutes from './routes/consultant';
 import adminConsultantsRoutes from './routes/admin-consultants';
@@ -35,6 +36,7 @@ import { swaggerSpec } from './config/swagger';
 import { startTransactionGeneratorJob } from './jobs/transaction-generator.job';
 import { startAllJobs } from './jobs/notification.job';
 import { startAsaasConsumerJob } from './jobs/asaas-consumer.job';
+import { startTrialExpiryNotificationJob } from './jobs/trial-expiry-notification.job';
 import { startAsaasReconcilerJob } from './jobs/asaas-reconciler.job';
 import { authService } from './services/auth.service';
 import { RegisterSchema, LoginSchema, RefreshTokenSchema, ChangePasswordSchema, SwitchTenantSchema } from './dtos/auth.dto';
@@ -135,15 +137,21 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Permitir requests sem origin (como mobile apps ou curl)
+    // Permitir requests sem origin (mobile apps, curl, server-to-server).
     if (!origin) return callback(null, true);
-    
+
     if (allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      console.warn(`CORS bloqueado para origem: ${origin}`);
-      callback(null, true); // Temporariamente permitir todas para debug
+      return callback(null, true);
     }
+
+    // Em desenvolvimento, liberar qualquer localhost / 127.0.0.1 para evitar
+    // atrito com portas alternativas; em produção, bloquear.
+    if (env.NODE_ENV !== 'production' && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+      return callback(null, true);
+    }
+
+    log.warn('CORS bloqueado para origem', { origin });
+    return callback(new Error(`Origem não autorizada pelo CORS: ${origin}`));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
@@ -281,6 +289,9 @@ apiRouter.use('/profiles', userProfileRoutes);
 
 // LGPD routes (política pública + rotas privadas com auth próprio)
 apiRouter.use('/lgpd', lgpdRoutes);
+
+// Data management (factory reset - configurações de fábrica)
+apiRouter.use('/data-management', dataManagementRoutes);
 
 // Phase 2A — Consultor (feature flag `consultant.enabled`, default OFF).
 // Quando OFF, as rotas respondem 404 (requireFeature) sem tocar em nada legado.
@@ -985,6 +996,15 @@ app.use((err: Error, req: Request, res: Response, next: any) => {
 app.listen(port, () => {
   // Inicia o job de geração de transações
   startTransactionGeneratorJob();
+
+  // Sprint 2 — registra tools do agent no registry default.
+  // Import lazy para não afetar smoke tests nem importar em tooling.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  require('./agent/tools').registerDefaultTools();
+
+  // Sprint 3 — loga status do provider LLM uma única vez no boot.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  require('./agent/orchestrator').logProviderBootOnce();
   
   log.info('Servidor UTOP iniciado', {
     port,
@@ -1030,6 +1050,11 @@ app.listen(port, () => {
   // ✅ Fase A2A (C5.4) — Asaas reconciler (NO-OP enquanto flag OFF).
   // Startup guard: aborta se MODE=autofix sem FF_ASAAS_RECONCILER_AUTOFIX=true.
   startAsaasReconcilerJob();
+
+  // ✅ Sprint B — aviso de fim de trial (D-7 e D-1).
+  // Sem RESEND_API_KEY o EmailService entra em modo simulação; o job
+  // ainda registra Notification para auditoria/idempotência.
+  startTrialExpiryNotificationJob();
 });
 
 // Graceful shutdown

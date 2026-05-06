@@ -4,11 +4,16 @@
  */
 
 import { Router, Request, Response } from 'express';
+import { PrismaClient } from '@prisma/client';
 import { paymentService, PLANS } from '../services/payment.service';
+import { buildBillingSummaryService } from '../services/billing/billing-summary.service';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { log } from '../utils/logger';
 
 const router = Router();
+
+// Sprint B — billing summary com models reais (Tenant + Subscription + PaymentRecord).
+const billingSummaryService = buildBillingSummaryService({ db: new PrismaClient() });
 
 /**
  * @swagger
@@ -264,6 +269,36 @@ router.get('/check-trial', authenticateToken, async (req: AuthRequest, res: Resp
     res.status(500).json({
       success: false,
       error: { code: 'INTERNAL_ERROR', message: 'Erro ao verificar trial' }
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /subscription/billing-summary:
+ *   get:
+ *     summary: Resumo consolidado de cobrança (Sprint B)
+ *     description: |
+ *       Retorna estado consolidado de billing do tenant — plano, status,
+ *       trial, última subscription Asaas, último pagamento e dicas de UI
+ *       (severity + headline + cta) para a página /dashboard/settings/billing.
+ *     tags: [Subscription]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.get('/billing-summary', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId!;
+    const summary = await billingSummaryService.getSummary(tenantId);
+    res.json({ success: true, data: summary });
+  } catch (error: any) {
+    log.error('Erro ao obter billing-summary', { error, tenantId: req.tenantId });
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: error?.message || 'Erro ao obter resumo de cobrança',
+      },
     });
   }
 });

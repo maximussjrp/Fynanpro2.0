@@ -174,6 +174,23 @@ export class AuthService {
         const { createDefaultCategories } = await import('../utils/default-categories');
         await createDefaultCategories(tenant.id, tx);
 
+        // Conta bancária padrão (Sprint A comercial):
+        // garante que o usuário consiga criar a 1ª transação imediatamente
+        // após o login, sem cair em estado vazio bloqueante.
+        await tx.bankAccount.create({
+          data: {
+            tenantId: tenant.id,
+            name: 'Conta Principal',
+            type: 'corrente',
+            currentBalance: 0,
+            initialBalance: 0,
+            isActive: true,
+            color: '#1F4FD8',
+            icon: 'wallet',
+            order: 0,
+          },
+        });
+
         return { user, tenant };
       });
 

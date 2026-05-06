@@ -37,6 +37,8 @@ interface Transaction {
   userProfileId?: string;
   isRecurringOccurrence?: boolean; // Flag para identificar ocorrências
   recurringBillId?: string;
+  isInstallment?: boolean; // Flag para identificar parcelas individuais
+  installmentPurchaseId?: string;
   parentId?: string; // ID do template pai (para transações filhas de recorrentes/parcelamentos)
   frequency?: string; // Frequência da recorrência (daily, weekly, monthly, yearly)
   transactionType?: 'single' | 'recurring' | 'installment'; // Tipo de transação
@@ -321,10 +323,11 @@ export default function TransactionsPage() {
       if (filters.type !== 'all') params.type = filters.type;
       if (filters.status !== 'all') params.status = filters.status;
 
-      // Buscar transações realizadas + ocorrências pendentes
-      const [transactionsRes, occurrencesRes, categoriesRes, accountsRes, paymentMethodsRes] = await Promise.all([
+      // Buscar transações realizadas + ocorrências pendentes + parcelas
+      const [transactionsRes, occurrencesRes, installmentsRes, categoriesRes, accountsRes, paymentMethodsRes] = await Promise.all([
         api.get('/transactions', { params }),
         api.get('/recurring-bills/occurrences', { params }),
+        api.get('/installments'),
         api.get('/categories?isActive=true'),
         api.get('/bank-accounts?isActive=true'),
         api.get('/payment-methods?isActive=true'),
@@ -333,6 +336,7 @@ export default function TransactionsPage() {
       // Combinar transações com ocorrências de recorrências
       const transactionsList = transactionsRes.data.data.transactions || [];
       const occurrencesList = occurrencesRes.data.data?.occurrences || [];
+      const purchasesList = installmentsRes.data?.data?.purchases || installmentsRes.data?.purchases || [];
 
       // Mapear ocorrências PENDENTES para formato de transação (ignorar as já pagas)
       const mappedOccurrences = occurrencesList
@@ -356,8 +360,35 @@ export default function TransactionsPage() {
           createdAt: occ.createdAt,
       }));
 
+      // Mapear PARCELAS individuais (Installments) para formato de transação
+      const mappedInstallments = purchasesList.flatMap((p: any) =>
+        (p.installments || [])
+          .filter((inst: any) => inst.status === 'pending')
+          .map((inst: any) => ({
+            id: inst.id,
+            amount: inst.amount.toString(),
+            description: `${p.name} (${inst.installmentNumber}/${p.numberOfInstallments})`,
+            transactionDate: inst.dueDate,
+            dueDate: inst.dueDate,
+            status: inst.status,
+            notes: inst.notes,
+            type: 'expense',
+            categoryId: p.category?.id,
+            bankAccountId: inst.bankAccount?.id || inst.bankAccountId,
+            paymentMethodId: inst.paymentMethod?.id || inst.paymentMethodId,
+            isInstallment: true,
+            installmentPurchaseId: p.id,
+            installmentNumber: inst.installmentNumber,
+            totalInstallments: p.numberOfInstallments,
+            category: p.category || { id: '', name: 'Sem categoria', type: 'expense', icon: '❓', color: '#999' },
+            bankAccount: inst.bankAccount || { id: '', name: 'Sem conta', type: 'bank', currentBalance: 0 },
+            paymentMethod: inst.paymentMethod,
+            createdAt: inst.createdAt,
+          }))
+      );
+
       // Combinar listas
-      const combined = [...transactionsList, ...mappedOccurrences];
+      const combined = [...transactionsList, ...mappedOccurrences, ...mappedInstallments];
       
       // Remover duplicatas: se uma transação tem parentId, ela é filha de recorrente
       // e NÃO deve aparecer como occurrence também
@@ -466,8 +497,10 @@ export default function TransactionsPage() {
           paidAmount: transaction.amount,
         });
         toast.success('Recorrência paga com sucesso!');
+      } else if (transaction.isInstallment && transaction.installmentPurchaseId) {
+        await api.put(`/installments/${transaction.installmentPurchaseId}/installments/${transaction.id}/pay`);
+        toast.success('Parcela paga com sucesso!');
       } else {
-        // Transação normal ou transação do modelo NOVO (com parentId)
         const newStatus = transaction.status === 'completed' ? 'pending' : 'completed';
         await api.put(`/transactions/${transaction.id}`, {
           status: newStatus,

@@ -142,8 +142,6 @@ api.interceptors.response.use(
       localStorage.setItem('accessToken', accessToken);
       localStorage.setItem('refreshToken', newRefreshToken);
 
-      console.log('Token renovado com sucesso');
-
       // Atualiza header da request original
       if (originalRequest.headers) {
         originalRequest.headers.Authorization = `Bearer ${accessToken}`;

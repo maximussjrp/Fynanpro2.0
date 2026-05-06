@@ -42,7 +42,9 @@ export default function ProfileSelectorModal({
 
   const handleManageProfiles = () => {
     onClose();
-    router.push('/dashboard/settings/profiles');
+    // ⚠️ Sprint A: aba "Perfis Fiscais" está suspensa (e-Financeira em revisão).
+    // Encaminha para Settings raiz para evitar levar usuário a página dormente.
+    router.push('/dashboard/settings');
   };
 
   return (

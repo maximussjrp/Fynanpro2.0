@@ -53,6 +53,9 @@ describe('AuthService', () => {
           userProfile: {
             create: jest.fn().mockResolvedValue({ id: 'profile-123' }),
           },
+          bankAccount: {
+            create: jest.fn().mockResolvedValue({ id: 'bank-default-1' }),
+          },
         };
         return fn(mockTx);
       });
@@ -127,6 +130,7 @@ describe('AuthService', () => {
             createMany: jest.fn().mockResolvedValue({ count: 10 }),
           },
           userProfile: { create: jest.fn().mockResolvedValue({ id: 'profile-123' }) },
+          bankAccount: { create: jest.fn().mockResolvedValue({ id: 'bank-default-1' }) },
         };
         return fn(mockTx);
       });
@@ -172,6 +176,9 @@ describe('AuthService', () => {
           },
           userProfile: {
             create: jest.fn().mockResolvedValue({ id: 'profile-123' }),
+          },
+          bankAccount: {
+            create: jest.fn().mockResolvedValue({ id: 'bank-default-1' }),
           },
         };
         return fn(mockTx);

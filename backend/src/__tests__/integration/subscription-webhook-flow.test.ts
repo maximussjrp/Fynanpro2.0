@@ -71,7 +71,7 @@ describe('C5.2 — subscription webhook flow (processor → handler → cache)',
         subscription: {
           id: 'asaas_sub_int_1',
           customer: 'cus_int_1',
-          value: 39.9,
+          value: 79.9,
           nextDueDate: '2026-07-01',
           cycle: 'MONTHLY',
           status: 'INACTIVE',
@@ -93,7 +93,7 @@ describe('C5.2 — subscription webhook flow (processor → handler → cache)',
     const subArgs = db.__tx.subscription.update.mock.calls[0][0];
     expect(subArgs.data.status).toBe('suspended');
     expect(subArgs.data.lastAsaasEventAt).toBeInstanceOf(Date);
-    expect(subArgs.data.amountCents).toBe(3990);
+    expect(subArgs.data.amountCents).toBe(7990);
 
     // (c) Tenant.update → cache 'suspended'
     expect(db.__tx.tenant.update).toHaveBeenCalledTimes(1);

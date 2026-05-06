@@ -1,6 +1,7 @@
 'use client';
 
 import { X, Edit, DollarSign, Calendar, Tag, Building, CreditCard } from 'lucide-react';
+import CategoryCombobox from '@/components/common/CategoryCombobox';
 
 interface Category {
   id: string;
@@ -8,6 +9,9 @@ interface Category {
   type: string;
   icon: string;
   isActive: boolean;
+  level?: number;
+  parentId?: string | null;
+  parent?: { id: string; name: string; icon?: string | null } | null;
 }
 
 interface BankAccount {
@@ -270,19 +274,14 @@ export default function EditBillModal({
                   <Tag className="w-4 h-4 inline mr-1 text-[#F59E0B]" />
                   Categoria *
                 </label>
-                <select
-                  required
+                <CategoryCombobox
+                  categories={categories as any}
                   value={form.categoryId}
-                  onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#F59E0B] focus:border-transparent bg-[#F9FAFB] transition-all"
-                >
-                  <option value="">Selecione uma categoria</option>
-                  {categories.map((cat) => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.icon} {cat.name}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(id) => setForm({ ...form, categoryId: id })}
+                  filterType={form.type}
+                  required
+                  accentColor="#F59E0B"
+                />
               </div>
 
               <div>

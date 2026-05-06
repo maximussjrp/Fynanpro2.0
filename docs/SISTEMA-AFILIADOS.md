@@ -319,10 +319,10 @@ model AffiliateWithdrawal {
 ### 4. Conversão e Comissão
 
 ```
-1. Cliente assina plano (ex: Mensal R$39,90)
+1. Cliente assina plano (ex: Mensal R$79,90)
 2. Pagamento confirmado no Stripe
 3. Webhook cria AffiliateCommission:
-   - paymentAmount: R$39,90
+   - paymentAmount: R$79,90
    - commissionRate: 0.50
    - commissionAmount: R$19,95
    - status: pending
@@ -334,7 +334,7 @@ model AffiliateWithdrawal {
 ### 5. Pagamentos Recorrentes
 
 ```
-1. Todo mês, cliente paga R$39,90
+1. Todo mês, cliente paga R$79,90
 2. Nova AffiliateCommission criada
 3. Mesmo fluxo de 30 dias
 4. Afiliado continua recebendo enquanto cliente pagar
@@ -343,9 +343,9 @@ model AffiliateWithdrawal {
 ### 6. Cliente Troca de Plano
 
 ```
-1. Cliente muda de Mensal (R$39,90) para Anual (R$335,00)
-2. Próximo pagamento: R$335,00
-3. Comissão: R$335,00 × 50% = R$167,50
+1. Cliente muda de Mensal (R$79,90) para Anual (R$597,00)
+2. Próximo pagamento: R$597,00
+3. Comissão: R$597,00 × 50% = R$298,50
 ```
 
 ### 7. Cliente Cancela

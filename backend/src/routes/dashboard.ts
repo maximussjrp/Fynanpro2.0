@@ -1053,8 +1053,22 @@ router.get('/today-summary', async (req: AuthRequest, res) => {
  * 
  * A Receita Federal passou a monitorar movimentações via PIX, cartões e
  * transferências a partir de janeiro/2025 (IN RFB 2.219/2024)
+ *
+ * ============================================================================
+ * ⚠️  MÓDULO SUSPENSO — NÃO MEXER / NÃO EDITAR SEM APROVAÇÃO DO MAX
+ * ============================================================================
+ * O cálculo do widget e-Financeira está com bugs (somente status `completed`,
+ * projeção mensal inflada). Suspenso até revisão. Endpoint retorna `null` para
+ * o frontend não renderizar o card. Toda a lógica abaixo foi mantida intacta
+ * para reativação futura.
+ * ============================================================================
  */
-router.get('/fiscal-movement', async (req: AuthRequest, res) => {
+router.get('/fiscal-movement', async (_req: AuthRequest, res) => {
+  return res.json({ success: true, data: null, suspended: true, reason: 'Módulo e-Financeira suspenso temporariamente' });
+});
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _fiscalMovementSuspended = async (req: AuthRequest, res: any) => {
   try {
     const tenantId = req.tenantId!;
     const { month, year, accountType, profileId } = req.query;
@@ -1303,7 +1317,7 @@ router.get('/fiscal-movement', async (req: AuthRequest, res) => {
     log.error('Fiscal movement error', { error, tenantId: req.tenantId });
     return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao calcular movimentação fiscal', 500);
   }
-});
+};
 
 /**
  * Gera alertas personalizados baseados na movimentação

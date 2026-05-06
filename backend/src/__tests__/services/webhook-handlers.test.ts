@@ -826,7 +826,7 @@ describe('PAYMENT_DELETED handler (C5.1)', () => {
 const sampleAsaasSub = {
   id: 'asaas_sub_1',
   customer: 'cus_1',
-  value: 39.9,
+  value: 79.9,
   nextDueDate: '2026-06-01',
   cycle: 'MONTHLY' as const,
   status: 'ACTIVE' as const,
@@ -875,7 +875,7 @@ describe('SUBSCRIPTION_UPDATED handler (C5.2)', () => {
 
     const upd = tx.subscription.update.mock.calls[0][0];
     expect(upd.data.status).toBe('active');
-    expect(upd.data.amountCents).toBe(3990);
+    expect(upd.data.amountCents).toBe(7990);
     expect(upd.data.currentPeriodEnd).toBeInstanceOf(Date);
     expect(upd.data.lastAsaasEventAt).toBeInstanceOf(Date);
 

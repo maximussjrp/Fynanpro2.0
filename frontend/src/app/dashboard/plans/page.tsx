@@ -32,7 +32,7 @@ export default function PlansPage() {
   const [processing, setProcessing] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Verificar parâmetros de retorno do Stripe
+  // Verificar parâmetros de retorno do gateway de pagamento (Asaas).
   useEffect(() => {
     const success = searchParams.get('success');
     const canceled = searchParams.get('canceled');
@@ -52,13 +52,9 @@ export default function PlansPage() {
 
   const fetchPlans = async () => {
     try {
-      let response;
-      try {
-        response = await api.get('/subscription/stripe/plans');
-      } catch {
-        response = await api.get('/subscription/plans');
-      }
-      
+      // Sprint B — gateway único Asaas. Sem fallback para Stripe.
+      const response = await api.get('/subscription/plans');
+
       if (response.data.success) {
         const planData = response.data.data.plans || response.data.data;
         const plansArray = Array.isArray(planData) ? planData : Object.values(planData);
@@ -66,12 +62,12 @@ export default function PlansPage() {
         const paidPlans = plansArray.filter((p: Plan) => p.id !== 'trial');
         setPlans(paidPlans);
       }
-      
-      // Buscar status atual da assinatura
+
+      // Buscar status atual da assinatura via billing-summary (Sprint B).
       try {
-        const current = await api.get('/subscription/stripe/status');
-        if (current.data.success) {
-          setCurrentPlan(current.data.data.plan);
+        const summary = await api.get('/subscription/billing-summary');
+        if (summary.data?.success) {
+          setCurrentPlan(summary.data.data.plan);
         }
       } catch {
         try {
@@ -90,26 +86,38 @@ export default function PlansPage() {
 
   const handleSelectPlan = async (planId: string) => {
     if (planId === 'trial' || planId === currentPlan) return;
-    
+
     setSelectedPlan(planId);
     setProcessing(true);
     setMessage(null);
 
     try {
-      const response = await api.post('/subscription/stripe/checkout', {
+      // Sprint B — checkout via Asaas (PIX por padrão).
+      // Se Asaas estiver desabilitado em prod (FF off), o backend retorna 500
+      // com mensagem clara — exibimos para o usuário.
+      const response = await api.post('/subscription/checkout', {
         planId,
+        billingCycle: 'monthly',
+        billingType: 'PIX',
       });
 
-      if (response.data.success && response.data.data.url) {
+      if (response.data.success && response.data.data?.url) {
         window.location.href = response.data.data.url;
+      } else if (response.data.success) {
+        setMessage({
+          type: 'success',
+          text: 'Cobrança gerada. Verifique seu email para concluir o pagamento.',
+        });
       } else {
         throw new Error('URL de checkout não retornada');
       }
     } catch (error: any) {
       console.error('Erro ao iniciar checkout:', error);
-      setMessage({ 
-        type: 'error', 
-        text: error.response?.data?.error?.message || 'Erro ao processar. Tente novamente.' 
+      setMessage({
+        type: 'error',
+        text:
+          error.response?.data?.error?.message ||
+          'Pagamento online ainda não está liberado nesta conta. Fale com o suporte para ativar.',
       });
     } finally {
       setProcessing(false);
@@ -118,21 +126,9 @@ export default function PlansPage() {
   };
 
   const handleManageSubscription = async () => {
-    setProcessing(true);
-    try {
-      const response = await api.post('/subscription/stripe/portal');
-      if (response.data.success && response.data.data.url) {
-        window.location.href = response.data.data.url;
-      }
-    } catch (error: any) {
-      console.error('Erro ao abrir portal:', error);
-      setMessage({ 
-        type: 'error', 
-        text: 'Erro ao abrir portal de gerenciamento.' 
-      });
-    } finally {
-      setProcessing(false);
-    }
+    // Sprint B — sem portal externo no Asaas. Redireciona para a página
+    // interna de cobrança que mostra status, cobranças e CTA.
+    router.push('/dashboard/settings/billing');
   };
 
   const getPlanIcon = (planId: string) => {
