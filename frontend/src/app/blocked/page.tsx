@@ -73,7 +73,7 @@ export default function BlockedPage() {
       default:
         return {
           title: 'Período de Teste Expirado',
-          subtitle: 'Seus 30 dias de teste gratuito chegaram ao fim.',
+          subtitle: 'Seu período de teste gratuito chegou ao fim.',
           description: 'Esperamos que você tenha gostado! Escolha um plano para continuar organizando suas finanças.'
         };
     }

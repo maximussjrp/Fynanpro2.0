@@ -417,8 +417,8 @@ export default function Dashboard() {
           onOpenCalendar={() => router.push('/dashboard/calendar')}
         />
 
-        {/* Banner de Trial/Planos */}
-        <TrialBanner tenantId={tenant?.id} />
+        {/* TrialBanner ocultado no piloto comercial. */}
+        {/* <TrialBanner tenantId={tenant?.id} /> */}
 
         {/* Empty state forte para usuários sem nenhuma transação */}
         {hasNoActivity && (

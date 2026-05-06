@@ -5,7 +5,7 @@
 
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
-import { paymentService, PLANS } from '../services/payment.service';
+import { paymentService, PLANS, COMMERCIAL_PLANS } from '../services/payment.service';
 import { buildBillingSummaryService } from '../services/billing/billing-summary.service';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { log } from '../utils/logger';
@@ -109,7 +109,7 @@ router.post('/checkout', authenticateToken, async (req: AuthRequest, res: Respon
       });
     }
 
-    if (!PLANS[planId as keyof typeof PLANS]) {
+    if (!PLANS[planId as keyof typeof PLANS] && !COMMERCIAL_PLANS[planId as keyof typeof COMMERCIAL_PLANS]) {
       return res.status(400).json({
         success: false,
         error: { code: 'INVALID_PLAN', message: 'Plano inválido' }

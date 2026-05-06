@@ -27,8 +27,8 @@ export const PLANS = {
     price: 0,
     priceYearly: 0,
     features: [
-      '14 dias grátis',
-      'Todas funcionalidades do Básico',
+      'Período de teste gratuito',
+      'Todas as funcionalidades incluídas',
       'Sem cartão de crédito',
     ],
     limits: {
@@ -133,6 +133,81 @@ export const PLANS = {
     }
   }
 };
+
+/**
+ * Planos comerciais oficiais (UTOP 2026).
+ * Fonte de verdade dos preços: backend/src/config/pricing.ts.
+ * Estrutura consumida por GET /subscription/plans (frontend espera ids
+ * monthly/quarterly/semiannual/yearly).
+ */
+import {
+  MONTHLY_PLAN_PRICE_REAIS,
+  QUARTERLY_PLAN_PRICE_REAIS,
+  QUARTERLY_PLAN_PRICE_PER_MONTH_REAIS,
+  QUARTERLY_PLAN_SAVINGS_REAIS,
+  SEMIANNUAL_PLAN_PRICE_REAIS,
+  SEMIANNUAL_PLAN_PRICE_PER_MONTH_REAIS,
+  SEMIANNUAL_PLAN_SAVINGS_REAIS,
+  YEARLY_PLAN_PRICE_REAIS,
+  YEARLY_PLAN_PRICE_PER_MONTH_REAIS,
+  YEARLY_PLAN_SAVINGS_REAIS,
+} from '../config/pricing';
+
+const COMMERCIAL_FEATURES = [
+  'Todas as funcionalidades incluídas',
+  'Dashboard, relatórios e Pareto',
+  'Importação de extrato',
+  'Categorias hierárquicas',
+  'Contas e transações ilimitadas',
+  'Suporte por e-mail',
+];
+
+export const COMMERCIAL_PLANS = {
+  monthly: {
+    id: 'monthly',
+    name: 'Mensal',
+    price: MONTHLY_PLAN_PRICE_REAIS,
+    pricePerMonth: MONTHLY_PLAN_PRICE_REAIS,
+    period: 'monthly',
+    periodLabel: 'Cobrado mensalmente',
+    features: COMMERCIAL_FEATURES,
+    limits: {},
+  },
+  quarterly: {
+    id: 'quarterly',
+    name: 'Trimestral',
+    price: QUARTERLY_PLAN_PRICE_REAIS,
+    pricePerMonth: QUARTERLY_PLAN_PRICE_PER_MONTH_REAIS,
+    period: 'quarterly',
+    periodLabel: 'Cobrado a cada 3 meses',
+    savings: `Economize R$ ${QUARTERLY_PLAN_SAVINGS_REAIS.toFixed(2).replace('.', ',')}`,
+    features: COMMERCIAL_FEATURES,
+    limits: {},
+  },
+  semiannual: {
+    id: 'semiannual',
+    name: 'Semestral',
+    price: SEMIANNUAL_PLAN_PRICE_REAIS,
+    pricePerMonth: SEMIANNUAL_PLAN_PRICE_PER_MONTH_REAIS,
+    period: 'semiannual',
+    periodLabel: 'Cobrado a cada 6 meses',
+    savings: `Economize R$ ${SEMIANNUAL_PLAN_SAVINGS_REAIS.toFixed(2).replace('.', ',')}`,
+    features: COMMERCIAL_FEATURES,
+    limits: {},
+  },
+  yearly: {
+    id: 'yearly',
+    name: 'Anual',
+    price: YEARLY_PLAN_PRICE_REAIS,
+    pricePerMonth: YEARLY_PLAN_PRICE_PER_MONTH_REAIS,
+    period: 'yearly',
+    periodLabel: 'Cobrado anualmente',
+    savings: `Economize R$ ${YEARLY_PLAN_SAVINGS_REAIS.toFixed(2).replace('.', ',')}`,
+    popular: true,
+    features: COMMERCIAL_FEATURES,
+    limits: {},
+  },
+} as const;
 
 interface AsaasCustomer {
   id: string;
@@ -638,9 +713,9 @@ export const paymentService = {
   },
 
   /**
-   * Listar todos os planos
+   * Listar todos os planos comerciais (oficiais 2026).
    */
   getPlans() {
-    return Object.values(PLANS);
+    return Object.values(COMMERCIAL_PLANS);
   }
 };
