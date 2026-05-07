@@ -25,24 +25,29 @@ const audiences = [
 
 export default function AudienceSection() {
   return (
-    <section className="py-24 px-4 bg-[#0F1829]">
+    <section className="py-28 px-4 bg-[#0D1425]">
       <div className="max-w-4xl mx-auto">
         <div className="text-center mb-16">
-          <p className="text-[#10B981] text-sm font-semibold uppercase tracking-widest mb-3">Para quem é</p>
-          <h2 className="text-3xl sm:text-4xl font-bold text-white">
+          <p className="text-[#10B981] text-xs font-semibold uppercase tracking-widest mb-5">Para quem é</p>
+          <h2 className="text-3xl sm:text-4xl font-extrabold text-[#F5F7FB] tracking-tight">
             Feito para quem quer controle sem complicação
           </h2>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {audiences.map((item) => (
             <div
               key={item.title}
-              className="bg-[#151E30] border border-white/10 rounded-2xl p-6 flex gap-4 items-start hover:border-white/20 transition-colors"
+              className="rounded-3xl p-6 flex gap-4 items-start transition-all hover:scale-[1.01]"
+              style={{
+                background: '#151B2E',
+                border: '1px solid rgba(255,255,255,0.06)',
+                boxShadow: '0 1px 0 rgba(255,255,255,0.04) inset, 0 8px 24px rgba(0,0,0,0.35)',
+              }}
             >
               <span className="text-3xl">{item.emoji}</span>
               <div>
-                <h3 className="text-white font-semibold mb-1">{item.title}</h3>
+                <h3 className="text-[#F5F7FB] font-semibold mb-1 text-sm">{item.title}</h3>
                 <p className="text-[#64748B] text-sm leading-relaxed">{item.description}</p>
               </div>
             </div>

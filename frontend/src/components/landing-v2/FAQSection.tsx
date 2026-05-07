@@ -30,18 +30,18 @@ export default function FAQSection() {
   const [open, setOpen] = useState<number | null>(null);
 
   return (
-    <section id="faq" className="py-24 px-4">
+    <section id="faq" className="py-28 px-4 bg-[#0B1020]">
       <div className="max-w-2xl mx-auto">
         <div className="text-center mb-12">
-          <p className="text-[#10B981] text-sm font-semibold uppercase tracking-widest mb-3">Dúvidas frequentes</p>
-          <h2 className="text-3xl font-bold text-white">Perguntas e respostas</h2>
+          <p className="text-[#10B981] text-xs font-semibold uppercase tracking-widest mb-5">Dúvidas frequentes</p>
+          <h2 className="text-3xl font-extrabold text-[#F5F7FB] tracking-tight">Perguntas e respostas</h2>
         </div>
 
         <div className="flex flex-col gap-3">
           {faqs.map((faq, i) => (
             <div
               key={i}
-              className="bg-[#0F1829] border border-white/10 rounded-2xl overflow-hidden"
+              className="rounded-2xl overflow-hidden" style={{background:'#151B2E',border:'1px solid rgba(255,255,255,0.06)'}}
             >
               <button
                 onClick={() => setOpen(open === i ? null : i)}

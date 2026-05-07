@@ -2,17 +2,17 @@
 
 export default function HumanAuthoritySection() {
   return (
-    <section className="py-24 px-4">
+    <section className="py-28 px-4 bg-[#0B1020]">
       <div className="max-w-3xl mx-auto text-center">
-        <p className="text-[#10B981] text-sm font-semibold uppercase tracking-widest mb-6">Nossa história</p>
+        <p className="text-[#10B981] text-xs font-semibold uppercase tracking-widest mb-6">Nossa história</p>
 
-        <blockquote className="text-2xl sm:text-3xl font-bold text-white leading-snug mb-8">
+        <blockquote className="text-2xl sm:text-3xl font-extrabold text-[#F5F7FB] leading-snug mb-8 tracking-tight">
           "Criado por quem já perdeu noites tentando entender para onde o dinheiro foi."
         </blockquote>
 
         <div className="w-12 h-px bg-[#10B981]/40 mx-auto mb-8" />
 
-        <h2 className="text-xl sm:text-2xl font-semibold text-white mb-4">
+        <h2 className="text-xl sm:text-2xl font-bold text-[#F5F7FB] mb-4">
           Tecnologia com visão prática de gestão financeira
         </h2>
 

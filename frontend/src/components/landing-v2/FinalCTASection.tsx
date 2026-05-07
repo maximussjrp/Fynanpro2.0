@@ -5,7 +5,7 @@ import { ArrowRight } from 'lucide-react';
 
 export default function FinalCTASection() {
   return (
-    <section className="py-24 px-4 bg-[#0F1829]">
+    <section className="py-28 px-4 bg-[#0D1425]">
       <div className="max-w-2xl mx-auto text-center">
         {/* Glow */}
         <div className="relative">
@@ -13,7 +13,7 @@ export default function FinalCTASection() {
             <div className="w-80 h-40 bg-[#10B981]/15 rounded-full blur-3xl" />
           </div>
 
-          <h2 className="relative text-3xl sm:text-4xl font-bold text-white leading-snug mb-4">
+          <h2 className="relative text-3xl sm:text-4xl font-extrabold text-[#F5F7FB] leading-snug mb-4 tracking-tight">
             Pare de tentar adivinhar sua vida financeira.
             <br />
             <span className="text-[#10B981]">Comece a enxergar.</span>
