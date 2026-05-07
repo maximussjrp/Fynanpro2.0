@@ -207,7 +207,7 @@ export default function ChatbotWidget() {
         isLoading: false,
         messages: [{
           role: 'assistant',
-          content: 'Olá! 👋 Sou o Utop Assistant, seu guia financeiro. Posso te ajudar a organizar suas finanças. Vamos começar?',
+          content: 'Olá! 👋 Sou a Isis, sua guia financeira. Posso te ajudar a organizar suas finanças. Vamos começar?',
           timestamp: new Date(),
           quickReplies: ['Novo gasto', 'Meu saldo', 'Ajuda'],
         }],
@@ -319,7 +319,7 @@ export default function ChatbotWidget() {
       <button
         onClick={toggleChat}
         className="fixed bottom-20 sm:bottom-6 right-4 sm:right-6 w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-[#1F4FD8] to-[#2ECC9A] rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center group z-40"
-        title="Falar com Utop Assistant"
+        title="Falar com a Isis"
       >
         <MessageCircle className="w-5 h-5 sm:w-6 sm:h-6 text-white group-hover:scale-110 transition-transform" />
         
@@ -337,11 +337,11 @@ export default function ChatbotWidget() {
         onClick={() => setIsMinimized(!isMinimized)}
       >
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
-            <Sparkles className="w-5 h-5" />
+          <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-white/30 flex-shrink-0">
+            <img src="/images/isis-avatar.png" alt="Isis" className="w-full h-full object-cover" />
           </div>
           <div>
-            <h3 className="font-semibold">Utop Assistant</h3>
+            <h3 className="font-semibold">Isis</h3>
             <p className="text-xs text-white/80">Seu guia financeiro</p>
           </div>
         </div>
@@ -371,8 +371,8 @@ export default function ChatbotWidget() {
                 className={`flex gap-2 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 {message.role === 'assistant' && (
-                  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#1F4FD8] to-[#2ECC9A] flex items-center justify-center flex-shrink-0">
-                    <Bot className="w-4 h-4 text-white" />
+                  <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 border border-[#E2E8F0]">
+                    <img src="/images/isis-avatar.png" alt="Isis" className="w-full h-full object-cover" />
                   </div>
                 )}
                 
@@ -413,8 +413,8 @@ export default function ChatbotWidget() {
             {/* Loading */}
             {state.isLoading && (
               <div className="flex gap-2">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#1F4FD8] to-[#1A44BF] flex items-center justify-center">
-                  <Bot className="w-4 h-4 text-white" />
+                <div className="w-8 h-8 rounded-full overflow-hidden border border-[#E2E8F0]">
+                  <img src="/images/isis-avatar.png" alt="Isis" className="w-full h-full object-cover" />
                 </div>
                 <div className="bg-[#FFFFFF] px-4 py-3 rounded-2xl rounded-bl-md shadow-sm">
                   <div className="flex gap-1">
