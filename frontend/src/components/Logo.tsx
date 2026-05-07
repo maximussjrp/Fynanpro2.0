@@ -8,8 +8,6 @@ interface LogoProps {
   showText?: boolean;
 }
 
-const SYMBOL_SRC = '/branding/favicons/favicon-512.png';
-
 export default function Logo({
   variant = 'horizontal-light',
   width,
@@ -28,6 +26,10 @@ export default function Logo({
     return 32; // horizontal default
   })();
 
+  // Escolhe resolucao da imagem baseada no tamanho final
+  // Para sizes pequenas, usa favicon-32; para maiores, usa favicon-512
+  const symbolSrc = symbolSize <= 48 ? '/branding/favicons/favicon-32.png' : '/branding/favicons/favicon-512.png';
+
   // Cor do texto UTOP: claro em fundo escuro, escuro em fundo claro
   const textColor = isDark ? '#F5F7FB' : '#0B1020';
 
@@ -41,7 +43,7 @@ export default function Logo({
       <div className={`flex items-center justify-center ${className}`}>
         <div className="flex items-center gap-3">
           <img
-            src={SYMBOL_SRC}
+            src={symbolSrc}
             alt="UTOP"
             width={48}
             height={48}
@@ -61,7 +63,7 @@ export default function Logo({
   if (isIconOnly) {
     return (
       <img
-        src={SYMBOL_SRC}
+        src={symbolSrc}
         alt="UTOP"
         width={symbolSize}
         height={symbolSize}
@@ -75,7 +77,7 @@ export default function Logo({
   return (
     <div className={`flex items-center gap-2 ${className}`} style={style}>
       <img
-        src={SYMBOL_SRC}
+        src={symbolSrc}
         alt="UTOP"
         width={symbolSize}
         height={symbolSize}

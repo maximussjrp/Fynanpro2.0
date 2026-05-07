@@ -104,7 +104,7 @@ export default function Sidebar({ className = '', isMobileOpen = false, onCloseM
               <Logo variant="horizontal-dark" width={140} height={32} />
             </div>
           )}
-          {isCollapsed && <Logo variant="icon-small" width={32} height={32} />}
+          {isCollapsed && <Logo variant="icon-small" width={40} height={40} />}
         </div>
       </div>
 
