@@ -762,11 +762,18 @@ export class TransactionService {
       const updatedTransactions: any[] = [];
       
       for (const transaction of transactionsToUpdate) {
-        // Para cada transação, ajustar a data mantendo o mesmo DIA do mês
+        // Para cada transação, ajustar a data mantendo o mesmo DIA do mês.
+        // Status é sempre específico da ocorrência/parcela atual e não pode
+        // vazar para futuras transações em edições em lote.
         let adjustedData = { ...data };
+        const isCurrentTransaction = transaction.id === currentTransaction.id;
         
         // Remover totalInstallments do adjustedData para não atualizar cada parcela individualmente
         delete adjustedData.totalInstallments;
+
+        if (!isCurrentTransaction) {
+          delete adjustedData.status;
+        }
         
         if (data.transactionDate && scope !== 'this') {
           // Se a data foi alterada e estamos atualizando múltiplas transações
@@ -776,7 +783,7 @@ export class TransactionService {
           const [year, month, day] = dateStr.split('-').map(Number);
           const targetDay = day; // Dia do mês que o usuário quer (ex: 15)
           
-          if (transaction.id !== currentTransaction.id) {
+          if (!isCurrentTransaction) {
             // Para outras transações, manter o mês/ano original mas trocar o dia
             const transactionDateStr = transaction.transactionDate.toISOString().split('T')[0];
             const [instYear, instMonth] = transactionDateStr.split('-').map(Number);
