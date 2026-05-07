@@ -330,7 +330,7 @@ export default function ChatbotWidget() {
   }
 
   return (
-    <div className={`fixed bottom-0 right-0 sm:bottom-6 sm:right-6 w-full sm:w-96 bg-white sm:rounded-2xl shadow-2xl z-50 flex flex-col overflow-hidden transition-all duration-300 ${isMinimized ? 'h-16' : 'h-[100dvh] sm:h-[600px] sm:max-h-[80vh]'}`}>
+    <div style={{ colorScheme: 'light' }} className={`fixed bottom-0 right-0 sm:bottom-6 sm:right-6 w-full sm:w-96 bg-[#FFFFFF] sm:rounded-2xl shadow-2xl z-50 flex flex-col overflow-hidden transition-all duration-300 ${isMinimized ? 'h-16' : 'h-[100dvh] sm:h-[600px] sm:max-h-[80vh]'}`}>
       {/* Header */}
       <div 
         className="bg-gradient-to-r from-[#1F4FD8] to-[#2ECC9A] text-white p-4 flex items-center justify-between cursor-pointer"
@@ -364,7 +364,7 @@ export default function ChatbotWidget() {
       {!isMinimized && (
         <>
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#F8FAFC]">
             {state.messages.map((message, index) => (
               <div
                 key={index}
@@ -380,8 +380,8 @@ export default function ChatbotWidget() {
                   <div
                     className={`px-4 py-3 rounded-2xl ${
                       message.role === 'user'
-                        ? 'bg-[#1F4FD8] text-white rounded-br-md'
-                        : 'bg-white text-[#0F172A] rounded-bl-md shadow-sm'
+                        ? 'bg-[#1F4FD8] text-[#FFFFFF] rounded-br-md'
+                        : 'bg-[#FFFFFF] text-[#0F172A] rounded-bl-md shadow-sm'
                     }`}
                     dangerouslySetInnerHTML={{ __html: formatMessage(message.content) }}
                   />
@@ -393,7 +393,7 @@ export default function ChatbotWidget() {
                         <button
                           key={i}
                           onClick={() => handleQuickReply(option.replace(/^[0-9]️⃣\s*/, ''))}
-                          className="block w-full text-left px-3 py-2 text-sm bg-white hover:bg-gray-100 rounded-lg border border-gray-200 transition-colors text-gray-900"
+                          className="block w-full text-left px-3 py-2 text-sm bg-[#FFFFFF] hover:bg-[#F1F5F9] rounded-lg border border-[#E2E8F0] transition-colors text-[#0F172A]"
                         >
                           {option}
                         </button>
@@ -403,8 +403,8 @@ export default function ChatbotWidget() {
                 </div>
 
                 {message.role === 'user' && (
-                  <div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center flex-shrink-0">
-                    <User className="w-4 h-4 text-gray-600" />
+                  <div className="w-8 h-8 rounded-full bg-[#E2E8F0] flex items-center justify-center flex-shrink-0">
+                    <User className="w-4 h-4 text-[#475569]" />
                   </div>
                 )}
               </div>
@@ -416,11 +416,11 @@ export default function ChatbotWidget() {
                 <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#1F4FD8] to-[#1A44BF] flex items-center justify-center">
                   <Bot className="w-4 h-4 text-white" />
                 </div>
-                <div className="bg-white px-4 py-3 rounded-2xl rounded-bl-md shadow-sm">
+                <div className="bg-[#FFFFFF] px-4 py-3 rounded-2xl rounded-bl-md shadow-sm">
                   <div className="flex gap-1">
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                    <div className="w-2 h-2 bg-[#94A3B8] rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <div className="w-2 h-2 bg-[#94A3B8] rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <div className="w-2 h-2 bg-[#94A3B8] rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                   </div>
                 </div>
               </div>
@@ -431,12 +431,12 @@ export default function ChatbotWidget() {
 
           {/* Quick Replies */}
           {state.messages.length > 0 && state.messages[state.messages.length - 1].quickReplies && (
-            <div className="px-4 py-2 bg-white border-t border-gray-100 flex flex-wrap gap-2">
+            <div className="px-4 py-2 bg-[#FFFFFF] border-t border-[#F1F5F9] flex flex-wrap gap-2">
               {state.messages[state.messages.length - 1].quickReplies!.map((reply, i) => (
                 <button
                   key={i}
                   onClick={() => handleQuickReply(reply)}
-                  className="px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full transition-colors"
+                  className="px-3 py-1.5 text-sm bg-[#F1F5F9] hover:bg-[#E2E8F0] text-[#374151] rounded-full transition-colors"
                 >
                   {reply}
                 </button>
@@ -445,7 +445,7 @@ export default function ChatbotWidget() {
           )}
 
           {/* Input */}
-          <form onSubmit={handleSubmit} className="p-4 bg-white border-t border-gray-200">
+          <form onSubmit={handleSubmit} className="p-4 bg-[#FFFFFF] border-t border-[#E2E8F0]">
             <div className="flex gap-2">
               <input
                 ref={inputRef}
@@ -453,7 +453,7 @@ export default function ChatbotWidget() {
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 placeholder={isListening ? "Ouvindo..." : "Digite sua mensagem..."}
-                className={`flex-1 px-4 py-2.5 min-h-[44px] bg-gray-100 rounded-full focus:outline-none focus:ring-2 focus:ring-[#1F4FD8]/50 text-sm text-gray-900 placeholder:text-gray-400 ${isListening ? 'ring-2 ring-red-400' : ''}`}
+                className={`flex-1 px-4 py-2.5 min-h-[44px] bg-[#F1F5F9] rounded-full focus:outline-none focus:ring-2 focus:ring-[#1F4FD8]/50 text-sm text-[#0F172A] placeholder:text-[#94A3B8] ${isListening ? 'ring-2 ring-red-400' : ''}`}
                 disabled={state.isLoading}
               />
               {/* Botão de Microfone - apenas em navegadores compatíveis */}
@@ -464,8 +464,8 @@ export default function ChatbotWidget() {
                   disabled={state.isLoading}
                   className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-200 ${
                     isListening 
-                      ? 'bg-red-500 hover:bg-red-600 animate-pulse' 
-                      : 'bg-gray-200 hover:bg-gray-300 text-gray-600'
+                      ? 'bg-red-500 hover:bg-red-600 animate-pulse text-[#FFFFFF]' 
+                      : 'bg-[#E2E8F0] hover:bg-[#CBD5E1] text-[#475569]'
                   } disabled:opacity-50 disabled:cursor-not-allowed`}
                   title={isListening ? "Parar gravação" : "Falar mensagem"}
                 >
