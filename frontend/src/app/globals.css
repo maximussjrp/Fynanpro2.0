@@ -165,6 +165,158 @@ body {
   color: var(--v2-text-faint);
 }
 
+/* ==================== UTOP V2 — REMAP DE TOKENS LEGADOS ====================
+   Converte classes Tailwind claras em equivalentes dark, escopado em .utop-v2.
+   Permite manter as paginas internas (Transacoes, Contas, Categorias, etc.)
+   coerentes com o tema premium sem reescrever cada uma. Migracao gradual:
+   trocar para .v2-card neutraliza estes overrides. */
+
+/* Backgrounds claros -> surfaces dark */
+.utop-v2 .bg-white { background-color: var(--v2-bg-surface) !important; }
+.utop-v2 .bg-gray-50 { background-color: var(--v2-bg-surface-2) !important; }
+.utop-v2 .bg-gray-100 { background-color: var(--v2-bg-surface-2) !important; }
+.utop-v2 .bg-gray-200 { background-color: var(--v2-bg-elevated) !important; }
+.utop-v2 .bg-slate-50 { background-color: var(--v2-bg-surface-2) !important; }
+.utop-v2 .bg-slate-100 { background-color: var(--v2-bg-surface-2) !important; }
+
+/* Hovers de fundo claro -> hover sutil em dark */
+.utop-v2 .hover\:bg-gray-50:hover,
+.utop-v2 .hover\:bg-gray-100:hover,
+.utop-v2 .hover\:bg-slate-50:hover,
+.utop-v2 .hover\:bg-slate-100:hover {
+  background-color: rgba(255, 255, 255, 0.04) !important;
+}
+
+/* Texto cinza-escuro -> texto claro */
+.utop-v2 .text-gray-900,
+.utop-v2 .text-slate-900,
+.utop-v2 .text-zinc-900,
+.utop-v2 .text-neutral-900,
+.utop-v2 .text-black {
+  color: var(--v2-text-primary) !important;
+}
+.utop-v2 .text-gray-800,
+.utop-v2 .text-slate-800,
+.utop-v2 .text-zinc-800 {
+  color: var(--v2-text-primary) !important;
+}
+.utop-v2 .text-gray-700,
+.utop-v2 .text-slate-700,
+.utop-v2 .text-zinc-700 {
+  color: #CBD5E1 !important;
+}
+.utop-v2 .text-gray-600,
+.utop-v2 .text-slate-600,
+.utop-v2 .text-zinc-600 {
+  color: var(--v2-text-muted) !important;
+}
+.utop-v2 .text-gray-500,
+.utop-v2 .text-slate-500,
+.utop-v2 .text-zinc-500 {
+  color: var(--v2-text-muted) !important;
+}
+.utop-v2 .text-gray-400,
+.utop-v2 .text-slate-400,
+.utop-v2 .text-zinc-400 {
+  color: var(--v2-text-faint) !important;
+}
+
+/* Bordas claras -> bordas sutis */
+.utop-v2 .border-gray-100,
+.utop-v2 .border-gray-200,
+.utop-v2 .border-slate-100,
+.utop-v2 .border-slate-200,
+.utop-v2 .border-zinc-200 {
+  border-color: var(--v2-border) !important;
+}
+.utop-v2 .border-gray-300,
+.utop-v2 .border-slate-300,
+.utop-v2 .border-zinc-300 {
+  border-color: var(--v2-border-strong) !important;
+}
+.utop-v2 .divide-gray-100 > :not([hidden]) ~ :not([hidden]),
+.utop-v2 .divide-gray-200 > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--v2-border) !important;
+}
+
+/* Inputs / Selects / Textareas: garantir contraste em fundo escuro */
+.utop-v2 input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']),
+.utop-v2 select,
+.utop-v2 textarea {
+  background-color: var(--v2-bg-surface-2);
+  color: var(--v2-text-primary);
+  border-color: var(--v2-border-strong);
+}
+.utop-v2 select option {
+  background-color: var(--v2-bg-elevated);
+  color: var(--v2-text-primary);
+}
+
+/* Badges de tonalidades claras -> versoes mais saturadas que se leem em dark */
+.utop-v2 .bg-blue-50 { background-color: rgba(59, 130, 246, 0.12) !important; }
+.utop-v2 .bg-blue-100 { background-color: rgba(59, 130, 246, 0.16) !important; }
+.utop-v2 .text-blue-700,
+.utop-v2 .text-blue-800,
+.utop-v2 .text-blue-900 { color: #93C5FD !important; }
+
+.utop-v2 .bg-green-50 { background-color: rgba(16, 185, 129, 0.12) !important; }
+.utop-v2 .bg-green-100 { background-color: rgba(16, 185, 129, 0.16) !important; }
+.utop-v2 .text-green-700,
+.utop-v2 .text-green-800,
+.utop-v2 .text-green-900 { color: #6EE7B7 !important; }
+
+.utop-v2 .bg-emerald-50 { background-color: rgba(16, 185, 129, 0.12) !important; }
+.utop-v2 .bg-emerald-100 { background-color: rgba(16, 185, 129, 0.16) !important; }
+.utop-v2 .text-emerald-700,
+.utop-v2 .text-emerald-800 { color: #6EE7B7 !important; }
+
+.utop-v2 .bg-red-50 { background-color: rgba(244, 63, 94, 0.12) !important; }
+.utop-v2 .bg-red-100 { background-color: rgba(244, 63, 94, 0.16) !important; }
+.utop-v2 .text-red-700,
+.utop-v2 .text-red-800,
+.utop-v2 .text-red-900 { color: #FCA5A5 !important; }
+
+.utop-v2 .bg-amber-50 { background-color: rgba(245, 158, 11, 0.12) !important; }
+.utop-v2 .bg-amber-100 { background-color: rgba(245, 158, 11, 0.16) !important; }
+.utop-v2 .bg-yellow-50 { background-color: rgba(245, 158, 11, 0.12) !important; }
+.utop-v2 .bg-yellow-100 { background-color: rgba(245, 158, 11, 0.16) !important; }
+.utop-v2 .text-amber-700,
+.utop-v2 .text-amber-800,
+.utop-v2 .text-yellow-700,
+.utop-v2 .text-yellow-800 { color: #FCD34D !important; }
+
+.utop-v2 .bg-purple-50 { background-color: rgba(168, 85, 247, 0.12) !important; }
+.utop-v2 .bg-purple-100 { background-color: rgba(168, 85, 247, 0.16) !important; }
+.utop-v2 .text-purple-700,
+.utop-v2 .text-purple-800 { color: #D8B4FE !important; }
+
+.utop-v2 .bg-pink-50 { background-color: rgba(236, 72, 153, 0.12) !important; }
+.utop-v2 .bg-pink-100 { background-color: rgba(236, 72, 153, 0.16) !important; }
+.utop-v2 .text-pink-700,
+.utop-v2 .text-pink-800 { color: #F9A8D4 !important; }
+
+/* Linhas de tabela com hover claro */
+.utop-v2 tr.hover\:bg-gray-50:hover,
+.utop-v2 .hover\:bg-gray-50\/50:hover {
+  background-color: rgba(255, 255, 255, 0.03) !important;
+}
+
+/* Sombras claras: troca por sombra mais profunda no escuro */
+.utop-v2 .shadow,
+.utop-v2 .shadow-sm,
+.utop-v2 .shadow-md,
+.utop-v2 .shadow-lg,
+.utop-v2 .shadow-xl {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
+}
+
+/* Modais / overlays */
+.utop-v2 .bg-black\/50,
+.utop-v2 .bg-black\/40,
+.utop-v2 .bg-gray-900\/50 {
+  background-color: rgba(0, 0, 0, 0.65) !important;
+}
+
 /* ==================== MOBILE REPORTS - RESPONSIVIDADE ==================== */
 
 /* Ocultar scrollbar mas manter funcionalidade */
