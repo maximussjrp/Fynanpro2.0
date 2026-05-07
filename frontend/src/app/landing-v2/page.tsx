@@ -16,7 +16,7 @@ import LandingFooter from '@/components/landing-v2/LandingFooter';
 
 export default function LandingV2Page() {
   return (
-    <div className="min-h-screen bg-[#0B1120] text-[#F1F5F9] font-sans antialiased">
+    <div className="min-h-screen bg-[#080B14] text-[#F1F5F9] font-sans antialiased">
       <LandingNav />
       <main>
         <HeroSection />
