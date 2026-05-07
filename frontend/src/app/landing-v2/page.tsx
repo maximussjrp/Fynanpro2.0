@@ -6,7 +6,6 @@ import MethodSection from '@/components/landing-v2/MethodSection';
 import FeaturesSection from '@/components/landing-v2/FeaturesSection';
 import AudienceSection from '@/components/landing-v2/AudienceSection';
 import HumanAuthoritySection from '@/components/landing-v2/HumanAuthoritySection';
-import OfferSection from '@/components/landing-v2/OfferSection';
 import PricingSection from '@/components/landing-v2/PricingSection';
 import TrustSection from '@/components/landing-v2/TrustSection';
 import FAQSection from '@/components/landing-v2/FAQSection';
@@ -25,7 +24,6 @@ export default function LandingV2Page() {
         <FeaturesSection />
         <AudienceSection />
         <HumanAuthoritySection />
-        <OfferSection />
         <PricingSection />
         <TrustSection />
         <FAQSection />
