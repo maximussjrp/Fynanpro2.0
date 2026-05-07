@@ -76,6 +76,59 @@ body {
   border-width: 0;
 }
 
+/* ==================== UTOP DASHBOARD V2 - PREMIUM DARK ==================== */
+.utop-v2 {
+  --v2-bg-app: #0B1020;
+  --v2-bg-surface: #151B2E;
+  --v2-bg-surface-2: #1A2236;
+  --v2-bg-elevated: #1E2741;
+  --v2-border: rgba(255, 255, 255, 0.06);
+  --v2-border-strong: rgba(255, 255, 255, 0.10);
+  --v2-text-primary: #F5F7FB;
+  --v2-text-muted: #94A3B8;
+  --v2-text-faint: #64748B;
+
+  --v2-income: #3B82F6;
+  --v2-income-soft: rgba(59, 130, 246, 0.15);
+  --v2-expense: #C026D3;
+  --v2-expense-soft: rgba(192, 38, 211, 0.15);
+  --v2-warn: #F59E0B;
+  --v2-danger: #F43F5E;
+  --v2-goal: #10B981;
+  --v2-goal-soft: rgba(16, 185, 129, 0.15);
+
+  --v2-shadow-card: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 8px 24px rgba(0, 0, 0, 0.35);
+  --v2-radius: 16px;
+
+  background: var(--v2-bg-app);
+  color: var(--v2-text-primary);
+  font-family: 'Inter', sans-serif;
+  min-height: 100vh;
+}
+
+.utop-v2 .v2-card {
+  background: var(--v2-bg-surface);
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0) 100%);
+  border: 1px solid var(--v2-border);
+  border-radius: var(--v2-radius);
+  box-shadow: var(--v2-shadow-card);
+  transition: transform 0.18s ease, border-color 0.18s ease;
+}
+
+.utop-v2 .v2-card:hover {
+  border-color: var(--v2-border-strong);
+}
+
+.utop-v2 .v2-num {
+  font-family: 'Poppins', 'Inter', sans-serif;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.utop-v2 .v2-muted { color: var(--v2-text-muted); }
+.utop-v2 .v2-faint { color: var(--v2-text-faint); }
+
 /* ==================== MOBILE REPORTS - RESPONSIVIDADE ==================== */
 
 /* Ocultar scrollbar mas manter funcionalidade */
