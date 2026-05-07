@@ -84,15 +84,20 @@ export default function Sidebar({ className = '', isMobileOpen = false, onCloseM
       )}
       
       <aside 
-        className={`bg-white border-r border-gray-200 flex flex-col transition-all duration-300 h-full
+        className={`flex flex-col transition-all duration-300 h-full utop-sidebar
           ${isCollapsed ? 'w-20' : 'w-64'}
           ${className}
           fixed lg:relative z-50 lg:z-auto
           ${isMobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
         `}
+        style={{
+          background: 'var(--v2-bg-surface)',
+          borderRight: '1px solid var(--v2-border)',
+          fontFamily: 'Inter, sans-serif',
+        }}
       >
       {/* Header */}
-      <div className="p-4 border-b border-gray-200">
+      <div className="p-4" style={{ borderBottom: '1px solid var(--v2-border)' }}>
         <div className="flex items-center justify-between">
           {!isCollapsed && (
             <div className="flex items-center gap-2">
@@ -105,16 +110,23 @@ export default function Sidebar({ className = '', isMobileOpen = false, onCloseM
 
       {/* User Info */}
       {!isCollapsed && (
-        <div className="p-4 border-b border-gray-200">
+        <div className="p-4" style={{ borderBottom: '1px solid var(--v2-border)' }}>
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#1A1A1A] to-[#2A2A2A] border border-[#C9A962] flex items-center justify-center text-[#C9A962] font-semibold">
+            <div
+              className="w-10 h-10 rounded-full flex items-center justify-center font-semibold"
+              style={{
+                background: 'linear-gradient(135deg, #1A1A1A 0%, #2A2A2A 100%)',
+                border: '1px solid #C9A962',
+                color: '#C9A962',
+              }}
+            >
               {user?.fullName?.charAt(0).toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-gray-900 truncate" style={{ fontFamily: 'Inter, sans-serif' }}>
+              <p className="text-sm font-semibold truncate" style={{ color: 'var(--v2-text-primary)' }}>
                 {user?.fullName}
               </p>
-              <p className="text-xs text-gray-500 truncate" style={{ fontFamily: 'Inter, sans-serif' }}>
+              <p className="text-xs truncate" style={{ color: 'var(--v2-text-muted)' }}>
                 {tenant?.name}
               </p>
             </div>
@@ -127,26 +139,23 @@ export default function Sidebar({ className = '', isMobileOpen = false, onCloseM
         <div className="space-y-1">
           {menuItems.map((item) => {
             const Icon = item.icon;
-            const isActive = pathname === item.href;
-            
+            const isActive = pathname === item.href || (item.href !== '/dashboard' && pathname?.startsWith(item.href));
+
             return (
               <button
                 key={item.href}
                 onClick={() => handleNavigation(item.href)}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all ${
-                  isActive 
-                    ? 'bg-[#F5F0E6] text-[#1A1A1A] font-medium border-l-2 border-[#C9A962]' 
-                    : 'text-gray-600 hover:bg-gray-50'
-                }`}
-                style={{ fontFamily: 'Inter, sans-serif' }}
+                className="utop-nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all"
+                data-active={isActive ? 'true' : 'false'}
                 title={isCollapsed ? item.label : undefined}
               >
                 <Icon className={`flex-shrink-0 ${isCollapsed ? 'w-6 h-6' : 'w-5 h-5'}`} />
-                {!isCollapsed && (
-                  <span className="text-sm">{item.label}</span>
-                )}
+                {!isCollapsed && <span className="text-sm">{item.label}</span>}
                 {!isCollapsed && item.badge && (
-                  <span className="ml-auto bg-[#E74C3C] text-white text-xs font-semibold px-2 py-0.5 rounded-full">
+                  <span
+                    className="ml-auto text-xs font-semibold px-2 py-0.5 rounded-full"
+                    style={{ background: 'var(--v2-danger)', color: '#fff' }}
+                  >
                     {item.badge}
                   </span>
                 )}
@@ -157,21 +166,20 @@ export default function Sidebar({ className = '', isMobileOpen = false, onCloseM
       </nav>
 
       {/* Footer Actions */}
-      <div className="p-3 border-t border-gray-200 space-y-1">
+      <div className="p-3 space-y-1" style={{ borderTop: '1px solid var(--v2-border)' }}>
         <button
           onClick={() => handleNavigation('/dashboard/settings')}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-600 hover:bg-gray-50 transition-all"
-          style={{ fontFamily: 'Inter, sans-serif' }}
+          className="utop-nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all"
+          data-active={pathname === '/dashboard/settings' ? 'true' : 'false'}
           title={isCollapsed ? 'Configurações' : undefined}
         >
           <Settings className={`flex-shrink-0 ${isCollapsed ? 'w-6 h-6' : 'w-5 h-5'}`} />
           {!isCollapsed && <span className="text-sm">Configurações</span>}
         </button>
-        
+
         <button
           onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-red-600 hover:bg-red-50 transition-all"
-          style={{ fontFamily: 'Inter, sans-serif' }}
+          className="utop-nav-danger w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all"
           title={isCollapsed ? 'Sair' : undefined}
         >
           <LogOut className={`flex-shrink-0 ${isCollapsed ? 'w-6 h-6' : 'w-5 h-5'}`} />
@@ -181,7 +189,8 @@ export default function Sidebar({ className = '', isMobileOpen = false, onCloseM
         {/* Toggle Button */}
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className="w-full flex items-center justify-center py-2 text-gray-400 hover:text-gray-600 transition-all"
+          className="w-full flex items-center justify-center py-2 transition-all"
+          style={{ color: 'var(--v2-text-faint)' }}
           title={isCollapsed ? 'Expandir menu' : 'Recolher menu'}
         >
           {isCollapsed ? (

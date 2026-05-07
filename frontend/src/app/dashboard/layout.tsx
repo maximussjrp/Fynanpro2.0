@@ -55,10 +55,10 @@ export default function DashboardLayout({
   // Mostrar loading enquanto verifica autenticação
   if (isLoading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-gradient-to-br from-[#F4F7FB] to-white">
+      <div className="utop-v2 flex h-screen items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#C9A962] mx-auto"></div>
-          <p className="text-gray-600 mt-4 font-inter">Carregando...</p>
+          <p className="mt-4" style={{ color: 'var(--v2-text-muted)', fontFamily: 'Inter, sans-serif' }}>Carregando...</p>
         </div>
       </div>
     );
@@ -70,7 +70,7 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="flex h-screen bg-gradient-to-br from-[#F4F7FB] to-white overflow-hidden">
+    <div className="utop-v2 flex h-screen overflow-hidden">
       {/* Sidebar - Desktop sempre visível */}
       <div className="hidden lg:block w-64 flex-shrink-0">
         <div className="fixed left-0 top-0 h-screen w-64 z-40">
@@ -88,15 +88,19 @@ export default function DashboardLayout({
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden w-full">
         {/* Mobile Header com Menu Hamburger */}
-        <div className="lg:hidden flex items-center gap-3 p-4 bg-white border-b border-gray-200">
+        <div
+          className="lg:hidden flex items-center gap-3 p-4"
+          style={{ background: 'var(--v2-bg-surface)', borderBottom: '1px solid var(--v2-border)' }}
+        >
           <button
             onClick={() => setIsMobileMenuOpen(true)}
-            className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+            className="p-2 rounded-lg transition-colors"
+            style={{ color: 'var(--v2-text-primary)' }}
             aria-label="Abrir menu"
           >
-            <Menu className="w-6 h-6 text-gray-700" />
+            <Menu className="w-6 h-6" />
           </button>
-          <span className="text-lg font-semibold text-gray-900">UTOP</span>
+          <span className="text-lg font-semibold" style={{ color: 'var(--v2-text-primary)' }}>UTOP</span>
         </div>
 
         {/* Desktop Header */}
