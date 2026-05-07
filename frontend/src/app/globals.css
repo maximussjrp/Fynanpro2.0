@@ -317,6 +317,111 @@ body {
   background-color: rgba(0, 0, 0, 0.65) !important;
 }
 
+/* Gradients claros (banners "Nova experiencia" etc.) -> tonalizados em dark */
+.utop-v2 .from-green-50,
+.utop-v2 .from-emerald-50,
+.utop-v2 .to-green-50,
+.utop-v2 .to-emerald-50,
+.utop-v2 .via-green-50,
+.utop-v2 .via-emerald-50 {
+  --tw-gradient-from: rgba(16, 185, 129, 0.10) !important;
+  --tw-gradient-to: rgba(16, 185, 129, 0.04) !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+}
+.utop-v2 .from-blue-50,
+.utop-v2 .from-sky-50,
+.utop-v2 .from-indigo-50,
+.utop-v2 .to-blue-50,
+.utop-v2 .to-sky-50,
+.utop-v2 .to-indigo-50 {
+  --tw-gradient-from: rgba(59, 130, 246, 0.10) !important;
+  --tw-gradient-to: rgba(59, 130, 246, 0.04) !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+}
+.utop-v2 .from-amber-50,
+.utop-v2 .from-yellow-50,
+.utop-v2 .to-amber-50,
+.utop-v2 .to-yellow-50 {
+  --tw-gradient-from: rgba(245, 158, 11, 0.10) !important;
+  --tw-gradient-to: rgba(245, 158, 11, 0.04) !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+}
+.utop-v2 .from-red-50,
+.utop-v2 .from-rose-50,
+.utop-v2 .from-pink-50,
+.utop-v2 .to-red-50,
+.utop-v2 .to-rose-50,
+.utop-v2 .to-pink-50 {
+  --tw-gradient-from: rgba(244, 63, 94, 0.10) !important;
+  --tw-gradient-to: rgba(244, 63, 94, 0.04) !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+}
+.utop-v2 .from-purple-50,
+.utop-v2 .from-violet-50,
+.utop-v2 .from-fuchsia-50,
+.utop-v2 .to-purple-50,
+.utop-v2 .to-violet-50,
+.utop-v2 .to-fuchsia-50 {
+  --tw-gradient-from: rgba(168, 85, 247, 0.10) !important;
+  --tw-gradient-to: rgba(168, 85, 247, 0.04) !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+}
+.utop-v2 .from-gray-50,
+.utop-v2 .from-slate-50,
+.utop-v2 .to-gray-50,
+.utop-v2 .to-slate-50,
+.utop-v2 .from-white,
+.utop-v2 .to-white {
+  --tw-gradient-from: rgba(255, 255, 255, 0.04) !important;
+  --tw-gradient-to: rgba(255, 255, 255, 0.0) !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+}
+
+/* Reforco de leitura: textos pequenos cinza-medio em tabelas/listas */
+.utop-v2 .text-gray-700,
+.utop-v2 .text-slate-700,
+.utop-v2 .text-zinc-700,
+.utop-v2 .text-gray-800,
+.utop-v2 .text-slate-800 {
+  color: #E2E8F0 !important;
+}
+
+/* Cards solidos coloridos: NAO sobrescrever texto interno (mantem text-white).
+   Quando o card e bg-{cor}-500/600/700/800, text-gray-* perderia contraste. */
+.utop-v2 [class*="bg-blue-500"] [class*="text-gray-"],
+.utop-v2 [class*="bg-blue-600"] [class*="text-gray-"],
+.utop-v2 [class*="bg-blue-700"] [class*="text-gray-"],
+.utop-v2 [class*="bg-green-500"] [class*="text-gray-"],
+.utop-v2 [class*="bg-green-600"] [class*="text-gray-"],
+.utop-v2 [class*="bg-emerald-500"] [class*="text-gray-"],
+.utop-v2 [class*="bg-emerald-600"] [class*="text-gray-"],
+.utop-v2 [class*="bg-red-500"] [class*="text-gray-"],
+.utop-v2 [class*="bg-red-600"] [class*="text-gray-"],
+.utop-v2 [class*="bg-rose-500"] [class*="text-gray-"],
+.utop-v2 [class*="bg-purple-500"] [class*="text-gray-"],
+.utop-v2 [class*="bg-purple-600"] [class*="text-gray-"],
+.utop-v2 [class*="bg-violet-500"] [class*="text-gray-"],
+.utop-v2 [class*="bg-amber-500"] [class*="text-gray-"],
+.utop-v2 [class*="bg-orange-500"] [class*="text-gray-"] {
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+
+/* Calendario: dia atual com fundo claro -> realce sutil em dark */
+.utop-v2 .bg-blue-50.ring-2,
+.utop-v2 .ring-blue-500.bg-blue-50 {
+  background-color: rgba(59, 130, 246, 0.18) !important;
+  box-shadow: inset 0 0 0 2px rgba(59, 130, 246, 0.5) !important;
+}
+
+/* Listas com fundo claro tonalizado por status (linhas verdes/vermelhas etc.) */
+.utop-v2 .bg-green-50\/50,
+.utop-v2 .bg-emerald-50\/50 { background-color: rgba(16, 185, 129, 0.06) !important; }
+.utop-v2 .bg-red-50\/50,
+.utop-v2 .bg-rose-50\/50 { background-color: rgba(244, 63, 94, 0.06) !important; }
+.utop-v2 .bg-amber-50\/50,
+.utop-v2 .bg-yellow-50\/50 { background-color: rgba(245, 158, 11, 0.06) !important; }
+.utop-v2 .bg-blue-50\/50 { background-color: rgba(59, 130, 246, 0.06) !important; }
+
 /* ==================== MOBILE REPORTS - RESPONSIVIDADE ==================== */
 
 /* Ocultar scrollbar mas manter funcionalidade */
