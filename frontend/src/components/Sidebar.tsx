@@ -101,7 +101,7 @@ export default function Sidebar({ className = '', isMobileOpen = false, onCloseM
         <div className="flex items-center justify-between">
           {!isCollapsed && (
             <div className="flex items-center gap-2">
-              <Logo variant="horizontal-light" width={140} height={32} />
+              <Logo variant="horizontal-dark" width={140} height={32} />
             </div>
           )}
           {isCollapsed && <Logo variant="icon-small" width={32} height={32} />}

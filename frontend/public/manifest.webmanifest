@@ -1,0 +1,17 @@
+{
+  "name": "UTOP - Seu dinheiro em equilíbrio",
+  "short_name": "UTOP",
+  "description": "Do sonho ao controle. UTOP é o fim da ilusão financeira.",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0B1020",
+  "theme_color": "#0B1020",
+  "icons": [
+    { "src": "/branding/favicons/favicon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/branding/favicons/favicon-256.png", "sizes": "256x256", "type": "image/png" },
+    { "src": "/branding/favicons/favicon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/branding/favicons/favicon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
