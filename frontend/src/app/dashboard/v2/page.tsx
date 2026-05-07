@@ -12,6 +12,7 @@ import {
   AlertTriangle,
   Sparkles,
   Target,
+  Building2,
 } from 'lucide-react';
 import api from '@/lib/api';
 import { useAuth, useTenant } from '@/stores/auth';
@@ -103,7 +104,98 @@ interface TodaySummary {
   overdue: { total: number; count: number; items: Array<{ description: string; daysOverdue: number; dueDate: string }> };
 }
 
+interface BankAccountSummary {
+  id: string;
+  name: string;
+  institution: string;
+  currentBalance: number;
+}
+
 const CATEGORY_PALETTE = ['#3B82F6', '#C026D3', '#F59E0B', '#10B981', '#F43F5E', '#8B5CF6', '#06B6D4'];
+
+const BANK_LOGO_REPO_BASE = 'https://cdn.jsdelivr.net/gh/Tgentil/Bancos-em-SVG@main';
+
+const BANK_LOGOS = [
+  { aliases: ['bradesco'], path: 'Bradesco S.A/bradesco com nome.svg' },
+  { aliases: ['itau', 'itau unibanco'], path: 'Itaú Unibanco S.A/itau-2-laranja.svg' },
+  { aliases: ['santander'], path: 'Banco Santander Brasil S.A/banco-santander-logo.svg' },
+  { aliases: ['inter'], path: 'Banco Inter S.A/inter.svg' },
+  { aliases: ['nubank', 'nu pagamentos', 'nubank'], path: 'Nu Pagamentos S.A/nubank-branco.svg' },
+  { aliases: ['c6'], path: 'Banco C6 S.A/c6 bank- branco.svg' },
+  { aliases: ['btg', 'btg pactual'], path: 'Banco BTG Pacutal/btg-pactual-nome .svg' },
+  { aliases: ['banco do brasil', 'bb'], path: 'Banco do Brasil S.A/banco-do-brasil-com-fundo.svg' },
+  { aliases: ['caixa'], path: 'Caixa Econômica Federal/caixa-economica-federal-1.svg' },
+  { aliases: ['mercado pago'], path: 'Mercado Pago/mercado-pago-nome.svg' },
+  { aliases: ['picpay'], path: 'PicPay/Logo-PicPay -nome .svg' },
+  { aliases: ['pagbank', 'pagseguro'], path: 'PagSeguro Internet S.A/logo-pagbank.svg' },
+  { aliases: ['sicredi'], path: 'Sicredi/logo-sicred-preto.svg' },
+  { aliases: ['sicoob'], path: 'Sicoob/sicoob-minimalista-com.svg' },
+  { aliases: ['asaas'], path: 'Asaas IP S.A/header-logo-azul.svg' },
+  { aliases: ['stone'], path: 'Stone Pagamentos S.A/stone-branco.svg' },
+  { aliases: ['neon'], path: 'Neon/header-logo-neon.svg' },
+  { aliases: ['original'], path: 'Banco Original S.A/banco-original-logo-branco-nome.svg' },
+  { aliases: ['sofisa'], path: 'Banco Sofisa/logo-banco-sofisa-verde.svg' },
+  { aliases: ['brb'], path: 'BRB - Banco de Brasilia/brb-logo-abreviado.svg' },
+  { aliases: ['banrisul'], path: 'Banrisul/banrisul-logo-2023.svg' },
+  { aliases: ['safra'], path: 'Banco Safra S.A/logo-safra-nome.svg' },
+  { aliases: ['original'], path: 'Banco Original S.A/banco-original-logo-branco-nome.svg' },
+];
+
+function normalizeInstitution(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function buildBankLogoUrl(path: string): string {
+  const encodedPath = path
+    .split('/')
+    .map((segment) => encodeURIComponent(segment))
+    .join('/');
+
+  return `${BANK_LOGO_REPO_BASE}/${encodedPath}`;
+}
+
+function getBankLogoUrl(institution: string): string | null {
+  const normalizedInstitution = normalizeInstitution(institution);
+  const match = BANK_LOGOS.find((entry) => entry.aliases.some((alias) => normalizedInstitution.includes(alias)));
+  return match ? buildBankLogoUrl(match.path) : null;
+}
+
+function getInstitutionInitials(value: string): string {
+  const words = value.split(/\s+/).filter(Boolean);
+  return words.slice(0, 2).map((word) => word[0]?.toUpperCase()).join('') || 'BK';
+}
+
+function BankLogo({ institution }: { institution: string }) {
+  const [hasError, setHasError] = useState(false);
+  const logoUrl = useMemo(() => getBankLogoUrl(institution), [institution]);
+
+  if (!logoUrl || hasError) {
+    return (
+      <div className="flex h-11 w-14 shrink-0 items-center justify-center rounded-2xl border border-[var(--v2-border-strong)] bg-[rgba(15,23,42,0.8)] text-xs font-semibold text-[var(--v2-text-primary)]">
+        {getInstitutionInitials(institution)}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-11 w-14 shrink-0 items-center justify-center rounded-2xl border border-[var(--v2-border-strong)] bg-[rgba(15,23,42,0.8)] px-2">
+      <img
+        src={logoUrl}
+        alt={`Logo de ${institution}`}
+        className="h-7 w-full object-contain"
+        loading="lazy"
+        referrerPolicy="no-referrer"
+        onError={() => setHasError(true)}
+      />
+    </div>
+  );
+}
 
 export default function DashboardV2Page() {
   const router = useRouter();
@@ -117,6 +209,7 @@ export default function DashboardV2Page() {
   const [ranking, setRanking] = useState<RankingRow[]>([]);
   const [today, setToday] = useState<TodaySummary | null>(null);
   const [upcoming, setUpcoming] = useState<UpcomingItem[]>([]);
+  const [bankAccounts, setBankAccounts] = useState<BankAccountSummary[]>([]);
   const [totalAccountsBalance, setTotalAccountsBalance] = useState(0);
 
   useEffect(() => {
@@ -170,11 +263,21 @@ export default function DashboardV2Page() {
         setRanking(rankingRes.data.data?.ranking ?? []);
         setToday(todayRes.data.data ?? null);
 
-        const accounts = accountsRes.data.data?.accounts ?? [];
-        const totalBalance = accounts.reduce(
-          (sum: number, a: { currentBalance?: number | string }) => sum + Number(a.currentBalance ?? 0),
-          0,
+        const accounts: BankAccountSummary[] = (accountsRes.data.data?.accounts ?? []).map(
+          (account: {
+            id: string;
+            name?: string;
+            institution?: string;
+            currentBalance?: number | string;
+          }) => ({
+            id: account.id,
+            name: account.name ?? 'Conta bancária',
+            institution: account.institution ?? 'Instituição não informada',
+            currentBalance: Number(account.currentBalance ?? 0),
+          }),
         );
+        const totalBalance = accounts.reduce((sum, account) => sum + account.currentBalance, 0);
+        setBankAccounts(accounts);
         setTotalAccountsBalance(totalBalance);
 
         const upcomingTx: UpcomingItem[] = (upcomingRes.data.data?.transactions ?? [])
@@ -256,6 +359,11 @@ export default function DashboardV2Page() {
         color: CATEGORY_PALETTE[i % CATEGORY_PALETTE.length],
       })),
     [ranking],
+  );
+
+  const highlightedAccounts = useMemo(
+    () => [...bankAccounts].sort((left, right) => right.currentBalance - left.currentBalance).slice(0, 4),
+    [bankAccounts],
   );
 
   // Próxima conta + mais antiga em atraso (para QuickCards)
@@ -397,6 +505,75 @@ export default function DashboardV2Page() {
           secondary="Você no caminho certo"
           detail={{ label: 'Mês', value: '55%' }}
         />
+      </section>
+
+      <section className="v2-card p-5 mb-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <div>
+            <div className="inline-flex items-center gap-2 text-xs uppercase tracking-[0.18em] v2-faint mb-2">
+              <Building2 className="h-3.5 w-3.5" />
+              Contas bancarias
+            </div>
+            <h2 className="text-base font-semibold">Suas contas com logo da instituicao</h2>
+            <p className="text-xs v2-muted mt-0.5">
+              {bankAccounts.length > 0
+                ? `${bankAccounts.length} contas ativas conectadas ao seu saldo total`
+                : 'Assim que voce cadastrar contas, elas aparecem aqui com o saldo atual.'}
+            </p>
+          </div>
+          <button
+            type="button"
+            className="text-xs px-3 py-1.5 rounded-lg border border-[var(--v2-border-strong)] v2-muted hover:text-[var(--v2-text-primary)]"
+            onClick={() => router.push('/dashboard/bank-accounts')}
+            title="Gerenciar contas bancarias"
+          >
+            Gerenciar contas
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div
+                key={index}
+                className="h-28 rounded-2xl border border-[var(--v2-border-subtle)] bg-[rgba(255,255,255,0.02)] animate-pulse"
+              />
+            ))}
+          </div>
+        ) : highlightedAccounts.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+            {highlightedAccounts.map((account) => (
+              <div
+                key={account.id}
+                className="rounded-2xl border border-[var(--v2-border-subtle)] bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.01))] p-4"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <BankLogo institution={account.institution} />
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold truncate">{account.name}</p>
+                      <p className="text-xs v2-muted truncate">{account.institution}</p>
+                    </div>
+                  </div>
+                  <span className="rounded-full border border-[var(--v2-border-strong)] px-2 py-1 text-[10px] uppercase tracking-[0.16em] v2-faint">
+                    Ativa
+                  </span>
+                </div>
+
+                <div className="mt-5">
+                  <p className="text-[11px] uppercase tracking-[0.16em] v2-faint mb-1">Saldo atual</p>
+                  <p className="text-lg font-semibold text-[var(--v2-text-primary)]">
+                    {formatCurrency(account.currentBalance)}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-dashed border-[var(--v2-border-strong)] bg-[rgba(255,255,255,0.02)] p-6 text-sm v2-muted">
+            Nenhuma conta bancaria ativa encontrada.
+          </div>
+        )}
       </section>
 
       {/* Bloco 3: Gráfico herói + donut categorias */}
