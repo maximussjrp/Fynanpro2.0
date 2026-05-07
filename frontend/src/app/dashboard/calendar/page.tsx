@@ -141,21 +141,15 @@ export default function CalendarPage() {
   const monthName = currentDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
 
   // Calcular totais do mês
-  const monthTotal = events.reduce((acc, event) => {
-    if (event.type === 'income') {
-      return acc + Number(event.amount);
-    } else {
-      return acc - Number(event.amount);
-    }
-  }, 0);
-
   const monthIncome = events
     .filter(e => e.type === 'income')
     .reduce((acc, e) => acc + Number(e.amount), 0);
 
   const monthExpense = events
-    .filter(e => e.type === 'expense')
+    .filter(e => e.type !== 'income')
     .reduce((acc, e) => acc + Number(e.amount), 0);
+
+  const monthTotal = monthIncome - monthExpense;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#F4F7FB] to-white">
