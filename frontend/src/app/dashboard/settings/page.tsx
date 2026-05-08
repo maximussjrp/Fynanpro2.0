@@ -22,7 +22,6 @@ import {
   Sun,
   Globe,
   CreditCard,
-  Building2,
   Check,
   X,
   Trash2,
@@ -195,7 +194,7 @@ export default function SettingsPage() {
     setLoading(true);
     try {
       // await api.put('/tenants/me', tenantSettings);
-      toast.success('Configurações da empresa salvas!');
+      toast.success('Preferências salvas!');
     } catch (error) {
       toast.error('Erro ao salvar configurações');
     } finally {
@@ -257,7 +256,7 @@ export default function SettingsPage() {
     { id: 'profile', label: 'Perfil', icon: User },
     // ⚠️ SUSPENSO — Perfis Fiscais (e-Financeira) desativado até revisão. Não reabilitar sem aprovação do Max.
     // { id: 'fiscal-profiles', label: 'Perfis Fiscais', icon: Users, href: '/dashboard/settings/profiles' },
-    { id: 'tenant', label: 'Empresa', icon: Building2 },
+    { id: 'tenant', label: 'Preferências', icon: Globe },
     { id: 'billing', label: 'Plano e Cobrança', icon: CreditCard, href: '/dashboard/settings/billing' },
     { id: 'notifications', label: 'Notificações', icon: Bell },
     { id: 'security', label: 'Segurança', icon: Shield },
@@ -404,21 +403,21 @@ export default function SettingsPage() {
                 </div>
               )}
 
-              {/* Tab: Empresa/Tenant */}
+              {/* Tab: Preferências/Tenant */}
               {activeTab === 'tenant' && (
                 <div className="space-y-6">
-                  <h2 className="text-xl font-bold text-gray-800">Configurações da Empresa</h2>
+                  <h2 className="text-xl font-bold text-gray-800">Preferências do Sistema</h2>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Nome da Empresa</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Seu Nome / Apelido do Espaço</label>
                       <input
                         type="text"
                         value={tenantSettings.name}
                         onChange={(e) => setTenantSettings(prev => ({ ...prev, name: e.target.value }))}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8]"
-                        aria-label="Nome da empresa"
-                        placeholder="Nome da sua empresa"
+                        aria-label="Nome do espaço"
+                        placeholder="Ex: Finanças da Maria"
                       />
                     </div>
                     <div>
