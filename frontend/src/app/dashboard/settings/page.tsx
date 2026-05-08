@@ -35,6 +35,7 @@ import {
 interface UserSettings {
   fullName: string;
   email: string;
+  cpfCnpj: string;
   currentPassword: string;
   newPassword: string;
   confirmPassword: string;
@@ -73,6 +74,7 @@ export default function SettingsPage() {
   const [userSettings, setUserSettings] = useState<UserSettings>({
     fullName: user?.fullName || '',
     email: user?.email || '',
+    cpfCnpj: '',
     currentPassword: '',
     newPassword: '',
     confirmPassword: ''
@@ -109,11 +111,47 @@ export default function SettingsPage() {
     }
   }, [user, tenant]);
 
+  useEffect(() => {
+    api.get('/user-profiles').then((res) => {
+      const profiles: any[] = res.data?.data?.profiles || [];
+      const def = profiles.find((p: any) => p.isDefault) || profiles[0];
+      if (def?.document) {
+        const d = String(def.document).replace(/\D/g, '');
+        const fmt =
+          d.length === 14
+            ? d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5')
+            : d.length === 11
+            ? d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')
+            : def.document;
+        setUserSettings(prev => ({ ...prev, cpfCnpj: fmt }));
+      }
+    }).catch(() => {});
+  }, []);
+
   const handleSaveProfile = async () => {
     setLoading(true);
     try {
-      // Aqui seria a chamada à API para atualizar o perfil
-      // await api.put('/users/me', { fullName: userSettings.fullName });
+      const cleanDoc = userSettings.cpfCnpj.replace(/\D/g, '');
+      if (cleanDoc) {
+        // Busca perfil padrão e atualiza documento
+        const listRes = await api.get('/user-profiles');
+        const profiles: any[] = listRes.data?.data?.profiles || [];
+        const def = profiles.find((p: any) => p.isDefault) || profiles[0];
+        if (def) {
+          await api.put(`/user-profiles/${def.id}`, {
+            name: def.name,
+            document: cleanDoc,
+            documentType: cleanDoc.length === 14 ? 'PJ' : 'PF',
+          });
+        } else {
+          await api.post('/user-profiles', {
+            name: userSettings.fullName || user?.fullName || 'Meu Perfil',
+            document: cleanDoc,
+            documentType: cleanDoc.length === 14 ? 'PJ' : 'PF',
+            isDefault: true,
+          });
+        }
+      }
       toast.success('Perfil atualizado com sucesso!');
     } catch (error) {
       toast.error('Erro ao atualizar perfil');
@@ -321,6 +359,37 @@ export default function SettingsPage() {
                         placeholder="seu@email.com"
                       />
                       <p className="text-xs text-gray-400 mt-1">O e-mail não pode ser alterado</p>
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        CPF / CNPJ <span className="text-red-500">*</span>
+                        <span className="text-xs text-gray-400 font-normal ml-1">(obrigatório para pagamento)</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={userSettings.cpfCnpj}
+                        onChange={(e) => {
+                          const digits = e.target.value.replace(/\D/g, '').slice(0, 14);
+                          let fmt = digits;
+                          if (digits.length <= 11) {
+                            fmt = digits
+                              .replace(/(\d{3})(\d)/, '$1.$2')
+                              .replace(/(\d{3})(\d)/, '$1.$2')
+                              .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+                          } else {
+                            fmt = digits
+                              .replace(/(\d{2})(\d)/, '$1.$2')
+                              .replace(/(\d{3})(\d)/, '$1.$2')
+                              .replace(/(\d{3})(\d)/, '$1/$2')
+                              .replace(/(\d{4})(\d{1,2})$/, '$1-$2');
+                          }
+                          setUserSettings(prev => ({ ...prev, cpfCnpj: fmt }));
+                        }}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1F4FD8] focus:border-transparent"
+                        aria-label="CPF ou CNPJ"
+                        placeholder="000.000.000-00 ou 00.000.000/0001-00"
+                        maxLength={18}
+                      />
                     </div>
                   </div>
                   
