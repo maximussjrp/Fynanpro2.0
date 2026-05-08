@@ -19,6 +19,43 @@ interface Plan {
   limits: Record<string, any>;
 }
 
+type BillingCycle = 'monthly' | 'quarterly' | 'semiannual' | 'yearly';
+
+function normalizePlanId(planId?: string | null): string {
+  const normalized = String(planId || 'trial').toLowerCase();
+  const map: Record<string, string> = {
+    annual: 'yearly',
+    annually: 'yearly',
+    yearly: 'yearly',
+    semiannually: 'semiannual',
+    semiannual: 'semiannual',
+    quarterly: 'quarterly',
+    monthly: 'monthly',
+    month: 'monthly',
+  };
+
+  return map[normalized] ?? normalized;
+}
+
+function planLabel(planId: string): string {
+  const map: Record<string, string> = {
+    trial: 'Teste',
+    monthly: 'Mensal',
+    quarterly: 'Trimestral',
+    semiannual: 'Semestral',
+    yearly: 'Anual',
+  };
+
+  return map[planId] ?? planId;
+}
+
+function resolveBillingCycle(plan: Plan): BillingCycle {
+  const normalized = normalizePlanId(plan.period || plan.id);
+  return ['monthly', 'quarterly', 'semiannual', 'yearly'].includes(normalized)
+    ? (normalized as BillingCycle)
+    : 'monthly';
+}
+
 export default function PlansPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -65,13 +102,13 @@ export default function PlansPage() {
       try {
         const summary = await api.get('/subscription/billing-summary');
         if (summary.data?.success) {
-          setCurrentPlan(summary.data.data.plan);
+          setCurrentPlan(normalizePlanId(summary.data.data.plan));
         }
       } catch {
         try {
           const current = await api.get('/subscription/current');
           if (current.data.success) {
-            setCurrentPlan(current.data.data.currentPlan);
+            setCurrentPlan(normalizePlanId(current.data.data.currentPlan));
           }
         } catch {}
       }
@@ -82,7 +119,7 @@ export default function PlansPage() {
     }
   };
 
-  const handleSelectPlan = async (planId: string) => {
+  const handleSelectPlan = async (planId: string, billingCycle: BillingCycle) => {
     if (planId === 'trial' || planId === currentPlan) return;
 
     setSelectedPlan(planId);
@@ -91,11 +128,10 @@ export default function PlansPage() {
 
     try {
       // Checkout via Asaas (PIX por padrão).
-      // Se Asaas estiver desabilitado em prod (FF off), o backend retorna 500
-      // com mensagem clara — exibimos para o usuário.
+      // O ciclo precisa seguir o card escolhido para evitar cobrança errada.
       const response = await api.post('/subscription/checkout', {
         planId,
-        billingCycle: 'monthly',
+        billingCycle,
         billingType: 'PIX',
       });
 
@@ -179,7 +215,7 @@ export default function PlansPage() {
           <div className="mb-8 text-center space-y-4">
             <span className="inline-flex items-center px-4 py-2 bg-[#6C5CE7]/10 text-[#6C5CE7] rounded-full text-sm font-medium">
               <Crown className="w-4 h-4 mr-2" />
-              Plano atual: {plans.find(p => p.id === currentPlan)?.name || currentPlan}
+              Plano atual: {plans.find(p => p.id === currentPlan)?.name || planLabel(currentPlan)}
             </span>
             <div>
               <button
@@ -284,7 +320,7 @@ export default function PlansPage() {
 
                   {/* Botão */}
                   <button
-                    onClick={() => handleSelectPlan(plan.id)}
+                    onClick={() => handleSelectPlan(plan.id, resolveBillingCycle(plan))}
                     disabled={isCurrentPlan || processing}
                     className={`w-full py-3 rounded-xl font-semibold transition-all ${
                       isCurrentPlan

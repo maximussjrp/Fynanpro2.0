@@ -209,6 +209,37 @@ export const COMMERCIAL_PLANS = {
   },
 } as const;
 
+type CheckoutBillingCycle = 'monthly' | 'quarterly' | 'semiannual' | 'yearly';
+
+type CheckoutPlan =
+  | (typeof PLANS)[keyof typeof PLANS]
+  | (typeof COMMERCIAL_PLANS)[keyof typeof COMMERCIAL_PLANS];
+
+function getCheckoutPlan(planId: string): CheckoutPlan | undefined {
+  return (COMMERCIAL_PLANS as Record<string, CheckoutPlan>)[planId] || (PLANS as Record<string, CheckoutPlan>)[planId];
+}
+
+function getCheckoutValue(plan: CheckoutPlan, billingCycle: CheckoutBillingCycle): number {
+  if ('period' in plan) {
+    return plan.price;
+  }
+
+  return billingCycle === 'yearly' ? plan.priceYearly : plan.price;
+}
+
+function getAsaasCycle(billingCycle: CheckoutBillingCycle): 'MONTHLY' | 'QUARTERLY' | 'SEMIANNUALLY' | 'YEARLY' {
+  switch (billingCycle) {
+    case 'quarterly':
+      return 'QUARTERLY';
+    case 'semiannual':
+      return 'SEMIANNUALLY';
+    case 'yearly':
+      return 'YEARLY';
+    default:
+      return 'MONTHLY';
+  }
+}
+
 interface AsaasCustomer {
   id: string;
   name: string;
@@ -221,7 +252,7 @@ interface AsaasSubscription {
   customer: string;
   value: number;
   billingType: 'CREDIT_CARD' | 'BOLETO' | 'PIX';
-  cycle: 'MONTHLY' | 'YEARLY';
+  cycle: 'MONTHLY' | 'QUARTERLY' | 'SEMIANNUALLY' | 'YEARLY';
   status: 'ACTIVE' | 'INACTIVE' | 'EXPIRED' | 'OVERDUE';
 }
 
@@ -304,16 +335,16 @@ export const paymentService = {
     tenantId: string,
     userId: string,
     planId: string,
-    billingCycle: 'monthly' | 'yearly',
+    billingCycle: CheckoutBillingCycle,
     billingType: 'CREDIT_CARD' | 'BOLETO' | 'PIX' = 'CREDIT_CARD'
   ) {
-    const plan = PLANS[planId as keyof typeof PLANS];
+    const plan = getCheckoutPlan(planId);
     if (!plan) throw new Error('Plano não encontrado');
 
     const customer = await this.findOrCreateCustomer(tenantId, userId);
 
-    const value = billingCycle === 'yearly' ? plan.priceYearly : plan.price;
-    const cycle = billingCycle === 'yearly' ? 'YEARLY' : 'MONTHLY';
+    const value = getCheckoutValue(plan, billingCycle);
+    const cycle = getAsaasCycle(billingCycle);
 
     // Criar assinatura no Asaas
     const subscription = await asaasRequest('/subscriptions', 'POST', {
@@ -374,7 +405,7 @@ export const paymentService = {
     tenantId: string,
     userId: string,
     planId: string,
-    billingCycle: 'monthly' | 'yearly',
+    billingCycle: CheckoutBillingCycle,
     creditCard: {
       holderName: string;
       number: string;
@@ -391,13 +422,13 @@ export const paymentService = {
       phone: string;
     }
   ) {
-    const plan = PLANS[planId as keyof typeof PLANS];
+    const plan = getCheckoutPlan(planId);
     if (!plan) throw new Error('Plano não encontrado');
 
     const customer = await this.findOrCreateCustomer(tenantId, userId);
 
-    const value = billingCycle === 'yearly' ? plan.priceYearly : plan.price;
-    const cycle = billingCycle === 'yearly' ? 'YEARLY' : 'MONTHLY';
+    const value = getCheckoutValue(plan, billingCycle);
+    const cycle = getAsaasCycle(billingCycle);
 
     // Criar assinatura com cartão
     const subscription = await asaasRequest('/subscriptions', 'POST', {
@@ -524,7 +555,7 @@ export const paymentService = {
         data: {
           status: 'active',
           currentPeriodStart: new Date(),
-          currentPeriodEnd: this.calculatePeriodEnd((subscription.billingCycle || 'monthly') as 'monthly' | 'yearly'),
+          currentPeriodEnd: this.calculatePeriodEnd((subscription.billingCycle || 'monthly') as CheckoutBillingCycle),
         }
       });
 
@@ -677,12 +708,19 @@ export const paymentService = {
   /**
    * Calcular fim do período
    */
-  calculatePeriodEnd(cycle: 'monthly' | 'yearly'): Date {
+  calculatePeriodEnd(cycle: CheckoutBillingCycle): Date {
     const now = new Date();
-    if (cycle === 'yearly') {
-      return new Date(now.setFullYear(now.getFullYear() + 1));
+
+    switch (cycle) {
+      case 'quarterly':
+        return new Date(now.setMonth(now.getMonth() + 3));
+      case 'semiannual':
+        return new Date(now.setMonth(now.getMonth() + 6));
+      case 'yearly':
+        return new Date(now.setFullYear(now.getFullYear() + 1));
+      default:
+        return new Date(now.setMonth(now.getMonth() + 1));
     }
-    return new Date(now.setMonth(now.getMonth() + 1));
   },
 
   /**
