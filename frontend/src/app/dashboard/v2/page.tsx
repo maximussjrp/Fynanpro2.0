@@ -394,14 +394,7 @@ export default function DashboardV2Page() {
             </h1>
             <p className="text-sm v2-muted mt-1">Aqui está sua saúde financeira hoje.</p>
           </div>
-          <button
-            type="button"
-            onClick={() => router.push('/dashboard')}
-            className="text-xs v2-muted hover:text-[var(--v2-text-primary)] underline-offset-4 hover:underline"
-            title="Voltar para o dashboard clássico"
-          >
-            ← versão clássica
-          </button>
+
         </div>
       </header>
 
