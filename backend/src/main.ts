@@ -30,6 +30,8 @@ import adminConsultantsRoutes from './routes/admin-consultants';
 // Phase A1 — Asaas Foundation (behind feature flags `asaas.enabled` / `asaas.webhook.enabled`)
 import billingRoutes from './routes/billing';
 import webhooksRoutes from './routes/webhooks';
+// Public demo routes (no auth required)
+import publicDemoRoutes from './routes/public-demo';
 import { createDefaultCategories } from './utils/default-categories';
 import { env } from './config/env';
 import { swaggerSpec } from './config/swagger';
@@ -978,6 +980,9 @@ apiRouter.get('/transactions', async (req: Request, res: Response) => {
     });
   }
 });
+
+// Rotas públicas (sem autenticação)
+app.use('/api/v1/demo', publicDemoRoutes);
 
 app.use('/api/v1', apiRouter);
 
