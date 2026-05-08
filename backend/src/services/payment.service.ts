@@ -554,13 +554,20 @@ export const paymentService = {
       where: { asaasPaymentId: payment.id }
     });
 
-    // Buscar subscription pelo customer
+    // Buscar subscription pelo asaasSubscriptionId do pagamento
     const subscription = await prisma.subscription.findFirst({
-      where: { asaasCustomerId: payment.customer }
+      where: payment.subscription
+        ? { asaasSubscriptionId: payment.subscription }
+        : { tenantId: { not: '' } }, // fallback nunca ocorre mas satisfaz o tipo
     });
 
-    if (!subscription) {
+    if (!subscription && !payment.subscription) {
       log.warn('Subscription não encontrada para pagamento', { paymentId: payment.id });
+      return;
+    }
+
+    if (!subscription) {
+      log.warn('Subscription não encontrada para pagamento', { paymentId: payment.id, asaasSubscriptionId: payment.subscription });
       return;
     }
 
@@ -606,7 +613,7 @@ export const paymentService = {
         data: {
           status: 'active',
           currentPeriodStart: new Date(),
-          currentPeriodEnd: this.calculatePeriodEnd((subscription.billingCycle || 'monthly') as CheckoutBillingCycle),
+          currentPeriodEnd: this.calculatePeriodEnd((subscription.cycle || 'MONTHLY').toLowerCase() as CheckoutBillingCycle),
         }
       });
 
