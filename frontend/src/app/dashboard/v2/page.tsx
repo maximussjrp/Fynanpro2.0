@@ -15,7 +15,7 @@ import {
   Building2,
 } from 'lucide-react';
 import api from '@/lib/api';
-import { useAuth, useTenant } from '@/stores/auth';
+import { useAuth, useTenant, useUser } from '@/stores/auth';
 import { formatCurrency } from '@/lib/energyColors';
 import KpiCard from '@/components/dashboard-v2/KpiCard';
 import QuickCard from '@/components/dashboard-v2/QuickCard';
@@ -201,6 +201,7 @@ export default function DashboardV2Page() {
   const router = useRouter();
   const { isAuthenticated } = useAuth();
   const tenant = useTenant();
+  const user = useUser();
 
   const [loading, setLoading] = useState(true);
   const [currentMonth, setCurrentMonth] = useState<MonthSummary | null>(null);
@@ -381,7 +382,7 @@ export default function DashboardV2Page() {
 
   if (!isAuthenticated) return null;
 
-  const userName = tenant?.name?.split(' ')[0] ?? 'por aqui';
+  const userName = user?.fullName?.split(' ')[0] ?? tenant?.name?.split(' ')[0] ?? 'por aqui';
 
   return (
     <div className="utop-v2 min-h-screen p-4 md:p-6 lg:p-8">
