@@ -982,14 +982,14 @@ export default function ReportsPage() {
                               <text 
                                 x={x} 
                                 y={y} 
-                                fill="#0f172a" 
+                                fill="#F1F5F9" 
                                 textAnchor={x > cx ? 'start' : 'end'} 
                                 dominantBaseline="central" 
-                                fontSize={13} 
-                                fontWeight={600}
-                                style={{ fill: '#0f172a' }}
+                                fontSize={12} 
+                                fontWeight={700}
+                                style={{ fill: '#F1F5F9' }}
                               >
-                                {`${icon || ''} ${percentage?.toFixed(0) || 0}%`}
+                                {`${percentage?.toFixed(0) || 0}%`}
                               </text>
                             );
                           }}
