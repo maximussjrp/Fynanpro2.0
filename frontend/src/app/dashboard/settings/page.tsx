@@ -112,7 +112,7 @@ export default function SettingsPage() {
   }, [user, tenant]);
 
   useEffect(() => {
-    api.get('/user-profiles').then((res) => {
+    api.get('/profiles').then((res) => {
       const profiles: any[] = res.data?.data?.profiles || [];
       const def = profiles.find((p: any) => p.isDefault) || profiles[0];
       if (def?.document) {
@@ -134,17 +134,17 @@ export default function SettingsPage() {
       const cleanDoc = userSettings.cpfCnpj.replace(/\D/g, '');
       if (cleanDoc) {
         // Busca perfil padrão e atualiza documento
-        const listRes = await api.get('/user-profiles');
+        const listRes = await api.get('/profiles');
         const profiles: any[] = listRes.data?.data?.profiles || [];
         const def = profiles.find((p: any) => p.isDefault) || profiles[0];
         if (def) {
-          await api.put(`/user-profiles/${def.id}`, {
+          await api.put(`/profiles/${def.id}`, {
             name: def.name,
             document: cleanDoc,
             documentType: cleanDoc.length === 14 ? 'PJ' : 'PF',
           });
         } else {
-          await api.post('/user-profiles', {
+          await api.post('/profiles', {
             name: userSettings.fullName || user?.fullName || 'Meu Perfil',
             document: cleanDoc,
             documentType: cleanDoc.length === 14 ? 'PJ' : 'PF',
