@@ -400,24 +400,28 @@ export const paymentService = {
 
     // Salvar assinatura no banco
     await prisma.subscription.upsert({
-      where: { tenantId },
+      where: {
+        provider_asaasSubscriptionId: {
+          provider: 'asaas',
+          asaasSubscriptionId: subscription.id,
+        },
+      },
       create: {
         tenantId,
-        planId,
+        provider: 'asaas',
         plan: planId,
-        billingCycle,
+        cycle,
+        amountCents: Math.round(value * 100),
         status: 'pending',
-        asaasCustomerId: customer.id,
         asaasSubscriptionId: subscription.id,
         currentPeriodStart: new Date(),
         currentPeriodEnd: this.calculatePeriodEnd(billingCycle),
       },
       update: {
-        planId,
         plan: planId,
-        billingCycle,
+        cycle,
+        amountCents: Math.round(value * 100),
         status: 'pending',
-        asaasCustomerId: customer.id,
         asaasSubscriptionId: subscription.id,
         currentPeriodStart: new Date(),
         currentPeriodEnd: this.calculatePeriodEnd(billingCycle),
@@ -491,25 +495,30 @@ export const paymentService = {
     });
 
     // Salvar assinatura no banco
+    const subStatus = subscription.status === 'ACTIVE' ? 'active' : 'pending';
     await prisma.subscription.upsert({
-      where: { tenantId },
+      where: {
+        provider_asaasSubscriptionId: {
+          provider: 'asaas',
+          asaasSubscriptionId: subscription.id,
+        },
+      },
       create: {
         tenantId,
-        planId,
+        provider: 'asaas',
         plan: planId,
-        billingCycle,
-        status: subscription.status === 'ACTIVE' ? 'active' : 'pending',
-        asaasCustomerId: customer.id,
+        cycle,
+        amountCents: Math.round(value * 100),
+        status: subStatus,
         asaasSubscriptionId: subscription.id,
         currentPeriodStart: new Date(),
         currentPeriodEnd: this.calculatePeriodEnd(billingCycle),
       },
       update: {
-        planId,
         plan: planId,
-        billingCycle,
-        status: subscription.status === 'ACTIVE' ? 'active' : 'pending',
-        asaasCustomerId: customer.id,
+        cycle,
+        amountCents: Math.round(value * 100),
+        status: subStatus,
         asaasSubscriptionId: subscription.id,
         currentPeriodStart: new Date(),
         currentPeriodEnd: this.calculatePeriodEnd(billingCycle),
