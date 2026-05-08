@@ -16,6 +16,8 @@ interface CalendarEvent {
   status?: string;
 }
 
+const VISIBLE_CALENDAR_STATUSES = new Set(['pending', 'overdue']);
+
 export default function CalendarPage() {
   const router = useRouter();
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -58,10 +60,10 @@ export default function CalendarPage() {
         });
       }
 
-      // Ocorrências de recorrências (A Pagar) - Só mostrar pendentes
+      // Ocorrências de recorrências (A Pagar) - Só mostrar pendentes e atrasadas
       if (response.data.data?.recurringOccurrences) {
         response.data.data.recurringOccurrences
-          .filter((occ: any) => occ.status === 'pending') // ✅ Filtrar apenas pendentes
+          .filter((occ: any) => VISIBLE_CALENDAR_STATUSES.has(String(occ.status || '').toLowerCase()))
           .forEach((occ: any) => {
             processedEvents.push({
               id: occ.id,
@@ -104,7 +106,8 @@ export default function CalendarPage() {
 
     return events.filter(event => {
       const eventDate = new Date(event.date).toISOString().split('T')[0];
-      return eventDate === dateStr;
+      const normalizedStatus = String(event.status || '').toLowerCase();
+      return eventDate === dateStr && VISIBLE_CALENDAR_STATUSES.has(normalizedStatus);
     });
   };
 
