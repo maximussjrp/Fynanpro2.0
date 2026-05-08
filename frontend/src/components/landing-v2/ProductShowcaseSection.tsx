@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import Image from 'next/image';
 import { MessageCircle, Smartphone, Monitor } from 'lucide-react';
@@ -13,8 +13,8 @@ export default function ProductShowcaseSection() {
             Sincronizado em Todos os Dispositivos
           </h2>
           <p className="text-lg text-[#94A3B8] max-w-3xl mx-auto">
-            Do seu smartphone até o desktop — UTOP está sempre com você, oferecendo a mesma
-            experiência poderosa e intuitiva em qualquer lugar.
+            Do seu smartphone atÃ© o desktop â€” UTOP estÃ¡ sempre com vocÃª, oferecendo a mesma
+            experiÃªncia poderosa e intuitiva em qualquer lugar.
           </p>
         </div>
 
@@ -30,8 +30,8 @@ export default function ProductShowcaseSection() {
                   <MessageCircle className="w-5 h-5 text-blue-400" />
                 </div>
                 <div>
-                  <h3 className="text-xl font-bold text-[#F1F5F9]">Isis — Seu Guia IA</h3>
-                  <p className="text-sm text-[#64748B]">Conversação inteligente no bolso</p>
+                  <h3 className="text-xl font-bold text-[#F1F5F9]">Isis â€” Seu Guia IA</h3>
+                  <p className="text-sm text-[#64748B]">ConversaÃ§Ã£o inteligente no bolso</p>
                 </div>
               </div>
 
@@ -50,12 +50,12 @@ export default function ProductShowcaseSection() {
               </div>
 
               <div className="mt-8 space-y-3">
-                <p className="text-[#F1F5F9] font-medium">✨ Recursos</p>
+                <p className="text-[#F1F5F9] font-medium">âœ¨ Recursos</p>
                 <ul className="space-y-2 text-sm text-[#94A3B8]">
-                  <li>💬 Chat natural em português</li>
-                  <li>📊 Análise de gastos em tempo real</li>
-                  <li>💡 Recomendações personalizadas</li>
-                  <li>🎯 Metas e alertas inteligentes</li>
+                  <li>ðŸ’¬ Chat natural em portuguÃªs</li>
+                  <li>ðŸ“Š AnÃ¡lise de gastos em tempo real</li>
+                  <li>ðŸ’¡ RecomendaÃ§Ãµes personalizadas</li>
+                  <li>ðŸŽ¯ Metas e alertas inteligentes</li>
                 </ul>
               </div>
             </div>
@@ -79,7 +79,7 @@ export default function ProductShowcaseSection() {
               <div className="flex justify-center">
                 <div className="relative w-full">
                   <Image
-                    src="/images/dashboard-desktop-mobile-mockup.png"
+                    src="/images/dashboard-desktop-mobile.png"
                     alt="Dashboard desktop e mobile mockup"
                     width={600}
                     height={400}
@@ -90,12 +90,12 @@ export default function ProductShowcaseSection() {
               </div>
 
               <div className="mt-8 space-y-3">
-                <p className="text-[#F1F5F9] font-medium">🎛️ Funcionalidades</p>
+                <p className="text-[#F1F5F9] font-medium">ðŸŽ›ï¸ Funcionalidades</p>
                 <ul className="space-y-2 text-sm text-[#94A3B8]">
-                  <li>📈 Gráficos detalhados e insights</li>
-                  <li>🏦 Múltiplas contas sincronizadas</li>
-                  <li>🔄 Contas recorrentes automáticas</li>
-                  <li>💾 Sincronização em tempo real</li>
+                  <li>ðŸ“ˆ GrÃ¡ficos detalhados e insights</li>
+                  <li>ðŸ¦ MÃºltiplas contas sincronizadas</li>
+                  <li>ðŸ”„ Contas recorrentes automÃ¡ticas</li>
+                  <li>ðŸ’¾ SincronizaÃ§Ã£o em tempo real</li>
                 </ul>
               </div>
             </div>
@@ -105,14 +105,14 @@ export default function ProductShowcaseSection() {
         {/* Bottom CTA */}
         <div className="mt-20 text-center">
           <p className="text-[#94A3B8] mb-6 text-lg">
-            Pronto para ter controle total sobre suas finanças?
+            Pronto para ter controle total sobre suas finanÃ§as?
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <a
               href="/login?tab=register"
               className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-3 px-8 rounded-lg transition shadow-lg"
             >
-              Começar Agora
+              ComeÃ§ar Agora
             </a>
             <a
               href="#demo"
@@ -126,3 +126,4 @@ export default function ProductShowcaseSection() {
     </section>
   );
 }
+
