@@ -130,9 +130,16 @@ router.post('/checkout', authenticateToken, async (req: AuthRequest, res: Respon
     });
   } catch (error: any) {
     log.error('Erro ao criar checkout', { error, tenantId: req.tenantId });
-    res.status(500).json({
+
+    const errorMessage = error?.message || 'Erro ao criar checkout';
+    const missingDocument = /cpf\s*ou\s*cnpj/i.test(errorMessage);
+
+    res.status(missingDocument ? 422 : 500).json({
       success: false,
-      error: { code: 'CHECKOUT_ERROR', message: error.message || 'Erro ao criar checkout' }
+      error: {
+        code: missingDocument ? 'MISSING_CUSTOMER_DOCUMENT' : 'CHECKOUT_ERROR',
+        message: errorMessage,
+      }
     });
   }
 });

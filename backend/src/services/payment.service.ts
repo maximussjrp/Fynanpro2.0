@@ -270,6 +270,32 @@ interface AsaasPayment {
   pixCopiaECola?: string;
 }
 
+const MISSING_CUSTOMER_DOCUMENT_MESSAGE =
+  'Para criar esta cobrança é necessário preencher o CPF ou CNPJ do cliente.';
+
+function normalizeDocument(value?: string | null): string | null {
+  const digits = String(value || '').replace(/\D/g, '');
+  if (digits.length === 11 || digits.length === 14) {
+    return digits;
+  }
+  return null;
+}
+
+async function getTenantBillingDocument(tenantId: string): Promise<string | null> {
+  const profile = await prisma.userProfile.findFirst({
+    where: {
+      tenantId,
+      isActive: true,
+      deletedAt: null,
+      document: { not: null },
+    },
+    orderBy: [{ isDefault: 'desc' }, { updatedAt: 'desc' }],
+    select: { document: true },
+  });
+
+  return normalizeDocument(profile?.document);
+}
+
 async function asaasRequest(endpoint: string, method: string = 'GET', body?: any): Promise<any> {
   const response = await fetch(`${ASAAS_API_URL}${endpoint}`, {
     method,
@@ -302,6 +328,11 @@ export const paymentService = {
 
     if (!tenant) throw new Error('Tenant não encontrado');
 
+    const billingDocument = await getTenantBillingDocument(tenantId);
+    if (!billingDocument) {
+      throw new Error(MISSING_CUSTOMER_DOCUMENT_MESSAGE);
+    }
+
     // Verificar se já tem asaasCustomerId
     const subscription = await prisma.subscription.findFirst({
       where: { tenantId }
@@ -311,7 +342,17 @@ export const paymentService = {
       // Buscar cliente existente
       try {
         const customer = await asaasRequest(`/customers/${subscription.asaasCustomerId}`);
-        return customer;
+
+        // Alguns customers antigos foram criados sem cpfCnpj.
+        // Nesse caso, criamos um novo customer com documento válido.
+        if (normalizeDocument(customer?.cpfCnpj)) {
+          return customer;
+        }
+
+        log.warn('Cliente Asaas sem CPF/CNPJ, criando novo customer', {
+          tenantId,
+          asaasCustomerId: subscription.asaasCustomerId,
+        });
       } catch (e) {
         // Cliente não existe mais, criar novo
         log.warn('Cliente Asaas não encontrado, criando novo', { error: e });
@@ -322,6 +363,7 @@ export const paymentService = {
     const customer = await asaasRequest('/customers', 'POST', {
       name: tenant.owner.fullName,
       email: tenant.owner.email,
+      cpfCnpj: billingDocument,
       externalReference: tenantId,
     });
 
