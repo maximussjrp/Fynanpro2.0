@@ -5,44 +5,26 @@ import { ArrowRight } from 'lucide-react';
 
 export default function FinalCTASection() {
   return (
-    <section className="py-24 px-4 sm:px-6 bg-[#0D1425]">
-      <div className="max-w-6xl mx-auto">
-        <div
-          className="relative rounded-3xl p-12 sm:p-20 overflow-hidden text-center"
-          style={{
-            background: 'linear-gradient(135deg, rgba(16,185,129,0.10) 0%, rgba(59,130,246,0.06) 50%, rgba(139,92,246,0.08) 100%)',
-            border: '1px solid rgba(16,185,129,0.20)',
-            boxShadow: '0 1px 0 rgba(255,255,255,0.04) inset, 0 40px 100px rgba(0,0,0,0.5)',
-          }}
-        >
-          {/* Glow */}
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="w-[500px] h-[200px] bg-[#10B981]/10 rounded-full blur-[80px]" />
-          </div>
+    <section className="bg-[#0B1020] px-4 py-24 sm:px-6">
+      <div className="mx-auto max-w-6xl">
+        <div className="overflow-hidden rounded-[1.75rem] border border-emerald-300/25 bg-emerald-300/[0.07] p-8 text-center shadow-[0_30px_90px_rgba(0,0,0,0.42)] sm:p-14">
+          <p className="mb-5 text-xs font-bold uppercase tracking-[0.18em] text-emerald-300">
+            Comece hoje
+          </p>
+          <h2 className="mx-auto max-w-3xl text-3xl font-black leading-[1.08] tracking-tight text-white sm:text-5xl">
+            Pare de adivinhar sua vida financeira. Comece a enxergar.
+          </h2>
+          <p className="mx-auto mt-6 max-w-xl text-base leading-8 text-slate-300">
+            Organize seu mês, entenda seus gastos e tome decisões com mais segurança.
+          </p>
 
-          <div className="relative">
-            <p className="text-[#10B981] text-xs font-semibold uppercase tracking-widest mb-6">Comece hoje</p>
-
-            <h2 className="text-3xl sm:text-5xl font-extrabold text-[#F5F7FB] leading-[1.08] mb-4 tracking-tight">
-              Pare de adivinhar<br />sua vida financeira.
-            </h2>
-            <p className="text-3xl sm:text-5xl font-extrabold text-[#10B981] leading-[1.08] mb-8 tracking-tight">
-              Comece a enxergar.
-            </p>
-
-            <p className="text-[#64748B] text-base leading-relaxed mb-10 max-w-md mx-auto">
-              Organize seu mês, entenda seus gastos e tome decisões com mais segurança.
-            </p>
-
-            <Link
-              href="/login"
-              className="inline-flex items-center gap-2 text-white font-semibold px-10 py-4 rounded-2xl text-base transition-all hover:scale-[1.03]"
-              style={{ background: '#10B981', boxShadow: '0 0 40px rgba(16,185,129,0.30)' }}
-            >
-              Começar agora — grátis
-              <ArrowRight size={20} />
-            </Link>
-          </div>
+          <Link
+            href="/login"
+            className="mt-8 inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-400 px-7 text-sm font-extrabold text-slate-950 shadow-[0_18px_48px_rgba(16,185,129,0.24)] transition hover:bg-emerald-300"
+          >
+            Começar agora
+            <ArrowRight size={17} />
+          </Link>
         </div>
       </div>
     </section>

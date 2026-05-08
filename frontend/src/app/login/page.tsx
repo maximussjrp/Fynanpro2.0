@@ -3,16 +3,33 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
-import { Wallet, TrendingUp, PiggyBank, CreditCard, LogIn, UserPlus, Eye, EyeOff, Mail, Lock, User, CheckCircle, Shield, Smartphone, ArrowLeft } from 'lucide-react';
-import { useAuth } from '@/stores/auth';
 import Link from 'next/link';
+import {
+  ArrowLeft,
+  ArrowRight,
+  CheckCircle,
+  CreditCard,
+  Eye,
+  EyeOff,
+  Lock,
+  LogIn,
+  Mail,
+  PiggyBank,
+  Shield,
+  Smartphone,
+  TrendingUp,
+  User,
+  UserPlus,
+} from 'lucide-react';
+import { useAuth } from '@/stores/auth';
+import Logo from '@/components/Logo';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
 export default function LoginPage() {
   const router = useRouter();
   const { setAuth } = useAuth();
-  
+
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -23,24 +40,24 @@ export default function LoginPage() {
     password: '',
     confirmPassword: '',
     fullName: '',
-    phone: ''
+    phone: '',
   });
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showResendOption, setShowResendOption] = useState(false);
 
-  // Validação de senha
   const passwordValidation = {
     minLength: formData.password.length >= 8,
     hasUppercase: /[A-Z]/.test(formData.password),
     hasLowercase: /[a-z]/.test(formData.password),
     hasNumber: /[0-9]/.test(formData.password),
-    passwordsMatch: formData.password === formData.confirmPassword && formData.confirmPassword.length > 0
+    passwordsMatch: formData.password === formData.confirmPassword && formData.confirmPassword.length > 0,
   };
 
-  const isPasswordValid = passwordValidation.minLength && 
-    passwordValidation.hasUppercase && 
-    passwordValidation.hasLowercase && 
+  const isPasswordValid =
+    passwordValidation.minLength &&
+    passwordValidation.hasUppercase &&
+    passwordValidation.hasLowercase &&
     passwordValidation.hasNumber;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -48,15 +65,14 @@ export default function LoginPage() {
     setIsLoading(true);
     setMessage('');
 
-    // Validação adicional no cadastro
     if (!isLogin) {
       if (!isPasswordValid) {
-        setMessage('❌ A senha não atende aos requisitos mínimos');
+        setMessage('A senha não atende aos requisitos mínimos.');
         setIsLoading(false);
         return;
       }
       if (formData.password !== formData.confirmPassword) {
-        setMessage('❌ As senhas não coincidem');
+        setMessage('As senhas não coincidem.');
         setIsLoading(false);
         return;
       }
@@ -64,22 +80,21 @@ export default function LoginPage() {
 
     try {
       const endpoint = isLogin ? '/auth/login' : '/auth/register';
-      const payload = isLogin 
+      const payload = isLogin
         ? { email: formData.email, password: formData.password }
-        : { 
-            email: formData.email, 
+        : {
+            email: formData.email,
             password: formData.password,
             fullName: formData.fullName,
-            tenantName: formData.fullName.split(' ')[0] + ' Finance'
+            tenantName: `${formData.fullName.split(' ')[0]} Finance`,
           };
 
       const response = await axios.post(`${API_URL}${endpoint}`, payload);
 
       if (response.data.success) {
         if (isLogin) {
-          setMessage('✅ Login realizado com sucesso!');
-          
-          // Salvar no Zustand store
+          setMessage('Login realizado com sucesso.');
+
           if (response.data.data?.tokens?.accessToken) {
             setAuth(
               {
@@ -89,23 +104,20 @@ export default function LoginPage() {
               response.data.data.user,
               response.data.data.tenant
             );
-            
+
             setTimeout(() => {
               router.push('/dashboard');
-            }, 1500);
+            }, 900);
           }
         } else {
-          // Cadastro - mostrar mensagem de verificação
           setRegisteredEmail(formData.email);
           setShowVerificationMessage(true);
         }
       }
     } catch (error: any) {
-      console.error('Auth error:', error);
-      const errorMsg = error.response?.data?.error?.message || 'Erro ao processar requisição';
-      setMessage(`❌ ${errorMsg}`);
-      
-      // Se email já cadastrado ou não verificado, mostrar opção de reenviar
+      const errorMsg = error.response?.data?.error?.message || 'Erro ao processar requisição.';
+      setMessage(errorMsg);
+
       if (errorMsg.includes('já cadastrado') || errorMsg.includes('não verificado')) {
         setRegisteredEmail(formData.email);
         setShowResendOption(true);
@@ -121,409 +133,370 @@ export default function LoginPage() {
     setIsLoading(true);
     try {
       await axios.post(`${API_URL}/auth/resend-verification`, { email: registeredEmail });
-      setMessage('✅ Email de verificação reenviado!');
-    } catch (error) {
-      setMessage('❌ Erro ao reenviar email. Tente novamente.');
+      setMessage('Email de verificação reenviado.');
+      setShowResendOption(false);
+    } catch {
+      setMessage('Erro ao reenviar email. Tente novamente.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Tela de verificação de email após cadastro
   if (showVerificationMessage) {
     return (
-      <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center p-4">
-        <div className="bg-white rounded-3xl shadow-xl p-8 lg:p-12 w-full max-w-md text-center">
-          <div className="flex items-center justify-center gap-3 mb-8">
-            <div className="w-12 h-12 bg-gradient-to-br from-[#1A1A1A] to-[#2A2A2A] rounded-xl flex items-center justify-center border border-[#C9A962]">
-              <span className="text-[#C9A962] font-bold text-xl">U</span>
-            </div>
-            <h1 className="text-3xl font-bold text-[#0F172A]" style={{fontFamily: 'Poppins, sans-serif'}}>
-              UTOP
-            </h1>
-          </div>
-
-          <div className="w-20 h-20 mx-auto bg-[#F5F0E6] rounded-full flex items-center justify-center mb-6">
-            <Mail className="w-10 h-10 text-[#C9A962]" />
-          </div>
-
-          <h2 className="text-2xl font-bold text-[#0F172A] mb-4">Verifique seu email</h2>
-          
-          <p className="text-[#475569] mb-2">
-            Enviamos um link de verificação para:
-          </p>
-          <p className="text-[#C9A962] font-semibold mb-6">{registeredEmail}</p>
-          
-          <p className="text-sm text-[#475569] mb-6">
-            Clique no link do email para ativar sua conta e começar a usar o UTOP.
-          </p>
-
-          <div className="space-y-3">
-            <button
-              onClick={handleResendVerification}
-              disabled={isLoading}
-              className="w-full py-3 border-2 border-[#C9A962] text-[#1A1A1A] rounded-xl font-semibold hover:bg-[#F5F0E6] transition-colors disabled:opacity-50"
-            >
-              {isLoading ? 'Reenviando...' : 'Reenviar email'}
-            </button>
-            
-            <button
-              onClick={() => {
-                setShowVerificationMessage(false);
-                setIsLogin(true);
-                setFormData({ email: '', password: '', confirmPassword: '', fullName: '', phone: '' });
-              }}
-              className="w-full py-3 text-[#475569] hover:text-[#0F172A] font-medium"
-            >
-              Voltar para login
-            </button>
-          </div>
-
-          {message && (
-            <div className={`mt-4 p-3 rounded-xl text-sm ${
-              message.startsWith('✅') ? 'bg-[#DCFCE7] text-[#22C55E]' : 'bg-[#FEF2F2] text-[#EF4444]'
-            }`}>
-              {message}
-            </div>
-          )}
+      <div className="min-h-screen bg-[#070A12] px-4 py-8 text-white">
+        <div className="mx-auto flex max-w-6xl items-center justify-between">
+          <Link
+            href="/landing-v2"
+            className="inline-flex items-center gap-2 text-sm font-semibold text-slate-400 transition hover:text-white"
+          >
+            <ArrowLeft size={18} />
+            Voltar
+          </Link>
+          <Logo variant="horizontal-dark" height={42} />
         </div>
+
+        <main className="mx-auto grid min-h-[calc(100vh-96px)] max-w-md place-items-center">
+          <div className="w-full rounded-[1.75rem] border border-white/[0.08] bg-[#101827] p-8 text-center shadow-[0_30px_90px_rgba(0,0,0,0.45)]">
+            <div className="mx-auto mb-6 grid h-16 w-16 place-items-center rounded-full bg-emerald-400/10 text-emerald-300">
+              <Mail size={30} />
+            </div>
+            <h1 className="text-2xl font-black">Verifique seu email</h1>
+            <p className="mt-4 text-sm leading-7 text-slate-400">
+              Enviamos um link de verificação para <span className="font-bold text-emerald-300">{registeredEmail}</span>.
+            </p>
+            <p className="mt-2 text-sm leading-7 text-slate-400">
+              Clique no link para ativar sua conta e começar a usar o UTOP.
+            </p>
+
+            <div className="mt-8 space-y-3">
+              <button
+                onClick={handleResendVerification}
+                disabled={isLoading}
+                className="h-12 w-full rounded-xl bg-emerald-400 text-sm font-extrabold text-slate-950 transition hover:bg-emerald-300 disabled:opacity-60"
+              >
+                {isLoading ? 'Reenviando...' : 'Reenviar email'}
+              </button>
+              <button
+                onClick={() => {
+                  setShowVerificationMessage(false);
+                  setIsLogin(true);
+                  setFormData({ email: '', password: '', confirmPassword: '', fullName: '', phone: '' });
+                }}
+                className="h-12 w-full rounded-xl border border-white/[0.08] text-sm font-bold text-slate-300 transition hover:bg-white/[0.05] hover:text-white"
+              >
+                Voltar para login
+              </button>
+            </div>
+
+            {message && <p className="mt-5 text-sm text-slate-400">{message}</p>}
+          </div>
+        </main>
       </div>
     );
   }
 
+  const benefitCards = [
+    {
+      icon: TrendingUp,
+      title: 'Clareza total',
+      description: 'Veja entradas, gastos e vencimentos sem depender de planilhas.',
+    },
+    {
+      icon: PiggyBank,
+      title: 'Rotina simples',
+      description: 'Poucos minutos por dia para manter o financeiro no lugar.',
+    },
+    {
+      icon: CreditCard,
+      title: 'Decisão segura',
+      description: 'Saiba o que vence, quanto sobra e onde ajustar primeiro.',
+    },
+  ];
+
   return (
-    <div className="min-h-screen bg-[#F8FAFC] relative overflow-hidden flex items-center justify-center p-4">
-      {/* Background decorative elements */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-0 right-0 w-[800px] h-[800px] bg-[#1A1A1A] rounded-full opacity-5 blur-3xl -translate-y-1/2 translate-x-1/2"></div>
-        <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-[#C9A962] rounded-full opacity-5 blur-3xl translate-y-1/2 -translate-x-1/2"></div>
-        <div className="absolute top-1/2 left-1/2 w-[400px] h-[400px] bg-[#C9A962] rounded-full opacity-10 blur-3xl -translate-x-1/2 -translate-y-1/2"></div>
-      </div>
+    <div className="min-h-screen overflow-hidden bg-[#070A12] text-white">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_35%_0%,rgba(16,185,129,0.16),transparent_32%),linear-gradient(180deg,#0B1020_0%,#070A12_72%)]" />
 
-      <main className="relative w-full max-w-6xl mx-auto">
-        {/* Voltar para Home */}
-        <Link href="/" className="absolute top-0 left-0 flex items-center gap-2 text-[#475569] hover:text-[#0F172A] transition-colors mb-8">
-          <ArrowLeft className="w-5 h-5" />
-          <span className="font-medium">Voltar</span>
-        </Link>
+      <div className="relative mx-auto flex min-h-screen max-w-6xl flex-col px-4 py-6 sm:px-6">
+        <header className="flex items-center justify-between border-b border-white/[0.06] pb-5">
+          <Link
+            href="/landing-v2"
+            className="inline-flex h-10 items-center gap-2 rounded-xl px-2 text-sm font-semibold text-slate-400 transition hover:bg-white/[0.05] hover:text-white"
+          >
+            <ArrowLeft size={18} />
+            Voltar
+          </Link>
+          <Logo variant="horizontal-dark" height={44} />
+          <div className="hidden w-[72px] sm:block" />
+        </header>
 
-        <div className="grid lg:grid-cols-2 gap-12 items-center mt-12 lg:mt-0">
-          {/* Left side - Marketing UTOP */}
-          <div className="space-y-8 hidden lg:block">
-            <div>
-              {/* UTOP Logo */}
-              <div className="flex items-center gap-4 mb-8">
-                <div className="w-16 h-16 bg-gradient-to-br from-[#1A1A1A] to-[#2A2A2A] rounded-2xl flex items-center justify-center shadow-lg border-2 border-[#C9A962]">
-                  <span className="text-[#C9A962] font-bold text-3xl font-poppins">U</span>
-                </div>
-                <h1 className="text-5xl font-bold text-[#0F172A]" style={{fontFamily: 'Poppins, sans-serif'}}>
-                  UTOP
-                </h1>
-              </div>
-              <h2 className="text-3xl font-bold mb-4 leading-tight text-[#0F172A]" style={{fontFamily: 'Poppins, sans-serif'}}>
-                Seu dinheiro em <span className="text-[#C9A962]">equilíbrio.</span>
-              </h2>
-              <p className="text-lg text-[#475569] mb-8" style={{fontFamily: 'Inter, sans-serif'}}>
-                Organizar suas finanças pode ser simples, leve e previsível.
-              </p>
+        <main className="grid flex-1 items-center gap-10 py-10 lg:grid-cols-[1fr_0.86fr] lg:py-14">
+          <section className="max-w-xl">
+            <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3.5 py-2 text-xs font-bold uppercase tracking-[0.18em] text-emerald-300">
+              <Shield size={14} />
+              Acesso seguro ao UTOP
             </div>
 
-            <div className="space-y-4">
-              <div className="flex items-center gap-4 bg-white p-5 rounded-2xl shadow-sm border border-[#CBD5E1]/50">
-                <div className="bg-[#1A1A1A] p-3 rounded-xl flex-shrink-0">
-                  <TrendingUp className="w-5 h-5 text-[#C9A962]" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-[#0F172A] mb-1" style={{fontFamily: 'Inter, sans-serif'}}>Clareza Total</h3>
-                  <p className="text-sm text-[#475569]" style={{fontFamily: 'Inter, sans-serif'}}>Veja suas finanças com tranquilidade</p>
-                </div>
-              </div>
+            <h1 className="text-4xl font-black leading-[1.04] tracking-tight sm:text-5xl">
+              Entre para organizar seu dinheiro com clareza.
+            </h1>
+            <p className="mt-6 max-w-lg text-base leading-8 text-slate-300">
+              Continue de onde parou ou crie sua conta para enxergar gastos, dívidas e próximos
+              vencimentos em uma experiência simples.
+            </p>
 
-              <div className="flex items-center gap-4 bg-white p-5 rounded-2xl shadow-sm border border-[#CBD5E1]/50">
-                <div className="bg-[#C9A962] p-3 rounded-xl flex-shrink-0">
-                  <PiggyBank className="w-5 h-5 text-white" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-[#0F172A] mb-1" style={{fontFamily: 'Inter, sans-serif'}}>Sem Pressão</h3>
-                  <p className="text-sm text-[#475569]" style={{fontFamily: 'Inter, sans-serif'}}>Tudo sob controle, no seu ritmo</p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-4 bg-white p-5 rounded-2xl shadow-sm border border-[#CBD5E1]/50">
-                <div className="bg-gradient-to-br from-[#1A1A1A] to-[#2A2A2A] p-3 rounded-xl flex-shrink-0 border border-[#C9A962]">
-                  <CreditCard className="w-5 h-5 text-[#C9A962]" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-[#0F172A] mb-1" style={{fontFamily: 'Inter, sans-serif'}}>Progressivo</h3>
-                  <p className="text-sm text-[#475569]" style={{fontFamily: 'Inter, sans-serif'}}>Crescimento constante e inteligente</p>
-                </div>
-              </div>
+            <div className="mt-9 space-y-4">
+              {benefitCards.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <div key={item.title} className="rounded-2xl border border-white/[0.08] bg-[#101827]/90 p-5">
+                    <div className="flex gap-4">
+                      <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-emerald-400/10 text-emerald-300">
+                        <Icon size={20} />
+                      </div>
+                      <div>
+                        <h2 className="font-black text-white">{item.title}</h2>
+                        <p className="mt-1 text-sm leading-6 text-slate-400">{item.description}</p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          </div>
+          </section>
 
-          {/* Right side - Auth Form */}
-          <div className="bg-white rounded-3xl shadow-xl p-8 lg:p-10 w-full max-w-md mx-auto lg:mx-0 border border-[#CBD5E1]/30">
-            {/* Logo no formulário mobile */}
-            <div className="lg:hidden mb-8 text-center">
-              <div className="flex items-center justify-center gap-3 mb-2">
-                <div className="w-12 h-12 bg-gradient-to-br from-[#1A1A1A] to-[#2A2A2A] rounded-xl flex items-center justify-center border border-[#C9A962]">
-                  <span className="text-[#C9A962] font-bold text-xl font-poppins">U</span>
-                </div>
-                <h1 className="text-3xl font-bold text-[#0F172A]" style={{fontFamily: 'Poppins, sans-serif'}}>
-                  UTOP
-                </h1>
-              </div>
-              <p className="text-sm text-[#475569]">Seu dinheiro em equilíbrio</p>
-            </div>
-
-            <div className="mb-8">
-              <div className="flex bg-[#F8FAFC] rounded-xl p-1.5">
-                <button
-                  onClick={() => setIsLogin(true)}
-                  className={`flex-1 py-3 px-4 text-center font-semibold rounded-xl transition-all ${
-                    isLogin
-                      ? 'bg-white text-[#1A1A1A] shadow-md border border-[#C9A962]'
-                      : 'text-[#475569] hover:text-[#0F172A]'
-                  }`}
-                  style={{fontFamily: 'Inter, sans-serif'}}
-                >
-                  <LogIn className="w-5 h-5 inline mr-2" />
-                  Entrar
-                </button>
-                <button
-                  onClick={() => setIsLogin(false)}
-                  className={`flex-1 py-3 px-4 text-center font-semibold rounded-xl transition-all ${
-                    !isLogin
-                      ? 'bg-white text-[#1A1A1A] shadow-md border border-[#C9A962]'
-                      : 'text-[#475569] hover:text-[#0F172A]'
-                  }`}
-                  style={{fontFamily: 'Inter, sans-serif'}}
-                >
-                  <UserPlus className="w-5 h-5 inline mr-2" />
-                  Cadastrar
-                </button>
-              </div>
+          <section className="w-full rounded-[1.75rem] border border-white/[0.08] bg-[#101827] p-6 shadow-[0_30px_90px_rgba(0,0,0,0.48)] sm:p-8">
+            <div className="mb-7 grid grid-cols-2 rounded-2xl bg-white/[0.04] p-1.5">
+              <button
+                onClick={() => setIsLogin(true)}
+                className={`flex h-12 items-center justify-center gap-2 rounded-xl text-sm font-extrabold transition ${
+                  isLogin ? 'bg-emerald-400 text-slate-950' : 'text-slate-400 hover:text-white'
+                }`}
+                type="button"
+              >
+                <LogIn size={18} />
+                Entrar
+              </button>
+              <button
+                onClick={() => setIsLogin(false)}
+                className={`flex h-12 items-center justify-center gap-2 rounded-xl text-sm font-extrabold transition ${
+                  !isLogin ? 'bg-emerald-400 text-slate-950' : 'text-slate-400 hover:text-white'
+                }`}
+                type="button"
+              >
+                <UserPlus size={18} />
+                Cadastrar
+              </button>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               {!isLogin && (
                 <>
-                  {/* Nome Completo */}
-                  <div>
-                    <label className="block text-sm font-semibold text-[#0F172A] mb-2" style={{fontFamily: 'Inter, sans-serif'}}>
-                      Nome Completo
-                    </label>
-                    <div className="relative">
-                      <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#94A3B8]" />
-                      <input
-                        type="text"
-                        value={formData.fullName}
-                        onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                        className="w-full pl-12 pr-4 py-3.5 border-2 border-[#CBD5E1] rounded-xl focus:ring-2 focus:ring-[#C9A962] focus:border-[#C9A962] transition-all bg-[#F8FAFC] text-[#0F172A] placeholder:text-[#94A3B8]"
-                        style={{fontFamily: 'Inter, sans-serif'}}
-                        placeholder="Seu nome completo"
-                        required={!isLogin}
-                      />
-                    </div>
-                  </div>
+                  <Field label="Nome completo" icon={User}>
+                    <input
+                      type="text"
+                      value={formData.fullName}
+                      onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+                      className="auth-input"
+                      placeholder="Seu nome completo"
+                      required
+                    />
+                  </Field>
 
-                  {/* Telefone (opcional) */}
-                  <div>
-                    <label className="block text-sm font-semibold text-[#0F172A] mb-2" style={{fontFamily: 'Inter, sans-serif'}}>
-                      Telefone <span className="text-[#94A3B8] font-normal">(opcional)</span>
-                    </label>
-                    <div className="relative">
-                      <Smartphone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#94A3B8]" />
-                      <input
-                        type="tel"
-                        value={formData.phone}
-                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                        className="w-full pl-12 pr-4 py-3.5 border-2 border-[#CBD5E1] rounded-xl focus:ring-2 focus:ring-[#C9A962] focus:border-[#C9A962] transition-all bg-[#F8FAFC] text-[#0F172A] placeholder:text-[#94A3B8]"
-                        style={{fontFamily: 'Inter, sans-serif'}}
-                        placeholder="(11) 99999-9999"
-                      />
-                    </div>
-                  </div>
+                  <Field label="Telefone" detail="opcional" icon={Smartphone}>
+                    <input
+                      type="tel"
+                      value={formData.phone}
+                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                      className="auth-input"
+                      placeholder="(11) 99999-9999"
+                    />
+                  </Field>
                 </>
               )}
 
-              {/* Email */}
-              <div>
-                <label className="block text-sm font-semibold text-[#0F172A] mb-2" style={{fontFamily: 'Inter, sans-serif'}}>
-                  Email
-                </label>
-                <div className="relative">
-                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#94A3B8]" />
-                  <input
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full pl-12 pr-4 py-3.5 border-2 border-[#CBD5E1] rounded-xl focus:ring-2 focus:ring-[#C9A962] focus:border-[#C9A962] transition-all bg-[#F8FAFC] text-[#0F172A] placeholder:text-[#94A3B8]"
-                    style={{fontFamily: 'Inter, sans-serif'}}
-                    placeholder="seu@email.com"
-                    required
-                  />
-                </div>
-              </div>
+              <Field label="Email" icon={Mail}>
+                <input
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  className="auth-input"
+                  placeholder="seu@email.com"
+                  required
+                />
+              </Field>
 
-              {/* Senha */}
-              <div>
-                <label className="block text-sm font-semibold text-[#0F172A] mb-2" style={{fontFamily: 'Inter, sans-serif'}}>
-                  Senha
-                </label>
-                <div className="relative">
-                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#94A3B8]" />
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    className="w-full pl-12 pr-12 py-3.5 border-2 border-[#CBD5E1] rounded-xl focus:ring-2 focus:ring-[#C9A962] focus:border-[#C9A962] transition-all bg-[#F8FAFC] text-[#0F172A] placeholder:text-[#94A3B8]"
-                    style={{fontFamily: 'Inter, sans-serif'}}
-                    placeholder="••••••••"
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#475569]"
-                  >
-                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                  </button>
-                </div>
-              </div>
+              <Field label="Senha" icon={Lock}>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  className="auth-input pr-12"
+                  placeholder="••••••••"
+                  required
+                />
+                <PasswordToggle show={showPassword} onClick={() => setShowPassword(!showPassword)} />
+              </Field>
 
-              {/* Confirmar Senha (apenas no cadastro) */}
               {!isLogin && (
                 <>
-                  <div>
-                    <label className="block text-sm font-semibold text-[#0F172A] mb-2" style={{fontFamily: 'Inter, sans-serif'}}>
-                      Confirmar Senha
-                    </label>
-                    <div className="relative">
-                      <Shield className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#94A3B8]" />
-                      <input
-                        type={showConfirmPassword ? 'text' : 'password'}
-                        value={formData.confirmPassword}
-                        onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                        className={`w-full pl-12 pr-12 py-3.5 border-2 rounded-xl focus:ring-2 transition-all bg-[#F8FAFC] text-[#0F172A] placeholder:text-[#94A3B8] ${
-                          formData.confirmPassword.length > 0
-                            ? passwordValidation.passwordsMatch
-                              ? 'border-[#2563EB] focus:border-[#2563EB] focus:ring-[#2563EB]'
-                              : 'border-[#E11D48] focus:border-[#E11D48] focus:ring-[#E11D48]'
-                            : 'border-[#CBD5E1] focus:border-[#C9A962] focus:ring-[#C9A962]'
-                        }`}
-                        style={{fontFamily: 'Inter, sans-serif'}}
-                        placeholder="••••••••"
-                        required={!isLogin}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                        className="absolute right-4 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#475569]"
-                      >
-                        {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                      </button>
-                    </div>
-                  </div>
+                  <Field label="Confirmar senha" icon={Shield}>
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      value={formData.confirmPassword}
+                      onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                      className="auth-input pr-12"
+                      placeholder="••••••••"
+                      required
+                    />
+                    <PasswordToggle
+                      show={showConfirmPassword}
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    />
+                  </Field>
 
-                  {/* Requisitos da Senha */}
-                  <div className="bg-[#F8FAFC] rounded-xl p-4 space-y-2">
-                    <p className="text-xs font-semibold text-[#475569] mb-2">Requisitos da senha:</p>
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      <div className={`flex items-center gap-2 ${passwordValidation.minLength ? 'text-[#2563EB]' : 'text-[#94A3B8]'}`}>
-                        <CheckCircle className="w-4 h-4" />
-                        <span>8+ caracteres</span>
-                      </div>
-                      <div className={`flex items-center gap-2 ${passwordValidation.hasUppercase ? 'text-[#2563EB]' : 'text-[#94A3B8]'}`}>
-                        <CheckCircle className="w-4 h-4" />
-                        <span>Letra maiúscula</span>
-                      </div>
-                      <div className={`flex items-center gap-2 ${passwordValidation.hasLowercase ? 'text-[#2563EB]' : 'text-[#94A3B8]'}`}>
-                        <CheckCircle className="w-4 h-4" />
-                        <span>Letra minúscula</span>
-                      </div>
-                      <div className={`flex items-center gap-2 ${passwordValidation.hasNumber ? 'text-[#2563EB]' : 'text-[#94A3B8]'}`}>
-                        <CheckCircle className="w-4 h-4" />
-                        <span>Número</span>
-                      </div>
+                  <div className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-4">
+                    <p className="mb-3 text-xs font-bold text-slate-300">Requisitos da senha</p>
+                    <div className="grid gap-2 text-xs text-slate-400 sm:grid-cols-2">
+                      <Requirement ok={passwordValidation.minLength} label="8+ caracteres" />
+                      <Requirement ok={passwordValidation.hasUppercase} label="Letra maiúscula" />
+                      <Requirement ok={passwordValidation.hasLowercase} label="Letra minúscula" />
+                      <Requirement ok={passwordValidation.hasNumber} label="Número" />
                     </div>
                   </div>
                 </>
               )}
 
               {message && (
-                <div className={`p-4 rounded-xl text-sm font-medium ${
-                  message.startsWith('✅')
-                    ? 'bg-[#DBEAFE] text-[#2563EB] border-2 border-[#2563EB]'
-                    : 'bg-[#FFF1F2] text-[#E11D48] border-2 border-[#E11D48]'
-                }`} style={{fontFamily: 'Inter, sans-serif'}}>
+                <div
+                  className={`rounded-2xl border p-4 text-sm font-semibold ${
+                    message.toLowerCase().includes('sucesso') || message.toLowerCase().includes('reenviado')
+                      ? 'border-emerald-300/25 bg-emerald-300/10 text-emerald-300'
+                      : 'border-rose-300/25 bg-rose-300/10 text-rose-200'
+                  }`}
+                >
                   {message}
                 </div>
               )}
 
-              {/* Botão de reenviar verificação quando email já cadastrado */}
               {showResendOption && (
                 <button
                   type="button"
-                  onClick={async () => {
-                    setIsLoading(true);
-                    try {
-                      await axios.post(`${API_URL}/auth/resend-verification`, { email: registeredEmail });
-                      setMessage('✅ Email de verificação reenviado! Verifique sua caixa de entrada.');
-                      setShowResendOption(false);
-                    } catch (error) {
-                      setMessage('❌ Erro ao reenviar email. Tente novamente.');
-                    } finally {
-                      setIsLoading(false);
-                    }
-                  }}
+                  onClick={handleResendVerification}
                   disabled={isLoading}
-                  className="w-full py-3 border-2 border-[#C9A962] text-[#1A1A1A] rounded-xl font-semibold hover:bg-[#F5F0E6] transition-colors disabled:opacity-50"
+                  className="h-12 w-full rounded-xl border border-emerald-300/25 text-sm font-bold text-emerald-300 transition hover:bg-emerald-300/10 disabled:opacity-60"
                 >
-                  {isLoading ? 'Reenviando...' : '📧 Reenviar email de verificação'}
+                  {isLoading ? 'Reenviando...' : 'Reenviar email de verificação'}
                 </button>
               )}
 
               <button
                 type="submit"
                 disabled={isLoading || (!isLogin && (!isPasswordValid || !passwordValidation.passwordsMatch))}
-                className="w-full bg-gradient-to-r from-[#1A1A1A] to-[#2A2A2A] hover:from-[#2A2A2A] hover:to-[#1A1A1A] text-[#C9A962] font-bold py-4 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 border border-[#C9A962]"
-                style={{fontFamily: 'Inter, sans-serif'}}
+                className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald-400 text-sm font-extrabold text-slate-950 shadow-[0_18px_48px_rgba(16,185,129,0.24)] transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {isLoading ? 'Processando...' : (isLogin ? 'Entrar' : 'Criar Conta')}
+                {isLoading ? 'Processando...' : isLogin ? 'Entrar' : 'Criar conta'}
+                {!isLoading && <ArrowRight size={17} />}
               </button>
             </form>
 
             {isLogin && (
               <div className="mt-6 text-center">
-                <Link href="/forgot-password" className="text-sm font-medium text-[#C9A962] hover:text-[#B8983D] hover:underline" style={{fontFamily: 'Inter, sans-serif'}}>
+                <Link href="/forgot-password" className="text-sm font-semibold text-emerald-300 hover:text-emerald-200">
                   Esqueceu sua senha?
                 </Link>
               </div>
             )}
 
             {!isLogin && (
-              <p className="mt-6 text-center text-xs text-[#94A3B8]">
+              <p className="mt-6 text-center text-xs leading-6 text-slate-500">
                 Ao criar sua conta, você concorda com nossos{' '}
-                <a href="/termos" className="text-[#C9A962] hover:underline">Termos de Uso</a>
-                {' '}e{' '}
-                <a href="/privacidade" className="text-[#C9A962] hover:underline">Política de Privacidade</a>
+                <a href="/termos" className="text-emerald-300 hover:underline">
+                  Termos de Uso
+                </a>{' '}
+                e{' '}
+                <a href="/privacidade" className="text-emerald-300 hover:underline">
+                  Política de Privacidade
+                </a>
+                .
               </p>
             )}
-          </div>
-        </div>
+          </section>
+        </main>
 
-        {/* Footer */}
-        <footer className="mt-8 text-center text-[#475569] text-xs" style={{fontFamily: 'Inter, sans-serif'}}>
-          <p>
-            © 2026 UTOP — Seu dinheiro em equilíbrio<br />
-            <span className="inline-flex items-center gap-1 mt-1">
-              <span className="w-1.5 h-1.5 bg-[#C9A962] rounded-full animate-pulse"></span>
-              Conectado
-            </span>
-          </p>
+        <footer className="pb-2 text-center text-xs text-slate-600">
+          © 2026 UTOP. Seu dinheiro em equilíbrio.
         </footer>
-      </main>
+      </div>
+
+      <style jsx global>{`
+        .auth-input {
+          width: 100%;
+          height: 52px;
+          border-radius: 14px;
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          background: rgba(255, 255, 255, 0.045);
+          padding: 0 16px 0 46px;
+          color: #f8fafc;
+          outline: none;
+          transition: border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+        }
+        .auth-input::placeholder {
+          color: #64748b;
+        }
+        .auth-input:focus {
+          border-color: rgba(110, 231, 183, 0.5);
+          background: rgba(255, 255, 255, 0.065);
+          box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.12);
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function Field({
+  label,
+  detail,
+  icon: Icon,
+  children,
+}: {
+  label: string;
+  detail?: string;
+  icon: React.ElementType;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-sm font-bold text-slate-200">
+        {label} {detail && <span className="font-medium text-slate-500">({detail})</span>}
+      </span>
+      <span className="relative block">
+        <Icon className="pointer-events-none absolute left-4 top-1/2 z-10 h-5 w-5 -translate-y-1/2 text-slate-500" />
+        {children}
+      </span>
+    </label>
+  );
+}
+
+function PasswordToggle({ show, onClick }: { show: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="absolute right-4 top-1/2 z-10 -translate-y-1/2 text-slate-500 transition hover:text-slate-200"
+      aria-label={show ? 'Ocultar senha' : 'Mostrar senha'}
+    >
+      {show ? <EyeOff size={19} /> : <Eye size={19} />}
+    </button>
+  );
+}
+
+function Requirement({ ok, label }: { ok: boolean; label: string }) {
+  return (
+    <div className={`flex items-center gap-2 ${ok ? 'text-emerald-300' : 'text-slate-500'}`}>
+      <CheckCircle size={15} />
+      <span>{label}</span>
     </div>
   );
 }

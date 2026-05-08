@@ -6,55 +6,56 @@ import { ChevronDown } from 'lucide-react';
 const faqs = [
   {
     q: 'Preciso entender de finanças para usar?',
-    a: 'Não. A ideia é justamente simplificar sua rotina financeira. O UTOP guia você passo a passo.',
-  },
-  {
-    q: 'O UTOP substitui uma consultoria financeira?',
-    a: 'Ele ajuda você a organizar e visualizar seus dados. Em campanhas específicas, pode haver acompanhamento adicional.',
+    a: 'Não. A ideia é simplificar sua rotina financeira. O UTOP organiza as informações para você entender o mês com clareza.',
   },
   {
     q: 'Serve para quem está endividado?',
-    a: 'Sim. Inclusive, o primeiro passo para sair das dívidas é enxergar com clareza o tamanho e a ordem dos compromissos.',
+    a: 'Sim. O primeiro passo para sair das dívidas é enxergar valores, vencimentos e prioridades sem confusão.',
+  },
+  {
+    q: 'Posso usar no celular?',
+    a: 'Sim. A experiência foi pensada para consulta rápida no celular e planejamento mais completo no computador.',
   },
   {
     q: 'Posso começar pelo mensal?',
-    a: 'Sim. Mas o trimestral é mais indicado para quem quer criar rotina e ter tempo real para sentir evolução.',
+    a: 'Sim. O trimestral é mais indicado para criar rotina, mas você pode escolher o plano que fizer mais sentido.',
   },
   {
     q: 'Tem plano anual?',
-    a: 'Sim. O anual é o plano com maior economia — R$ 597,00 por ano.',
+    a: 'Sim. O anual é o plano com maior economia para quem quer manter o controle financeiro no longo prazo.',
   },
 ];
 
 export default function FAQSection() {
-  const [open, setOpen] = useState<number | null>(null);
+  const [open, setOpen] = useState<number | null>(0);
 
   return (
-    <section id="faq" className="py-28 px-4 bg-[#0B1020]">
-      <div className="max-w-2xl mx-auto">
-        <div className="text-center mb-12">
-          <p className="text-[#10B981] text-xs font-semibold uppercase tracking-widest mb-5">Dúvidas frequentes</p>
-          <h2 className="text-3xl font-extrabold text-[#F5F7FB] tracking-tight">Perguntas e respostas</h2>
+    <section id="faq" className="bg-[#070A12] px-4 py-24 sm:px-6">
+      <div className="mx-auto grid max-w-6xl gap-10 lg:grid-cols-[0.8fr_1.2fr]">
+        <div>
+          <p className="mb-5 text-xs font-bold uppercase tracking-[0.18em] text-emerald-300">
+            Dúvidas frequentes
+          </p>
+          <h2 className="text-3xl font-black leading-[1.08] tracking-tight text-white sm:text-4xl">
+            Respostas diretas antes de você começar.
+          </h2>
         </div>
 
-        <div className="flex flex-col gap-3">
-          {faqs.map((faq, i) => (
-            <div
-              key={i}
-              className="rounded-2xl overflow-hidden" style={{background:'#151B2E',border:'1px solid rgba(255,255,255,0.06)'}}
-            >
+        <div className="space-y-3">
+          {faqs.map((faq, index) => (
+            <div key={faq.q} className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#101827]">
               <button
-                onClick={() => setOpen(open === i ? null : i)}
-                className="w-full flex items-center justify-between px-6 py-4 text-left gap-4"
+                onClick={() => setOpen(open === index ? null : index)}
+                className="flex w-full items-center justify-between gap-4 px-6 py-5 text-left"
               >
-                <span className="text-white font-medium text-sm">{faq.q}</span>
+                <span className="text-sm font-black text-white">{faq.q}</span>
                 <ChevronDown
                   size={18}
-                  className={`text-[#64748B] shrink-0 transition-transform ${open === i ? 'rotate-180' : ''}`}
+                  className={`shrink-0 text-emerald-300 transition-transform ${open === index ? 'rotate-180' : ''}`}
                 />
               </button>
-              {open === i && (
-                <div className="px-6 pb-5 text-[#94A3B8] text-sm leading-relaxed border-t border-white/5 pt-4">
+              {open === index && (
+                <div className="border-t border-white/[0.06] px-6 py-5 text-sm leading-7 text-slate-400">
                   {faq.a}
                 </div>
               )}

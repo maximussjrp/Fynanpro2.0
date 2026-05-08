@@ -1,7 +1,6 @@
 'use client';
 
 import HeroSection from '@/components/landing-v2/HeroSection';
-import PainSection from '@/components/landing-v2/PainSection';
 import MethodSection from '@/components/landing-v2/MethodSection';
 import FeaturesSection from '@/components/landing-v2/FeaturesSection';
 import AudienceSection from '@/components/landing-v2/AudienceSection';
@@ -21,7 +20,6 @@ export default function LandingV2Page() {
       <LandingNav />
       <main>
         <HeroSection />
-        <PainSection />
         <MethodSection />
         <FeaturesSection />
         <AudienceSection />

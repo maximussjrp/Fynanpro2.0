@@ -125,12 +125,7 @@ class EmailService {
           <!-- Logo -->
           <tr>
             <td align="center" style="padding-bottom: 30px;">
-              <div style="display: inline-flex; align-items: center; gap: 12px;">
-                <div style="width: 48px; height: 48px; background: linear-gradient(135deg, #1F4FD8, #2ECC9A); border-radius: 12px; display: flex; align-items: center; justify-content: center;">
-                  <span style="color: white; font-size: 24px; font-weight: bold;">U</span>
-                </div>
-                <span style="font-size: 28px; font-weight: bold; color: #0F172A;">UTOP</span>
-              </div>
+              <img src="${this.baseUrl}/logo-nova-v2.png" alt="UTOP" width="140" style="display:block;width:140px;height:auto;margin:0 auto;">
             </td>
           </tr>
           
@@ -218,12 +213,7 @@ class EmailService {
           <!-- Logo -->
           <tr>
             <td align="center" style="padding-bottom: 30px;">
-              <div style="display: inline-flex; align-items: center; gap: 12px;">
-                <div style="width: 48px; height: 48px; background: linear-gradient(135deg, #1F4FD8, #2ECC9A); border-radius: 12px; display: flex; align-items: center; justify-content: center;">
-                  <span style="color: white; font-size: 24px; font-weight: bold;">U</span>
-                </div>
-                <span style="font-size: 28px; font-weight: bold; color: #0F172A;">UTOP</span>
-              </div>
+              <img src="${this.baseUrl}/logo-nova-v2.png" alt="UTOP" width="140" style="display:block;width:140px;height:auto;margin:0 auto;">
             </td>
           </tr>
           
@@ -257,7 +247,7 @@ class EmailService {
               <!-- Botão -->
               <div style="text-align: center;">
                 <a href="${data.loginLink}" 
-                   style="display: inline-block; padding: 16px 48px; background: linear-gradient(135deg, #1F4FD8, #2ECC9A); color: white; text-decoration: none; border-radius: 12px; font-weight: 600; font-size: 16px;">
+                   style="display: inline-block; padding: 16px 48px; background: linear-gradient(135deg, #6EE7B7, #059669); color: white; text-decoration: none; border-radius: 12px; font-weight: 600; font-size: 16px;">
                   Acessar minha conta
                 </a>
               </div>
@@ -308,12 +298,7 @@ class EmailService {
           <!-- Logo -->
           <tr>
             <td align="center" style="padding-bottom: 30px;">
-              <div style="display: inline-flex; align-items: center; gap: 12px;">
-                <div style="width: 48px; height: 48px; background: linear-gradient(135deg, #1F4FD8, #2ECC9A); border-radius: 12px; display: flex; align-items: center; justify-content: center;">
-                  <span style="color: white; font-size: 24px; font-weight: bold;">U</span>
-                </div>
-                <span style="font-size: 28px; font-weight: bold; color: #0F172A;">UTOP</span>
-              </div>
+              <img src="${this.baseUrl}/logo-nova-v2.png" alt="UTOP" width="140" style="display:block;width:140px;height:auto;margin:0 auto;">
             </td>
           </tr>
           
@@ -336,7 +321,7 @@ class EmailService {
               <!-- Botão -->
               <div style="text-align: center; margin-bottom: 30px;">
                 <a href="${data.resetLink}" 
-                   style="display: inline-block; padding: 16px 48px; background: linear-gradient(135deg, #1F4FD8, #2ECC9A); color: white; text-decoration: none; border-radius: 12px; font-weight: 600; font-size: 16px;">
+                   style="display: inline-block; padding: 16px 48px; background: linear-gradient(135deg, #6EE7B7, #059669); color: white; text-decoration: none; border-radius: 12px; font-weight: 600; font-size: 16px;">
                   Redefinir senha
                 </a>
               </div>
@@ -415,12 +400,7 @@ class EmailService {
         <table role="presentation" style="width:100%;max-width:520px;border-collapse:collapse;">
           <tr>
             <td align="center" style="padding-bottom:30px;">
-              <div style="display:inline-flex;align-items:center;gap:12px;">
-                <div style="width:48px;height:48px;background:linear-gradient(135deg,#1F4FD8,#2ECC9A);border-radius:12px;display:flex;align-items:center;justify-content:center;">
-                  <span style="color:white;font-size:24px;font-weight:bold;">U</span>
-                </div>
-                <span style="font-size:28px;font-weight:bold;color:#0F172A;">UTOP</span>
-              </div>
+              <img src="${this.baseUrl}/logo-nova-v2.png" alt="UTOP" width="140" style="display:block;width:140px;height:auto;margin:0 auto;">
             </td>
           </tr>
           <tr>
@@ -438,7 +418,7 @@ class EmailService {
               </p>
               <div style="text-align:center;margin:30px 0;">
                 <a href="${data.upgradeLink}"
-                   style="display:inline-block;padding:16px 40px;background:linear-gradient(135deg,#1F4FD8,#2ECC9A);color:white;text-decoration:none;border-radius:12px;font-weight:600;font-size:16px;">
+                   style="display:inline-block;padding:16px 40px;background:linear-gradient(135deg,#6EE7B7,#059669);color:white;text-decoration:none;border-radius:12px;font-weight:600;font-size:16px;">
                   Ver planos e ativar
                 </a>
               </div>
@@ -479,3 +459,4 @@ class EmailService {
 }
 
 export const emailService = new EmailService();
+

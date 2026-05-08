@@ -6,6 +6,7 @@ import { useAuth } from '@/stores/auth';
 import Sidebar from '@/components/Sidebar';
 import DashboardHeader from '@/components/DashboardHeader';
 import ChatbotWidget from '@/components/ChatbotWidget';
+import Logo from '@/components/Logo';
 import { Menu } from 'lucide-react';
 
 export default function DashboardLayout({
@@ -100,7 +101,7 @@ export default function DashboardLayout({
           >
             <Menu className="w-6 h-6" />
           </button>
-          <span className="text-lg font-semibold" style={{ color: 'var(--v2-text-primary)' }}>UTOP</span>
+          <Logo variant="horizontal-dark" height={32} />
         </div>
 
         {/* Desktop Header */}

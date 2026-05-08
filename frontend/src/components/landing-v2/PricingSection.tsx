@@ -1,99 +1,92 @@
 'use client';
 
 import Link from 'next/link';
-import { Check } from 'lucide-react';
+import { Check, Star } from 'lucide-react';
 
-const secondary = [
+const plans = [
   { name: 'Mensal', price: 'R$ 79,90', period: '/mês', note: 'Para começar sem compromisso' },
   { name: 'Semestral', price: 'R$ 357,00', period: '/semestre', note: 'Mais economia' },
   { name: 'Anual', price: 'R$ 597,00', period: '/ano', note: 'Maior economia' },
 ];
 
+const benefits = [
+  'Acesso completo a todas as funcionalidades',
+  'Dashboard, categorias, contas e vencimentos',
+  'Assistente Isis para consultas rápidas',
+  'Equivale a R$ 65,67/mês no trimestral',
+];
+
 export default function PricingSection() {
   return (
-    <section id="precos" className="py-28 px-4 bg-[#0B1020]">
-      <div className="max-w-4xl mx-auto">
-        <div className="text-center mb-16">
-          <p className="text-[#10B981] text-xs font-semibold uppercase tracking-widest mb-5">Planos</p>
-          <h2 className="text-3xl sm:text-4xl font-extrabold text-[#F5F7FB] tracking-tight">Escolha como quer começar</h2>
+    <section id="precos" className="bg-[#070A12] px-4 py-24 sm:px-6">
+      <div className="mx-auto max-w-6xl">
+        <div className="mb-14 text-center">
+          <p className="mb-5 text-xs font-bold uppercase tracking-[0.18em] text-emerald-300">
+            Planos
+          </p>
+          <h2 className="mx-auto max-w-2xl text-3xl font-black leading-[1.08] tracking-tight text-white sm:text-4xl">
+            Escolha um plano e comece com clareza ainda este mês.
+          </h2>
         </div>
 
-        {/* Destaque Trimestral */}
-        <div
-          className="rounded-3xl p-8 sm:p-10 mb-6 relative overflow-hidden"
-          style={{
-            background: 'linear-gradient(135deg, rgba(16,185,129,0.10) 0%, rgba(16,185,129,0.04) 100%)',
-            border: '1.5px solid rgba(16,185,129,0.35)',
-            boxShadow: '0 1px 0 rgba(255,255,255,0.04) inset, 0 8px 24px rgba(0,0,0,0.35)',
-          }}
-        >
-          <div className="absolute top-0 right-0 bg-[#10B981] text-white text-xs font-bold px-4 py-1.5 rounded-bl-2xl tracking-widest uppercase">
-            Mais indicado
+        <div className="grid gap-4 lg:grid-cols-[1.25fr_0.75fr]">
+          <div className="relative overflow-hidden rounded-[1.75rem] border border-emerald-300/30 bg-emerald-300/[0.07] p-8 shadow-[0_30px_90px_rgba(0,0,0,0.35)]">
+            <div className="mb-7 inline-flex items-center gap-2 rounded-full bg-emerald-300 px-3 py-1.5 text-xs font-black uppercase tracking-[0.14em] text-slate-950">
+              <Star size={14} />
+              Mais indicado
+            </div>
+
+            <div className="grid gap-8 md:grid-cols-[1fr_auto] md:items-end">
+              <div>
+                <h3 className="text-2xl font-black text-white">Plano Trimestral</h3>
+                <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300">
+                  Melhor ponto de partida para criar rotina, acompanhar evolução e sentir o
+                  controle financeiro funcionando no dia a dia.
+                </p>
+
+                <ul className="mt-7 grid gap-3 sm:grid-cols-2">
+                  {benefits.map((benefit) => (
+                    <li key={benefit} className="flex gap-3 text-sm leading-6 text-slate-200">
+                      <Check className="mt-0.5 shrink-0 text-emerald-300" size={17} />
+                      {benefit}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="md:text-right">
+                <div>
+                  <span className="text-4xl font-black text-white">R$ 197,00</span>
+                  <span className="ml-1 text-sm text-slate-400">/trimestre</span>
+                </div>
+                <Link
+                  href="/login"
+                  className="mt-5 inline-flex h-12 items-center justify-center rounded-xl bg-emerald-400 px-6 text-sm font-extrabold text-slate-950 transition hover:bg-emerald-300"
+                >
+                  Começar pelo trimestral
+                </Link>
+              </div>
+            </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
-            <div>
-              <h3 className="text-2xl font-extrabold text-[#F5F7FB] mb-1 tracking-tight">Plano Trimestral</h3>
-              <p className="text-[#64748B] text-sm mb-4">
-                Mais indicado para começar com método e criar rotina.
-              </p>
-              <ul className="flex flex-col gap-2">
-                {[
-                  'Acesso completo a todas as funcionalidades',
-                  'Suporte prioritário',
-                  'Equivale a R$ 65,67/mês',
-                  'Economize R$ 42,70 em relação ao mensal',
-                ].map((item) => (
-                  <li key={item} className="flex items-center gap-2 text-[#94A3B8] text-sm">
-                    <Check size={15} className="text-[#10B981] shrink-0" />
-                    {item}
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <div className="flex flex-col items-start sm:items-end gap-4 shrink-0">
-              <div>
-                <span className="text-4xl font-extrabold text-[#F5F7FB]">R$ 197,00</span>
-                <span className="text-[#64748B] text-sm ml-1">/trimestre</span>
+          <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-1">
+            {plans.map((plan) => (
+              <div key={plan.name} className="rounded-2xl border border-white/[0.08] bg-[#101827] p-5">
+                <h4 className="font-black text-white">{plan.name}</h4>
+                <div className="mt-3">
+                  <span className="text-2xl font-black text-white">{plan.price}</span>
+                  <span className="ml-1 text-xs text-slate-500">{plan.period}</span>
+                </div>
+                <p className="mt-2 text-xs leading-5 text-slate-400">{plan.note}</p>
+                <Link
+                  href="/login"
+                  className="mt-4 inline-flex w-full justify-center rounded-xl border border-emerald-300/20 px-4 py-2.5 text-sm font-bold text-emerald-300 transition hover:border-emerald-300/50 hover:bg-emerald-300/10"
+                >
+                  Selecionar
+                </Link>
               </div>
-              <Link
-                href="/login"
-                className="text-white font-semibold px-8 py-3 rounded-2xl transition-all hover:scale-[1.02] whitespace-nowrap text-sm"
-                style={{ background: '#10B981', boxShadow: '0 0 20px rgba(16,185,129,0.20)' }}
-              >
-                Começar pelo trimestral
-              </Link>
-            </div>
+            ))}
           </div>
-        </div>
-
-        {/* Outros planos */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {secondary.map((plan) => (
-            <div
-              key={plan.name}
-              className="rounded-3xl p-6 flex flex-col gap-3 transition-all hover:scale-[1.01]"
-              style={{
-                background: '#151B2E',
-                border: '1px solid rgba(255,255,255,0.06)',
-                boxShadow: '0 1px 0 rgba(255,255,255,0.04) inset, 0 8px 24px rgba(0,0,0,0.35)',
-              }}
-            >
-              <h4 className="text-[#F5F7FB] font-semibold">{plan.name}</h4>
-              <div>
-                <span className="text-2xl font-bold text-[#F5F7FB]">{plan.price}</span>
-                <span className="text-[#64748B] text-xs ml-1">{plan.period}</span>
-              </div>
-              <p className="text-[#64748B] text-xs">{plan.note}</p>
-              <Link
-                href="/login"
-                className="mt-auto text-center text-[#10B981] hover:text-[#F5F7FB] border border-[#10B981]/20 hover:border-[#10B981]/50 text-sm font-medium py-2 rounded-xl transition-colors"
-              >
-                Selecionar
-              </Link>
-            </div>
-          ))}
         </div>
       </div>
     </section>

@@ -18,9 +18,9 @@ import {
   Menu,
   X,
   ChevronRight,
-  Shield,
   Loader2
 } from 'lucide-react';
+import Logo from '@/components/Logo';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -90,8 +90,8 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         {/* Logo */}
         <div className="flex items-center justify-between h-16 px-4 border-b border-gray-700">
           <div className="flex items-center gap-2">
-            <Shield className="w-8 h-8 text-[#6C5CE7]" />
-            <span className="text-xl font-bold">UTOP Admin</span>
+            <Logo variant="horizontal-dark" height={32} />
+            <span className="text-sm font-bold text-gray-300">Admin</span>
           </div>
           <button 
             className="lg:hidden p-1 hover:bg-gray-700 rounded"

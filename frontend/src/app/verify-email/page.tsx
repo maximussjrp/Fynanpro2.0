@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { CheckCircle, XCircle, Loader2 } from 'lucide-react';
+import Logo from '@/components/Logo';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
@@ -51,13 +52,8 @@ export default function VerifyEmailPage() {
     <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center p-4">
       <div className="bg-white rounded-3xl shadow-xl p-8 lg:p-12 w-full max-w-md text-center">
         {/* Logo */}
-        <div className="flex items-center justify-center gap-3 mb-8">
-          <div className="w-12 h-12 bg-gradient-to-br from-[#1F4FD8] to-[#2ECC9A] rounded-xl flex items-center justify-center">
-            <span className="text-white font-bold text-xl">U</span>
-          </div>
-          <h1 className="text-3xl font-bold text-[#0F172A]" style={{fontFamily: 'Poppins, sans-serif'}}>
-            UTOP
-          </h1>
+        <div className="mb-8 flex justify-center">
+          <Logo variant="horizontal-light" height={42} />
         </div>
 
         {status === 'loading' && (

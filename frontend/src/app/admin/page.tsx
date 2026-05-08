@@ -19,11 +19,11 @@ import {
   UserPlus,
   RefreshCw,
   LogOut,
-  Shield,
   Calendar,
   DollarSign,
   Activity
 } from 'lucide-react';
+import Logo from '@/components/Logo';
 
 interface Tenant {
   id: string;
@@ -188,11 +188,9 @@ export default function AdminPage() {
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <div className="bg-white/20 p-2 rounded-xl">
-                <Shield className="w-6 h-6" />
-              </div>
+              <Logo variant="horizontal-dark" height={34} />
               <div>
-                <h1 className="text-xl font-bold">UTOP Admin</h1>
+                <h1 className="text-xl font-bold">Admin</h1>
                 <p className="text-sm text-white/80">Painel Master</p>
               </div>
             </div>

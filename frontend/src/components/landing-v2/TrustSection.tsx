@@ -1,66 +1,48 @@
 'use client';
 
-import { ShieldCheck, Zap, Eye } from 'lucide-react';
+import { Eye, ShieldCheck, Zap } from 'lucide-react';
 
 const pillars = [
   {
     icon: ShieldCheck,
     title: 'Estabilidade',
-    description: 'Produto construído para funcionar de forma consistente, sem surpresas.',
-    color: '#10B981',
-    bg: 'rgba(16,185,129,0.08)',
-    border: 'rgba(16,185,129,0.15)',
+    description: 'Uma rotina financeira precisa funcionar todos os dias, sem surpresa.',
   },
   {
     icon: Eye,
     title: 'Clareza dos dados',
-    description: 'Informações que você consegue entender e confiar, sem enrolação.',
-    color: '#3B82F6',
-    bg: 'rgba(59,130,246,0.08)',
-    border: 'rgba(59,130,246,0.15)',
+    description: 'Informações organizadas para você entender, comparar e confiar.',
   },
   {
     icon: Zap,
     title: 'Simplicidade primeiro',
-    description: 'Antes de adicionar complexidade, priorizamos que o essencial funcione bem.',
-    color: '#F59E0B',
-    bg: 'rgba(245,158,11,0.08)',
-    border: 'rgba(245,158,11,0.15)',
+    description: 'O essencial vem antes da complexidade: registrar, enxergar e decidir.',
   },
 ];
 
 export default function TrustSection() {
   return (
-    <section className="py-24 px-4 sm:px-6 bg-[#080B14]">
-      <div className="max-w-6xl mx-auto">
-        <div className="max-w-xl mb-16">
-          <p className="text-[#10B981] text-xs font-semibold uppercase tracking-widest mb-5">Por que confiar</p>
-          <h2 className="text-3xl sm:text-4xl font-extrabold text-[#F5F7FB] tracking-tight leading-[1.1]">
-            Controle financeiro precisa gerar confiança, não dúvida.
+    <section className="bg-[#0B1020] px-4 py-24 sm:px-6">
+      <div className="mx-auto max-w-6xl">
+        <div className="mb-14 max-w-2xl">
+          <p className="mb-5 text-xs font-bold uppercase tracking-[0.18em] text-emerald-300">
+            Por que confiar
+          </p>
+          <h2 className="text-3xl font-black leading-[1.08] tracking-tight text-white sm:text-4xl">
+            Controle financeiro precisa gerar segurança, não mais dúvida.
           </h2>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {pillars.map((p) => {
-            const Icon = p.icon;
+        <div className="grid gap-4 sm:grid-cols-3">
+          {pillars.map((pillar) => {
+            const Icon = pillar.icon;
             return (
-              <div
-                key={p.title}
-                className="rounded-3xl p-7 flex flex-col gap-4"
-                style={{
-                  background: p.bg,
-                  border: `1px solid ${p.border}`,
-                  boxShadow: '0 1px 0 rgba(255,255,255,0.04) inset, 0 8px 24px rgba(0,0,0,0.35)',
-                }}
-              >
-                <div
-                  className="w-11 h-11 rounded-2xl flex items-center justify-center"
-                  style={{ background: p.bg, border: `1px solid ${p.border}` }}
-                >
-                  <Icon size={20} style={{ color: p.color }} />
+              <div key={pillar.title} className="rounded-2xl border border-white/[0.08] bg-[#101827] p-6">
+                <div className="mb-6 grid h-11 w-11 place-items-center rounded-xl bg-emerald-400/10 text-emerald-300">
+                  <Icon size={20} />
                 </div>
-                <h3 className="font-bold text-[#F5F7FB] text-base">{p.title}</h3>
-                <p className="text-[#64748B] text-sm leading-relaxed">{p.description}</p>
+                <h3 className="text-base font-black text-white">{pillar.title}</h3>
+                <p className="mt-3 text-sm leading-6 text-slate-400">{pillar.description}</p>
               </div>
             );
           })}
