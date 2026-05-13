@@ -1325,6 +1325,7 @@ export default function TransactionsPage() {
                     <option value="pending">Pendentes</option>
                   </select>
                 </div>
+              </div>
             </div>
             <div className="flex gap-2 mt-2">
               <button
