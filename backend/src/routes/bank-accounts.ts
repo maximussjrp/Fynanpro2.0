@@ -1,8 +1,9 @@
 import { Router, Request, Response } from 'express';
-import { prisma } from '../main';
+import { prisma } from '../utils/prisma-client';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { successResponse, errorResponse } from '../utils/response';
 import { log } from '../utils/logger';
+import { cacheService, CacheNamespace } from '../services/cache.service';
 
 const router = Router();
 
@@ -387,6 +388,27 @@ router.post('/adjustment', async (req: AuthRequest, res: Response) => {
     const adjustmentDate = new Date();
     const adjustmentAmount = Number(amount);
     const adjustmentDescription = description || `Ajuste de caixa: ${adjustmentAmount > 0 ? '+' : ''}${adjustmentAmount.toFixed(2)}`;
+    const recentDuplicateWindowStart = new Date(Date.now() - 15_000);
+
+    const recentAdjustment = await prisma.transaction.findFirst({
+      where: {
+        tenantId,
+        userId,
+        deletedAt: null,
+        type: 'adjustment',
+        bankAccountId,
+        amount: adjustmentAmount,
+        description: adjustmentDescription,
+        status: 'completed',
+        createdAt: {
+          gte: recentDuplicateWindowStart,
+        },
+      },
+    });
+
+    if (recentAdjustment) {
+      return errorResponse(res, 'DUPLICATE_REQUEST', 'Ajuste idêntico já foi processado recentemente', 409);
+    }
 
     // ========== TRANSAÇÃO ATÔMICA ==========
     const result = await prisma.$transaction(async (tx) => {
@@ -427,6 +449,13 @@ router.post('/adjustment', async (req: AuthRequest, res: Response) => {
       transactionId: result.adjustmentTransaction.id,
       newBalance: result.updatedAccount.currentBalance,
     });
+
+    await cacheService.invalidateMultiple([
+      CacheNamespace.DASHBOARD,
+      CacheNamespace.REPORTS,
+      CacheNamespace.TRANSACTIONS,
+      CacheNamespace.ACCOUNTS,
+    ]);
 
     return successResponse(res, {
       adjustment: {
@@ -502,6 +531,32 @@ router.post('/transfer/execute', async (req: AuthRequest, res: Response) => {
     const [year, month, day] = transactionDate.split('-').map(Number);
     const transferDate = new Date(year, month - 1, day, 12, 0, 0); // meio-dia para evitar problemas de timezone
     const transferDescription = description || `Transferência: ${fromAccount.name} → ${toAccount.name}`;
+    const recentDuplicateWindowStart = new Date(Date.now() - 15_000);
+
+    const recentTransfer = await prisma.transaction.findFirst({
+      where: {
+        tenantId,
+        userId,
+        deletedAt: null,
+        type: 'transfer',
+        bankAccountId: fromAccountId,
+        destinationAccountId: toAccountId,
+        amount: -Math.abs(amount),
+        description: transferDescription,
+        transactionDate: transferDate,
+        status: 'completed',
+        linkedTransactionId: {
+          not: null,
+        },
+        createdAt: {
+          gte: recentDuplicateWindowStart,
+        },
+      },
+    });
+
+    if (recentTransfer) {
+      return errorResponse(res, 'DUPLICATE_REQUEST', 'Transferência idêntica já foi processada recentemente', 409);
+    }
 
     // ========== TRANSAÇÃO ATÔMICA ==========
     // Todas as operações abaixo são executadas como uma única transação.
@@ -583,6 +638,13 @@ router.post('/transfer/execute', async (req: AuthRequest, res: Response) => {
       outTransactionId: result.outTransaction.id,
       inTransactionId: result.inTransaction.id,
     });
+
+    await cacheService.invalidateMultiple([
+      CacheNamespace.DASHBOARD,
+      CacheNamespace.REPORTS,
+      CacheNamespace.TRANSACTIONS,
+      CacheNamespace.ACCOUNTS,
+    ]);
 
     return successResponse(res, {
       transfer: {

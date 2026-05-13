@@ -282,6 +282,59 @@ describe('TransactionService', () => {
       // Saldo não deve ser atualizado para transações pendentes
       expect(bankAccountUpdateMock).not.toHaveBeenCalled();
     });
+
+    it('deve deduplicar criação idêntica recente sem reaplicar saldo', async () => {
+      const mockCategory = {
+        id: 'cat-123',
+        type: 'expense',
+        tenantId: 'tenant-123',
+      };
+
+      const mockBankAccount = {
+        id: 'bank-123',
+        tenantId: 'tenant-123',
+      };
+
+      const duplicateTransaction = {
+        id: 'trans-dup',
+        tenantId: 'tenant-123',
+        userId: 'user-123',
+        type: 'expense',
+        categoryId: 'cat-123',
+        bankAccountId: 'bank-123',
+        paymentMethodId: null,
+        amount: 50,
+        description: 'Padaria',
+        transactionDate: new Date('2026-05-10T00:00:00.000Z'),
+        status: 'completed',
+        notes: null,
+        tags: null,
+        category: null,
+        bankAccount: null,
+        paymentMethod: null,
+      };
+
+      (prisma.category.findFirst as jest.Mock).mockResolvedValue(mockCategory);
+      (prisma.bankAccount.findFirst as jest.Mock).mockResolvedValue(mockBankAccount);
+      (prisma.transaction.findFirst as jest.Mock).mockResolvedValue(duplicateTransaction);
+
+      const result = await transactionService.create(
+        {
+          type: 'expense',
+          categoryId: 'cat-123',
+          bankAccountId: 'bank-123',
+          amount: 50,
+          description: 'Padaria',
+          transactionDate: '2026-05-10',
+          status: 'completed',
+        },
+        'user-123',
+        'tenant-123'
+      );
+
+      expect(result.id).toBe('trans-dup');
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
   });
 
   describe('update()', () => {
@@ -451,6 +504,96 @@ describe('TransactionService', () => {
       const updateCall = updateMock.mock.calls[0][0];
       expect(updateCall.data.dueDate).toBeUndefined();
     });
+
+    it('deve recalcular ajuste de caixa aplicando apenas a diferença', async () => {
+      const mockExistingTransaction = {
+        id: 'adj-123',
+        tenantId: 'tenant-123',
+        type: 'adjustment',
+        amount: 100,
+        status: 'completed',
+        bankAccountId: 'bank-123',
+        transactionDate: new Date('2026-05-01T12:00:00.000Z'),
+      };
+
+      const bankAccountUpdateMock = jest.fn().mockResolvedValue({ currentBalance: 1150 });
+      (prisma.transaction.findFirst as jest.Mock).mockResolvedValue(mockExistingTransaction);
+      (prisma.$transaction as jest.Mock).mockImplementation(async (fn) => {
+        const mockTx = {
+          transaction: {
+            update: jest.fn().mockResolvedValue({ ...mockExistingTransaction, amount: 150 }),
+          },
+          bankAccount: {
+            update: bankAccountUpdateMock,
+          },
+        };
+        return fn(mockTx);
+      });
+
+      await transactionService.update('adj-123', { amount: 150 }, 'tenant-123');
+
+      expect(bankAccountUpdateMock).toHaveBeenNthCalledWith(1, {
+        where: { id: 'bank-123' },
+        data: { currentBalance: { decrement: 100 } },
+      });
+      expect(bankAccountUpdateMock).toHaveBeenNthCalledWith(2, {
+        where: { id: 'bank-123' },
+        data: { currentBalance: { increment: 150 } },
+      });
+    });
+
+    it('deve recalcular ajuste ao trocar de positivo para negativo', async () => {
+      const mockExistingTransaction = {
+        id: 'adj-456',
+        tenantId: 'tenant-123',
+        type: 'adjustment',
+        amount: 100,
+        status: 'completed',
+        bankAccountId: 'bank-123',
+        transactionDate: new Date('2026-05-01T12:00:00.000Z'),
+      };
+
+      const bankAccountUpdateMock = jest.fn().mockResolvedValue({ currentBalance: 850 });
+      (prisma.transaction.findFirst as jest.Mock).mockResolvedValue(mockExistingTransaction);
+      (prisma.$transaction as jest.Mock).mockImplementation(async (fn) => {
+        const mockTx = {
+          transaction: {
+            update: jest.fn().mockResolvedValue({ ...mockExistingTransaction, amount: -50 }),
+          },
+          bankAccount: {
+            update: bankAccountUpdateMock,
+          },
+        };
+        return fn(mockTx);
+      });
+
+      await transactionService.update('adj-456', { amount: -50 }, 'tenant-123');
+
+      expect(bankAccountUpdateMock).toHaveBeenNthCalledWith(1, {
+        where: { id: 'bank-123' },
+        data: { currentBalance: { decrement: 100 } },
+      });
+      expect(bankAccountUpdateMock).toHaveBeenNthCalledWith(2, {
+        where: { id: 'bank-123' },
+        data: { currentBalance: { decrement: 50 } },
+      });
+    });
+
+    it('deve bloquear edição financeira de transferência ligada', async () => {
+      (prisma.transaction.findFirst as jest.Mock).mockResolvedValue({
+        id: 'tx-transfer',
+        tenantId: 'tenant-123',
+        type: 'transfer',
+        amount: -250,
+        status: 'completed',
+        bankAccountId: 'bank-123',
+        linkedTransactionId: 'tx-transfer-in',
+      });
+
+      await expect(
+        transactionService.update('tx-transfer', { amount: 300 }, 'tenant-123')
+      ).rejects.toThrow('TRANSFER_LINKED_IMMUTABLE');
+    });
   });
 
   describe('delete()', () => {
@@ -505,6 +648,227 @@ describe('TransactionService', () => {
       await expect(
         transactionService.delete('trans-123', 'tenant-123')
       ).rejects.toThrow('Transação não encontrada');
+    });
+
+    it('deve estornar ajuste positivo ao excluir', async () => {
+      const adjustment = {
+        id: 'adj-positive',
+        tenantId: 'tenant-123',
+        type: 'adjustment',
+        amount: 120,
+        status: 'completed',
+        bankAccountId: 'bank-123',
+        deletedAt: null,
+      };
+
+      const bankAccountUpdateMock = jest.fn().mockResolvedValue({ currentBalance: 880 });
+      (prisma.transaction.findFirst as jest.Mock).mockResolvedValue(adjustment);
+      (prisma.$transaction as jest.Mock).mockImplementation(async (fn) => {
+        const mockTx = {
+          transaction: {
+            update: jest.fn().mockResolvedValue({ ...adjustment, deletedAt: new Date() }),
+            count: jest.fn().mockResolvedValue(0),
+          },
+          bankAccount: {
+            update: bankAccountUpdateMock,
+          },
+        };
+        return fn(mockTx);
+      });
+
+      await transactionService.delete('adj-positive', 'tenant-123');
+
+      expect(bankAccountUpdateMock).toHaveBeenCalledWith({
+        where: { id: 'bank-123' },
+        data: { currentBalance: { decrement: 120 } },
+      });
+    });
+
+    it('deve estornar ajuste negativo ao excluir', async () => {
+      const adjustment = {
+        id: 'adj-negative',
+        tenantId: 'tenant-123',
+        type: 'adjustment',
+        amount: -80,
+        status: 'completed',
+        bankAccountId: 'bank-123',
+        deletedAt: null,
+      };
+
+      const bankAccountUpdateMock = jest.fn().mockResolvedValue({ currentBalance: 1080 });
+      (prisma.transaction.findFirst as jest.Mock).mockResolvedValue(adjustment);
+      (prisma.$transaction as jest.Mock).mockImplementation(async (fn) => {
+        const mockTx = {
+          transaction: {
+            update: jest.fn().mockResolvedValue({ ...adjustment, deletedAt: new Date() }),
+            count: jest.fn().mockResolvedValue(0),
+          },
+          bankAccount: {
+            update: bankAccountUpdateMock,
+          },
+        };
+        return fn(mockTx);
+      });
+
+      await transactionService.delete('adj-negative', 'tenant-123');
+
+      expect(bankAccountUpdateMock).toHaveBeenCalledWith({
+        where: { id: 'bank-123' },
+        data: { currentBalance: { increment: 80 } },
+      });
+    });
+
+    it('deve estornar as duas pernas de transferência ligada ao excluir', async () => {
+      const transferOut = {
+        id: 'tx-out',
+        tenantId: 'tenant-123',
+        type: 'transfer',
+        amount: -200,
+        status: 'completed',
+        bankAccountId: 'bank-origin',
+        linkedTransactionId: 'tx-in',
+        deletedAt: null,
+      };
+      const transferIn = {
+        id: 'tx-in',
+        tenantId: 'tenant-123',
+        type: 'transfer',
+        amount: 200,
+        status: 'completed',
+        bankAccountId: 'bank-destination',
+        linkedTransactionId: 'tx-out',
+        deletedAt: null,
+      };
+
+      const bankAccountUpdateMock = jest.fn().mockResolvedValue({});
+      (prisma.transaction.findFirst as jest.Mock)
+        .mockResolvedValueOnce(transferOut)
+        .mockResolvedValueOnce(transferIn);
+      (prisma.$transaction as jest.Mock).mockImplementation(async (fn) => {
+        const mockTx = {
+          transaction: {
+            update: jest.fn().mockResolvedValue({}),
+            count: jest.fn().mockResolvedValue(0),
+          },
+          bankAccount: {
+            update: bankAccountUpdateMock,
+          },
+        };
+        return fn(mockTx);
+      });
+
+      await transactionService.delete('tx-out', 'tenant-123');
+
+      expect(bankAccountUpdateMock).toHaveBeenNthCalledWith(1, {
+        where: { id: 'bank-origin' },
+        data: { currentBalance: { increment: 200 } },
+      });
+      expect(bankAccountUpdateMock).toHaveBeenNthCalledWith(2, {
+        where: { id: 'bank-destination' },
+        data: { currentBalance: { decrement: 200 } },
+      });
+    });
+  });
+
+  describe('updateStatus()', () => {
+    it('deve estornar e reaplicar ajuste de caixa ao alternar status', async () => {
+      const adjustment = {
+        id: 'adj-status',
+        tenantId: 'tenant-123',
+        type: 'adjustment',
+        amount: 75,
+        status: 'completed',
+        bankAccountId: 'bank-123',
+        deletedAt: null,
+        dueDate: null,
+      };
+
+      const bankAccountUpdateMock = jest.fn().mockResolvedValue({ currentBalance: 1000 });
+      (prisma.transaction.findFirst as jest.Mock).mockResolvedValue(adjustment);
+      (prisma.$transaction as jest.Mock).mockImplementation(async (fn) => {
+        const mockTx = {
+          transaction: {
+            update: jest.fn().mockResolvedValue({ ...adjustment, status: 'pending' }),
+          },
+          bankAccount: {
+            update: bankAccountUpdateMock,
+          },
+        };
+        return fn(mockTx);
+      });
+
+      await transactionService.updateStatus('adj-status', 'pending', 'tenant-123');
+
+      expect(bankAccountUpdateMock).toHaveBeenCalledWith({
+        where: { id: 'bank-123' },
+        data: { currentBalance: { decrement: 75 } },
+      });
+    });
+
+    it('deve aplicar ajuste negativo ao marcar como completed', async () => {
+      const adjustment = {
+        id: 'adj-status-negative',
+        tenantId: 'tenant-123',
+        type: 'adjustment',
+        amount: -40,
+        status: 'pending',
+        bankAccountId: 'bank-123',
+        deletedAt: null,
+        dueDate: null,
+      };
+
+      const bankAccountUpdateMock = jest.fn().mockResolvedValue({ currentBalance: 960 });
+      (prisma.transaction.findFirst as jest.Mock).mockResolvedValue(adjustment);
+      (prisma.$transaction as jest.Mock).mockImplementation(async (fn) => {
+        const mockTx = {
+          transaction: {
+            update: jest.fn().mockResolvedValue({ ...adjustment, status: 'completed' }),
+          },
+          bankAccount: {
+            update: bankAccountUpdateMock,
+          },
+        };
+        return fn(mockTx);
+      });
+
+      await transactionService.updateStatus('adj-status-negative', 'completed', 'tenant-123');
+
+      expect(bankAccountUpdateMock).toHaveBeenCalledWith({
+        where: { id: 'bank-123' },
+        data: { currentBalance: { decrement: 40 } },
+      });
+    });
+
+    it('deve tratar retry completed->completed como noop sem tocar saldo nem gerar recorrencia', async () => {
+      const completedRecurring = {
+        id: 'rec-paid',
+        tenantId: 'tenant-123',
+        type: 'expense',
+        amount: 55,
+        status: 'completed',
+        bankAccountId: 'bank-123',
+        deletedAt: null,
+        dueDate: new Date('2026-05-10T00:00:00.000Z'),
+        paidDate: new Date('2026-05-10T00:00:00.000Z'),
+        transactionType: 'recurring',
+        parentId: 'parent-1',
+      };
+
+      const generateNextSpy = jest.spyOn(transactionService, 'generateNextOccurrence');
+      (prisma.transaction.findFirst as jest.Mock)
+        .mockResolvedValueOnce(completedRecurring)
+        .mockResolvedValueOnce({
+          ...completedRecurring,
+          category: null,
+          bankAccount: null,
+          paymentMethod: null,
+        });
+
+      const result = await transactionService.updateStatus('rec-paid', 'completed', 'tenant-123');
+
+      expect(result.status).toBe('completed');
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(generateNextSpy).not.toHaveBeenCalled();
     });
   });
 

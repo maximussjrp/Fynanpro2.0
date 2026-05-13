@@ -731,16 +731,16 @@ router.post('/:id/pay', async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.tenantId!;
     const transactionId = req.params.id;
-    const { paidDate, bankAccountId } = req.body;
+    const { paidDate, bankAccountId, paidAmount } = req.body;
 
     // Buscar transação
-    const transaction = await transactionService.getById(tenantId, transactionId);
+    const transaction = await transactionService.getById(transactionId, tenantId);
 
     if (!transaction) {
       return errorResponse(res, 'TRANSACTION_NOT_FOUND', 'Transação não encontrada', 404);
     }
 
-    if (transaction.status === 'paid') {
+    if (transaction.status === 'paid' || transaction.status === 'completed') {
       return errorResponse(res, 'ALREADY_PAID', 'Transação já foi paga', 400);
     }
 
@@ -778,78 +778,19 @@ router.post('/:id/pay', async (req: AuthRequest, res: Response) => {
       }
     }
 
-    // Atualizar transação
-    const updatedTransaction = await transactionService.pay(transactionId, {
-      status: 'paid',
-      paidDate: paymentDate,
-      isPaidEarly: isPaidEarly || undefined,
-      isPaidLate: isPaidLate || undefined,
-      daysEarlyLate: daysEarlyLate > 0 ? daysEarlyLate : undefined,
-      bankAccountId: targetBankAccountId,
-    });
-
-    // Atualizar saldo da conta bancária
-    const bankAccount = await transactionService.updateBankAccountBalance(
+    // Atualizar transação e saldo de forma atômica pelo service central
+    const updatedTransaction = await transactionService.updateStatus(
+      transactionId,
+      'completed',
       tenantId,
-      targetBankAccountId,
-      transaction.type === 'INCOME' ? transaction.amount : -transaction.amount
+      paymentDate,
+      paidAmount
     );
 
-    // Se for recorrente, gerar próximo mês automaticamente
-    if (transaction.recurringBillId) {
-      const recurringBill = await transactionService.getRecurringBill(tenantId, transaction.recurringBillId);
+    const bankAccount = await transactionService.getBankAccount(tenantId, targetBankAccountId);
 
-      if (recurringBill && recurringBill.status === 'active') {
-        const monthsAhead = recurringBill.monthsAhead || 1;
-
-        // Calcular próxima data baseado na frequência
-        let nextDueDate = new Date(dueDate);
-        switch (recurringBill.frequency) {
-          case 'monthly':
-            nextDueDate.setMonth(nextDueDate.getMonth() + monthsAhead);
-            break;
-          case 'weekly':
-            nextDueDate.setDate(nextDueDate.getDate() + (7 * monthsAhead));
-            break;
-          case 'biweekly':
-            nextDueDate.setDate(nextDueDate.getDate() + (14 * monthsAhead));
-            break;
-          case 'yearly':
-            nextDueDate.setFullYear(nextDueDate.getFullYear() + monthsAhead);
-            break;
-          default:
-            nextDueDate.setMonth(nextDueDate.getMonth() + monthsAhead);
-        }
-
-        // Verificar se já existe transação para esta data
-        const existingNext = await transactionService.findByDateAndRecurringBill(
-          tenantId,
-          transaction.recurringBillId,
-          nextDueDate
-        );
-
-        if (!existingNext) {
-          await transactionService.create({
-            categoryId: transaction.categoryId,
-            bankAccountId: transaction.bankAccountId,
-            paymentMethodId: transaction.paymentMethodId,
-            recurringBillId: transaction.recurringBillId,
-            description: transaction.description || 'Transação recorrente',
-            amount: Number(transaction.amount),
-            type: transaction.type as 'income' | 'expense' | 'transfer',
-            status: 'pending',
-            transactionDate: nextDueDate,
-            dueDate: nextDueDate,
-            isFixed: transaction.isFixed ?? true,
-          }, req.userId!, tenantId);
-
-          log.info('Next occurrence auto-generated', {
-            tenantId,
-            recurringBillId: transaction.recurringBillId,
-            nextDueDate,
-          });
-        }
-      }
+    if (!bankAccount) {
+      return errorResponse(res, 'BANK_ACCOUNT_NOT_FOUND', 'Conta bancária não encontrada', 404);
     }
 
     // Criar notificação

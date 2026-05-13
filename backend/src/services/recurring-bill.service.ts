@@ -263,14 +263,28 @@ export class RecurringBillService {
 
       // Executar tudo em transação atômica
       await prisma.$transaction(async (tx) => {
-        // 1. Atualizar ocorrência
-        result.occurrence = await tx.recurringBillOccurrence.update({
-          where: { id: occurrenceId },
+        const updateResult = await tx.recurringBillOccurrence.updateMany({
+          where: {
+            id: occurrenceId,
+            tenantId,
+            status: { not: 'paid' },
+          },
           data: {
             status: 'paid',
             paidDate: actualPaymentDate,
             paidAmount: finalAmount,
             notes: notes || occurrence.notes,
+          },
+        });
+
+        if (updateResult.count === 0) {
+          throw new Error('Ocorrência já foi paga');
+        }
+
+        result.occurrence = await tx.recurringBillOccurrence.findFirst({
+          where: {
+            id: occurrenceId,
+            tenantId,
           },
         });
 

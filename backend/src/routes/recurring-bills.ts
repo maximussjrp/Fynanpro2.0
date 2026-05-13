@@ -1,9 +1,11 @@
 import { Router, Response } from 'express';
-import { prisma } from '../main';
+import { prisma } from '../utils/prisma-client';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { successResponse, errorResponse } from '../utils/response';
 import { z } from 'zod';
 import { log } from '../utils/logger';
+import { cacheService, CacheNamespace } from '../services/cache.service';
+import { recurringBillService } from '../services/recurring-bill.service';
 
 const router = Router();
 
@@ -446,6 +448,13 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       await generateOccurrences(recurringBill.id, tenantId, 3);
     }
 
+    await cacheService.invalidateMultiple([
+      CacheNamespace.DASHBOARD,
+      CacheNamespace.REPORTS,
+      CacheNamespace.TRANSACTIONS,
+      CacheNamespace.ACCOUNTS,
+    ]);
+
     return successResponse(res, recurringBill, 201);
   } catch (error) {
     console.error('Create recurring bill error:', error);
@@ -604,6 +613,13 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
       },
     });
 
+    await cacheService.invalidateMultiple([
+      CacheNamespace.DASHBOARD,
+      CacheNamespace.REPORTS,
+      CacheNamespace.TRANSACTIONS,
+      CacheNamespace.ACCOUNTS,
+    ]);
+
     return successResponse(res, updated);
   } catch (error) {
     console.error('Update recurring bill error:', error);
@@ -693,6 +709,13 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
       });
     });
 
+    await cacheService.invalidateMultiple([
+      CacheNamespace.DASHBOARD,
+      CacheNamespace.REPORTS,
+      CacheNamespace.TRANSACTIONS,
+      CacheNamespace.ACCOUNTS,
+    ]);
+
     return successResponse(res, { 
       message: deleteMode === 'all' 
         ? 'Conta recorrente e todas as ocorrências excluídas com sucesso' 
@@ -710,112 +733,22 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
 // POST /api/v1/recurring-bills/:id/occurrences/:occurrenceId/pay
 router.post('/:id/occurrences/:occurrenceId/pay', async (req: AuthRequest, res: Response) => {
   try {
-    const { id, occurrenceId } = req.params;
+    const { occurrenceId } = req.params;
     const tenantId = req.tenantId!;
     const userId = req.userId!;
     const { paidAmount, paidDate, createTransaction = true } = req.body;
-
-    // Find occurrence
-    const occurrence = await prisma.recurringBillOccurrence.findFirst({
-      where: {
-        id: occurrenceId,
-        recurringBillId: id,
-      },
+    const result = await recurringBillService.payOccurrence(occurrenceId, tenantId, userId, {
+      paidAmount,
+      paidDate: paidDate ? new Date(paidDate) : undefined,
+      createTransaction,
     });
 
-    if (!occurrence) {
-      return errorResponse(res, 'NOT_FOUND', 'Ocorrência não encontrada', 404);
-    }
-
-    // Get recurring bill
-    const bill = await prisma.recurringBill.findFirst({
-      where: {
-        id: occurrence.recurringBillId,
-        tenantId,
-        deletedAt: null,
-      },
-    });
-
-    if (!bill) {
-      return errorResponse(res, 'NOT_FOUND', 'Conta fixa não encontrada', 404);
-    }
-
-    // Update occurrence
-    const updated = await prisma.recurringBillOccurrence.update({
-      where: { id: occurrenceId },
-      data: {
-        status: 'paid',
-        paidDate: paidDate ? new Date(paidDate) : new Date(),
-        paidAmount: paidAmount || bill.amount || 0,
-      },
-    });
-
-    // Create transaction if requested
-    if (createTransaction && bill.bankAccountId && bill.categoryId) {
-      const actualPaymentDate = new Date(); // Data real do pagamento (hoje)
-      const dueDate = occurrence.dueDate; // Data de vencimento original
-
-      // Calcular diferença de dias
-      const diffTime = actualPaymentDate.getTime() - dueDate.getTime();
-      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-      
-      const isPaidEarly = diffDays < 0;
-      const isPaidLate = diffDays > 0;
-      const daysEarlyLate = Math.abs(diffDays);
-
-      await prisma.transaction.create({
-        data: {
-          tenantId,
-          userId,
-          type: bill.type, // ✅ Usar tipo da recorrência (income ou expense)
-          categoryId: bill.categoryId,
-          bankAccountId: bill.bankAccountId,
-          paymentMethodId: bill.paymentMethodId,
-          amount: paidAmount || bill.amount || 0,
-          description: `Pagamento: ${bill.name}`,
-          transactionDate: dueDate, // ✅ Data de vencimento
-          paidDate: actualPaymentDate, // ✅ Data real do pagamento
-          isPaidEarly,
-          isPaidLate,
-          daysEarlyLate: diffDays !== 0 ? daysEarlyLate : null,
-          status: 'completed',
-          isRecurring: true,
-          recurringBillId: id,
-        },
-      });
-
-      console.log(`[PAY-OCCURRENCE] Transação criada:`);
-      console.log(`  - Vencimento: ${dueDate.toISOString().split('T')[0]}`);
-      console.log(`  - Pago em: ${actualPaymentDate.toISOString().split('T')[0]}`);
-      console.log(`  - Tipo: ${isPaidEarly ? `ANTECIPADO (${daysEarlyLate} dias)` : isPaidLate ? `ATRASADO (${daysEarlyLate} dias)` : 'EM DIA'}`);
-
-      // Update bank account balance
-      const balanceChange = paidAmount || bill.amount || 0;
-      if (bill.type === 'expense') {
-        // Despesa: diminui saldo
-        await prisma.bankAccount.update({
-          where: { id: bill.bankAccountId },
-          data: { currentBalance: { decrement: balanceChange } },
-        });
-        console.log(`  - Saldo atualizado: -R$ ${balanceChange}`);
-      } else {
-        // Receita: aumenta saldo
-        await prisma.bankAccount.update({
-          where: { id: bill.bankAccountId },
-          data: { currentBalance: { increment: balanceChange } },
-        });
-        console.log(`  - Saldo atualizado: +R$ ${balanceChange}`);
-      }
-    }
-
-    // Auto-generate next occurrence if autoGenerate is enabled
-    if (bill.autoGenerate && bill.status === 'active') {
-      await generateOccurrences(id, tenantId, 1);
-    }
-
-    return successResponse(res, updated);
+    return successResponse(res, result.occurrence);
   } catch (error) {
     console.error('Pay occurrence error:', error);
+    if (error instanceof Error && error.message === 'Ocorrência já foi paga') {
+      return errorResponse(res, 'VALIDATION_ERROR', error.message, 400);
+    }
     return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao registrar pagamento', 500);
   }
 });

@@ -69,6 +69,55 @@ function createDateRangeFilter(startDateStr: string, endDateStr: string) {
   };
 }
 
+function normalizeNumericAmount(value: string | number | { toString(): string }): number {
+  return typeof value === 'number' ? value : parseFloat(value.toString());
+}
+
+function getBalanceDeltaForTransaction(type: string | undefined | null, rawAmount: string | number | { toString(): string }): number {
+  const normalizedType = (type || '').toLowerCase();
+  const amount = normalizeNumericAmount(rawAmount);
+
+  switch (normalizedType) {
+    case 'income':
+      return Math.abs(amount);
+    case 'expense':
+      return -Math.abs(amount);
+    case 'transfer':
+      return amount;
+    case 'adjustment':
+      return amount;
+    default:
+      return 0;
+  }
+}
+
+function sameInstant(left?: Date | null, right?: Date | null): boolean {
+  if (!left && !right) {
+    return true;
+  }
+
+  if (!left || !right) {
+    return false;
+  }
+
+  return left.getTime() === right.getTime();
+}
+
+async function applyBalanceDelta(tx: any, bankAccountId: string | null | undefined, delta: number): Promise<void> {
+  if (!bankAccountId || delta === 0) {
+    return;
+  }
+
+  await tx.bankAccount.update({
+    where: { id: bankAccountId },
+    data: {
+      currentBalance: delta > 0
+        ? { increment: delta }
+        : { decrement: Math.abs(delta) },
+    },
+  });
+}
+
 // Interfaces
 interface TransactionSummary {
   totalIncome: number;
@@ -353,6 +402,42 @@ export class TransactionService {
         finalStatus = 'completed';
       }
 
+      const recentDuplicateWindowStart = new Date(Date.now() - 15_000);
+      const recentDuplicate = await prisma.transaction.findFirst({
+        where: {
+          tenantId,
+          userId,
+          deletedAt: null,
+          type: data.type,
+          categoryId: data.categoryId || null,
+          bankAccountId: data.bankAccountId || null,
+          paymentMethodId: data.paymentMethodId || null,
+          amount: data.amount,
+          description: data.description || '',
+          transactionDate,
+          status: finalStatus,
+          notes: data.notes || null,
+          tags: data.tags || null,
+          createdAt: {
+            gte: recentDuplicateWindowStart,
+          },
+        },
+        include: {
+          category: true,
+          bankAccount: true,
+          paymentMethod: true,
+        },
+      });
+
+      if (recentDuplicate) {
+        log.warn('TransactionService.create deduped recent duplicate', {
+          tenantId,
+          userId,
+          transactionId: recentDuplicate.id,
+        });
+        return recentDuplicate;
+      }
+
       // Create transaction with atomic balance update
       const transaction = await prisma.$transaction(async (tx) => {
         // Create transaction
@@ -385,25 +470,11 @@ export class TransactionService {
 
         // Update bank account balance if completed
         if (finalStatus === 'completed' && data.bankAccountId) {
-          if (data.type === 'income') {
-            await tx.bankAccount.update({
-              where: { id: data.bankAccountId },
-              data: {
-                currentBalance: {
-                  increment: data.amount,
-                },
-              },
-            });
-          } else if (data.type === 'expense') {
-            await tx.bankAccount.update({
-              where: { id: data.bankAccountId },
-              data: {
-                currentBalance: {
-                  decrement: data.amount,
-                },
-              },
-            });
-          }
+          await applyBalanceDelta(
+            tx,
+            data.bankAccountId,
+            getBalanceDeltaForTransaction(data.type, data.amount)
+          );
         }
 
         return newTransaction;
@@ -543,27 +614,11 @@ export class TransactionService {
       const updatedTransaction = await prisma.$transaction(async (tx) => {
         // Revert old balance change if completed
         if (existingTransaction.status === 'completed' && existingTransaction.bankAccountId) {
-          const oldAmount = parseFloat(existingTransaction.amount.toString());
-
-          if (existingTransaction.type === 'income') {
-            await tx.bankAccount.update({
-              where: { id: existingTransaction.bankAccountId },
-              data: {
-                currentBalance: {
-                  decrement: oldAmount,
-                },
-              },
-            });
-          } else if (existingTransaction.type === 'expense') {
-            await tx.bankAccount.update({
-              where: { id: existingTransaction.bankAccountId },
-              data: {
-                currentBalance: {
-                  increment: oldAmount,
-                },
-              },
-            });
-          }
+          await applyBalanceDelta(
+            tx,
+            existingTransaction.bankAccountId,
+            -getBalanceDeltaForTransaction(existingTransaction.type, existingTransaction.amount)
+          );
         }
 
         // Update transaction
@@ -603,25 +658,11 @@ export class TransactionService {
         const finalAmount = data.amount !== undefined ? data.amount : parseFloat(existingTransaction.amount.toString());
 
         if (finalStatus === 'completed' && finalBankAccountId) {
-          if (finalType === 'income') {
-            await tx.bankAccount.update({
-              where: { id: finalBankAccountId },
-              data: {
-                currentBalance: {
-                  increment: finalAmount,
-                },
-              },
-            });
-          } else if (finalType === 'expense') {
-            await tx.bankAccount.update({
-              where: { id: finalBankAccountId },
-              data: {
-                currentBalance: {
-                  decrement: finalAmount,
-                },
-              },
-            });
-          }
+          await applyBalanceDelta(
+            tx,
+            finalBankAccountId,
+            getBalanceDeltaForTransaction(finalType, finalAmount)
+          );
         }
 
         return updated;
@@ -1009,88 +1050,12 @@ export class TransactionService {
         
         for (const txn of allTransactions) {
           // Revert balance change if completed
-          // CORREÇÃO BUG #4: Try-catch para tratar erro se conta não existe
           if (txn.status === 'completed' && txn.bankAccountId) {
-            try {
-              const amount = parseFloat(txn.amount.toString());
-
-              // Verificar se conta ainda existe
-              const accountExists = await tx.bankAccount.findUnique({
-                where: { id: txn.bankAccountId },
-                select: { id: true },
-              });
-
-              if (accountExists) {
-                if (txn.type === 'income') {
-                  // Receita: decrementa o saldo (reverte o crédito)
-                  await tx.bankAccount.update({
-                    where: { id: txn.bankAccountId },
-                    data: {
-                      currentBalance: {
-                        decrement: amount,
-                      },
-                    },
-                  });
-                } else if (txn.type === 'expense') {
-                  // Despesa: incrementa o saldo (reverte o débito)
-                  await tx.bankAccount.update({
-                    where: { id: txn.bankAccountId },
-                    data: {
-                      currentBalance: {
-                        increment: Math.abs(amount),
-                      },
-                    },
-                  });
-                } else if (txn.type === 'transfer') {
-                  // Transferência: reverter o valor na conta de origem/destino
-                  // Se amount é negativo, era saída (conta origem) - incrementar para reverter
-                  // Se amount é positivo, era entrada (conta destino) - decrementar para reverter
-                  if (amount < 0) {
-                    // Era saída (negativo) - reverter incrementando
-                    await tx.bankAccount.update({
-                      where: { id: txn.bankAccountId },
-                      data: {
-                        currentBalance: {
-                          increment: Math.abs(amount),
-                        },
-                      },
-                    });
-                    log.info('Reverted transfer outflow', { 
-                      transactionId: txn.id, 
-                      bankAccountId: txn.bankAccountId,
-                      amount: Math.abs(amount),
-                    });
-                  } else {
-                    // Era entrada (positivo) - reverter decrementando
-                    await tx.bankAccount.update({
-                      where: { id: txn.bankAccountId },
-                      data: {
-                        currentBalance: {
-                          decrement: amount,
-                        },
-                      },
-                    });
-                    log.info('Reverted transfer inflow', { 
-                      transactionId: txn.id, 
-                      bankAccountId: txn.bankAccountId,
-                      amount,
-                    });
-                  }
-                }
-              } else {
-                log.warn('Bank account not found for balance revert', { 
-                  transactionId: txn.id, 
-                  bankAccountId: txn.bankAccountId 
-                });
-              }
-            } catch (error) {
-              log.error('Error reverting balance', { 
-                error, 
-                transactionId: txn.id, 
-                bankAccountId: txn.bankAccountId 
-              });
-              // Continua mesmo com erro no revert
-            }
+            await applyBalanceDelta(
+              tx,
+              txn.bankAccountId,
+              -getBalanceDeltaForTransaction(txn.type, txn.amount)
+            );
           }
 
           // Soft delete
@@ -1728,6 +1693,30 @@ export class TransactionService {
         parent.frequencyInterval || 1
       );
 
+      const existingOccurrence = await prisma.transaction.findFirst({
+        where: {
+          tenantId,
+          parentId: parent.id,
+          deletedAt: null,
+          dueDate: nextDueDate,
+        },
+        include: {
+          category: true,
+          bankAccount: true,
+          paymentMethod: true,
+        },
+      });
+
+      if (existingOccurrence) {
+        log.info('TransactionService.generateNextOccurrence deduped', {
+          parentId,
+          tenantId,
+          occurrenceId: existingOccurrence.id,
+          dueDate: nextDueDate,
+        });
+        return existingOccurrence;
+      }
+
       const result = await prisma.$transaction(async (tx) => {
         // Criar nova ocorrência
         const newOccurrence = await tx.transaction.create({
@@ -1806,6 +1795,37 @@ export class TransactionService {
         throw new Error('Transação não encontrada');
       }
 
+      const effectiveAmount = paidAmount !== undefined ? paidAmount : normalizeNumericAmount(transaction.amount);
+      const effectivePaidDate = newStatus === 'completed' ? (paidDate || transaction.paidDate || new Date()) : null;
+      const statusTransitioningToCompleted = transaction.status !== 'completed' && newStatus === 'completed';
+      const isNoOpStatusUpdate =
+        transaction.status === newStatus &&
+        normalizeNumericAmount(transaction.amount) === effectiveAmount &&
+        sameInstant(transaction.paidDate, effectivePaidDate);
+
+      if (isNoOpStatusUpdate) {
+        log.info('TransactionService.updateStatus noop', { id, newStatus, tenantId });
+
+        const current = await prisma.transaction.findFirst({
+          where: {
+            id,
+            tenantId,
+            deletedAt: null,
+          },
+          include: {
+            category: true,
+            bankAccount: true,
+            paymentMethod: true,
+          },
+        });
+
+        if (!current) {
+          throw new Error('Transação não encontrada');
+        }
+
+        return current;
+      }
+
       // Calcular se pago antecipado ou atrasado
       let isPaidEarly: boolean | null = null;
       let isPaidLate: boolean | null = null;
@@ -1835,18 +1855,11 @@ export class TransactionService {
       const result = await prisma.$transaction(async (tx) => {
         // Reverter saldo se estava completa
         if (transaction.status === 'completed' && transaction.bankAccountId) {
-          const amount = parseFloat(transaction.amount.toString());
-          if (transaction.type === 'income') {
-            await tx.bankAccount.update({
-              where: { id: transaction.bankAccountId },
-              data: { currentBalance: { decrement: amount } },
-            });
-          } else if (transaction.type === 'expense') {
-            await tx.bankAccount.update({
-              where: { id: transaction.bankAccountId },
-              data: { currentBalance: { increment: amount } },
-            });
-          }
+          await applyBalanceDelta(
+            tx,
+            transaction.bankAccountId,
+            -getBalanceDeltaForTransaction(transaction.type, transaction.amount)
+          );
         }
 
         // Atualizar transação
@@ -1854,11 +1867,11 @@ export class TransactionService {
           where: { id },
           data: {
             status: newStatus,
-            paidDate: newStatus === 'completed' ? (paidDate || new Date()) : null,
+            paidDate: effectivePaidDate,
             isPaidEarly,
             isPaidLate,
             daysEarlyLate,
-            amount: paidAmount !== undefined ? paidAmount : transaction.amount,
+            amount: effectiveAmount,
           },
           include: {
             category: true,
@@ -1869,25 +1882,18 @@ export class TransactionService {
 
         // Aplicar saldo se ficando completa
         if (newStatus === 'completed' && transaction.bankAccountId) {
-          const amount = paidAmount !== undefined ? paidAmount : parseFloat(transaction.amount.toString());
-          if (transaction.type === 'income') {
-            await tx.bankAccount.update({
-              where: { id: transaction.bankAccountId },
-              data: { currentBalance: { increment: amount } },
-            });
-          } else if (transaction.type === 'expense') {
-            await tx.bankAccount.update({
-              where: { id: transaction.bankAccountId },
-              data: { currentBalance: { decrement: amount } },
-            });
-          }
+          await applyBalanceDelta(
+            tx,
+            transaction.bankAccountId,
+            getBalanceDeltaForTransaction(transaction.type, effectiveAmount)
+          );
         }
 
         return updated;
       });
 
       // Se for recorrente e completada, gerar próxima
-      if (newStatus === 'completed' && 
+      if (statusTransitioningToCompleted && 
           transaction.transactionType === 'recurring' && 
           transaction.parentId) {
         try {

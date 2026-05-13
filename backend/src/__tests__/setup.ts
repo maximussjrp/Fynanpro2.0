@@ -29,9 +29,30 @@ export const mockPrisma = {
       findFirst: jest.fn(),
       findMany: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn(),
       delete: jest.fn(),
       count: jest.fn(),
       aggregate: jest.fn(),
+    },
+    recurringBillOccurrence: {
+      findFirst: jest.fn(),
+      findMany: jest.fn(),
+      update: jest.fn(),
+      updateMany: jest.fn(),
+      create: jest.fn(),
+      count: jest.fn(),
+    },
+    recurringBill: {
+      findFirst: jest.fn(),
+      findMany: jest.fn(),
+      update: jest.fn(),
+      create: jest.fn(),
+    },
+    import: {
+      create: jest.fn(),
+      update: jest.fn(),
+      findFirst: jest.fn(),
+      findMany: jest.fn(),
     },
     refreshToken: {
       create: jest.fn(),
@@ -118,7 +139,12 @@ export const mockPrisma = {
       transaction: {
         create: jest.fn(),
         update: jest.fn(),
+        findFirst: jest.fn(),
         delete: jest.fn(),
+      },
+      recurringBillOccurrence: {
+        updateMany: jest.fn(),
+        findFirst: jest.fn(),
       },
       refreshToken: {
         updateMany: jest.fn(),

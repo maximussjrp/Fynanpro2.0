@@ -1,13 +1,12 @@
 import { Router, Request, Response } from 'express';
 import multer from 'multer';
-import { PrismaClient } from '@prisma/client';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { importService, ColumnMapping, ImportedTransaction } from '../services/import.service';
 import { ofxPipelineService } from '../services/ofx-pipeline.service';
 import { log } from '../utils/logger';
+import { prisma } from '../utils/prisma-client';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // Estender Request para incluir file do multer
 interface MulterRequest extends AuthRequest {

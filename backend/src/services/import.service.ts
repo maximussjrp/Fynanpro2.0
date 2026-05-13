@@ -1,10 +1,9 @@
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../utils/prisma-client';
 import { log } from '../utils/logger';
 import { extractKeywords, calculateSimilarity } from './chatbot.service';
 import { cacheService, CacheNamespace } from './cache.service';
 import { bankProfileService } from './bank-profiles.service';
-
-const prisma = new PrismaClient();
+import { transactionService } from './transaction.service';
 
 // ==================== TIPOS ====================
 
@@ -79,6 +78,21 @@ export interface ImportHistory {
 
 // Cache de previews em memória (em produção usar Redis)
 const previewCache = new Map<string, ImportPreview>();
+
+function normalizeImportDescription(description: string): string {
+  return description.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function buildImportExternalFitId(bankAccountId: string, tx: ImportedTransaction): string {
+  return [
+    'import',
+    bankAccountId,
+    tx.date.toISOString().split('T')[0],
+    tx.type,
+    tx.amount.toFixed(2),
+    normalizeImportDescription(tx.description),
+  ].join(':');
+}
 
 // ==================== SERVIÇO PRINCIPAL ====================
 
@@ -1000,44 +1014,89 @@ export class ImportService {
     
     result.duplicates = duplicatesSkipped.length;
     result.skipped = unselected.length;
+
+    const importRecord = await prisma.import.create({
+      data: {
+        tenantId,
+        userId,
+        fileName: preview.fileName,
+        fileType: preview.fileType,
+        bankAccountId,
+        status: 'processing',
+        totalRows: selected.length,
+      },
+    });
     
     // Importar em lote
     for (const tx of selected) {
       try {
-        await prisma.transaction.create({
-          data: {
+        const externalFitId = buildImportExternalFitId(bankAccountId, tx);
+        const existing = await prisma.transaction.findFirst({
+          where: {
             tenantId,
-            userId,
-            type: tx.type,
-            categoryId: tx.categoryId || null,
-            bankAccountId,
-            paymentMethodId: paymentMethodId || null,
-            amount: tx.amount,
-            description: tx.description,
-            transactionDate: tx.date,
-            status: 'completed',
-            transactionType: 'single',
-            isFixed: false,
-            notes: `Importado de: ${preview.fileName}`,
+            externalFitId,
+            deletedAt: null,
           },
+          select: { id: true },
         });
-        
-        // Atualizar saldo da conta
-        const multiplier = tx.type === 'income' ? 1 : -1;
-        await prisma.bankAccount.update({
-          where: { id: bankAccountId },
-          data: {
-            currentBalance: {
-              increment: tx.amount * multiplier,
+
+        if (existing) {
+          result.duplicates++;
+          result.skipped++;
+          continue;
+        }
+
+        await prisma.$transaction(async (db) => {
+          await db.transaction.create({
+            data: {
+              tenantId,
+              userId,
+              type: tx.type,
+              categoryId: tx.categoryId || null,
+              bankAccountId,
+              paymentMethodId: paymentMethodId || null,
+              amount: tx.amount,
+              description: tx.description,
+              transactionDate: tx.date,
+              status: 'completed',
+              transactionType: 'single',
+              isFixed: false,
+              importBatchId: importRecord.id,
+              importSource: preview.fileType,
+              externalFitId,
+              normalizedDescription: normalizeImportDescription(tx.description),
+              notes: `Importado de: ${preview.fileName}`,
             },
-          },
+          });
+
+          await db.bankAccount.update({
+            where: { id: bankAccountId },
+            data: {
+              currentBalance: {
+                increment: tx.type === 'income' ? tx.amount : -tx.amount,
+              },
+            },
+          });
         });
-        
+
         result.imported++;
       } catch (error: any) {
         result.errors.push(`Erro ao importar "${tx.description}": ${error.message}`);
       }
     }
+
+    await prisma.import.update({
+      where: { id: importRecord.id },
+      data: {
+        status: result.errors.length > 0 ? (result.imported > 0 ? 'partial' : 'failed') : 'completed',
+        processedRows: result.imported,
+        errorRows: result.errors.length,
+        errorLog: result.errors.length > 0 ? JSON.stringify(result.errors) : null,
+        completedAt: new Date(),
+        createdCount: result.imported,
+        dedupedCount: result.duplicates,
+      },
+    });
     
     // Log do histórico (sem salvar em tabela por enquanto)
     log.info(`[Import] Histórico: ${preview.fileName} - ${result.imported} importadas, ${result.skipped} ignoradas, ${result.duplicates} duplicadas`);
@@ -1045,9 +1104,13 @@ export class ImportService {
     // Limpar cache do preview
     previewCache.delete(previewId);
     
-    // Invalidar cache do dashboard para forçar recálculo
-    await cacheService.invalidateNamespace(CacheNamespace.DASHBOARD);
-    log.info(`[Import] Cache do dashboard invalidado após importação`);
+    await cacheService.invalidateMultiple([
+      CacheNamespace.DASHBOARD,
+      CacheNamespace.REPORTS,
+      CacheNamespace.TRANSACTIONS,
+      CacheNamespace.ACCOUNTS,
+    ]);
+    log.info(`[Import] Caches financeiros invalidados após importação`);
     
     return result;
   }
@@ -1057,10 +1120,25 @@ export class ImportService {
    * TODO: Implementar tabela ImportHistory no schema se necessário
    */
   async getHistory(tenantId: string): Promise<ImportHistory[]> {
-    // ImportHistory table não existe no schema atual
-    // Retorna lista vazia por enquanto
-    log.info(`[Import] getHistory chamado para tenant ${tenantId} - tabela ImportHistory não implementada`);
-    return [];
+    const history = await prisma.import.findMany({
+      where: { tenantId },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+
+    return history.map((item) => ({
+      id: item.id,
+      tenantId: item.tenantId,
+      userId: item.userId || '',
+      fileName: item.fileName,
+      fileType: item.fileType,
+      bankAccountId: item.bankAccountId || undefined,
+      totalImported: item.createdCount,
+      totalSkipped: item.processedRows - item.createdCount,
+      totalDuplicates: item.dedupedCount,
+      status: item.status as 'completed' | 'partial' | 'failed',
+      createdAt: item.createdAt,
+    }));
   }
   
   /**
@@ -1068,9 +1146,42 @@ export class ImportService {
    * TODO: Implementar quando tabela ImportHistory for criada
    */
   async undoImport(tenantId: string, historyId: string): Promise<number> {
-    // ImportHistory table não existe no schema atual
-    log.warn(`[Import] undoImport não disponível - tabela ImportHistory não implementada`);
-    throw new Error('Funcionalidade de desfazer importação ainda não disponível');
+    const importRecord = await prisma.import.findFirst({
+      where: {
+        id: historyId,
+        tenantId,
+      },
+      select: { id: true },
+    });
+
+    if (!importRecord) {
+      throw new Error('Importação não encontrada');
+    }
+
+    const transactions = await prisma.transaction.findMany({
+      where: {
+        tenantId,
+        importBatchId: historyId,
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
+
+    let deletedCount = 0;
+    for (const transaction of transactions) {
+      const result = await transactionService.delete(transaction.id, tenantId, false, 'all');
+      deletedCount += result.deletedCount;
+    }
+
+    await prisma.import.update({
+      where: { id: historyId },
+      data: {
+        status: 'failed',
+        errorLog: JSON.stringify({ revertedAt: new Date().toISOString(), deletedCount }),
+      },
+    });
+
+    return deletedCount;
   }
 }
 
