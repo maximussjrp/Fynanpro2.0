@@ -115,9 +115,9 @@ export default function Sidebar({ className = '', isMobileOpen = false, onCloseM
             <div
               className="w-10 h-10 rounded-full flex items-center justify-center font-semibold"
               style={{
-                background: 'linear-gradient(135deg, #1A1A1A 0%, #2A2A2A 100%)',
-                border: '1px solid #C9A962',
-                color: '#C9A962',
+                background: 'linear-gradient(135deg, #1F4FD8 0%, #2ECC9A 100%)',
+                border: '1px solid rgba(255, 255, 255, 0.12)',
+                color: '#FFFFFF',
               }}
             >
               {user?.fullName?.charAt(0).toUpperCase()}

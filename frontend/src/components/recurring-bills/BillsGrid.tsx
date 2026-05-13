@@ -1,6 +1,8 @@
 'use client';
 
 import { Repeat, Plus } from 'lucide-react';
+import Button from '@/components/ui/Button';
+import EmptyState from '@/components/ui/EmptyState';
 import RecurringBillCard from './RecurringBillCard';
 
 interface RecurringBill {
@@ -86,24 +88,21 @@ export default function BillsGrid({
   // Empty State
   if (bills.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 px-4">
-        <div className="w-32 h-32 bg-gradient-to-br from-blue-100 to-blue-200 rounded-full flex items-center justify-center mb-6">
-          <Repeat className="w-16 h-16 text-[#1F4FD8]" />
-        </div>
-        <h3 className="text-2xl font-bold text-gray-900 mb-2 font-['Poppins']">
-          Nenhuma conta recorrente
-        </h3>
-        <p className="text-gray-600 text-center mb-6 max-w-md">
-          Comece criando sua primeira conta recorrente para organizar suas despesas e receitas que se repetem.
-        </p>
-        <button
-          onClick={onCreateNew}
-          className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[#1F4FD8] to-[#1A44BF] text-white rounded-xl font-semibold hover:shadow-xl transition-all duration-200 hover:-translate-y-0.5"
-        >
-          <Plus className="w-5 h-5" />
-          Criar Primeira Conta Recorrente
-        </button>
-      </div>
+      <EmptyState
+        icon={<Repeat className="w-10 h-10" />}
+        title="Nenhuma conta recorrente"
+        description="Comece criando sua primeira conta recorrente para organizar suas despesas e receitas que se repetem."
+        action={
+          <Button
+            onClick={onCreateNew}
+            variant="primary"
+            size="lg"
+            leftIcon={<Plus className="w-5 h-5" />}
+          >
+            Criar Primeira Conta Recorrente
+          </Button>
+        }
+      />
     );
   }
 

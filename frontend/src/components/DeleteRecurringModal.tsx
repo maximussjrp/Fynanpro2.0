@@ -1,6 +1,7 @@
 'use client';
 
 import { X, AlertTriangle, Trash2 } from 'lucide-react';
+import Button from '@/components/ui/Button';
 
 interface DeleteRecurringModalProps {
   isOpen: boolean;
@@ -78,30 +79,33 @@ export default function DeleteRecurringModal({
         {/* Footer */}
         <div className="flex flex-col gap-3 p-6 border-t border-gray-200">
           {/* Excluir apenas pendentes */}
-          <button
+          <Button
             onClick={() => onConfirm('pending')}
-            className="w-full px-4 py-3 bg-orange-500 hover:bg-orange-600 text-white font-medium rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
+            className="w-full"
+            variant="warning"
+            leftIcon={<Trash2 className="w-4 h-4" />}
           >
-            <Trash2 className="w-4 h-4" />
             Excluir apenas as pendentes
-          </button>
+          </Button>
 
           {/* Excluir todas */}
-          <button
+          <Button
             onClick={() => onConfirm('all')}
-            className="w-full px-4 py-3 bg-red-500 hover:bg-red-600 text-white font-medium rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
+            className="w-full"
+            variant="danger"
+            leftIcon={<Trash2 className="w-4 h-4" />}
           >
-            <Trash2 className="w-4 h-4" />
             Excluir tudo (incluindo realizadas)
-          </button>
+          </Button>
 
           {/* Cancelar */}
-          <button
+          <Button
             onClick={onClose}
-            className="w-full px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-xl transition-all duration-200"
+            className="w-full"
+            variant="secondary"
           >
             Cancelar
-          </button>
+          </Button>
         </div>
       </div>
 

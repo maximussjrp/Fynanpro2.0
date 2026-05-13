@@ -81,9 +81,9 @@ function ResetPasswordContent() {
   if (!token) {
     return (
       <div className="w-full max-w-md">
-        <div className="bg-white rounded-2xl shadow-xl p-8 border border-[#E5E7EB] text-center">
-          <AlertCircle className="text-red-500 mx-auto mb-4" size={48} />
-          <h1 className="text-xl font-bold text-[#1A1A1A] mb-2">
+        <div className="bg-white rounded-2xl shadow-xl p-8 border border-[#E2E8F0] text-center">
+          <AlertCircle className="text-[#DC2626] mx-auto mb-4" size={48} />
+          <h1 className="text-xl font-bold text-[#0F172A] mb-2">
             Link inválido
           </h1>
           <p className="text-sm text-[#475569] mb-6">
@@ -91,7 +91,7 @@ function ResetPasswordContent() {
           </p>
           <Link
             href="/forgot-password"
-            className="inline-block w-full py-3 bg-gradient-to-r from-[#1A1A1A] to-[#2A2A2A] text-[#C9A962] rounded-xl font-bold border border-[#C9A962]"
+            className="inline-block w-full py-3 bg-[#1F4FD8] text-white rounded-xl font-bold hover:bg-[#1A44BF] transition-colors"
           >
             Solicitar novo link
           </Link>
@@ -103,9 +103,9 @@ function ResetPasswordContent() {
   if (success) {
     return (
       <div className="w-full max-w-md">
-        <div className="bg-white rounded-2xl shadow-xl p-8 border border-[#E5E7EB] text-center">
-          <CheckCircle className="text-green-500 mx-auto mb-4" size={56} />
-          <h1 className="text-2xl font-bold text-[#1A1A1A] mb-2">
+        <div className="bg-white rounded-2xl shadow-xl p-8 border border-[#E2E8F0] text-center">
+          <CheckCircle className="text-[#16A34A] mx-auto mb-4" size={56} />
+          <h1 className="text-2xl font-bold text-[#0F172A] mb-2">
             Senha alterada!
           </h1>
           <p className="text-sm text-[#475569] mb-6">
@@ -114,7 +114,7 @@ function ResetPasswordContent() {
           </p>
           <Link
             href="/login"
-            className="inline-block w-full py-3 bg-gradient-to-r from-[#1A1A1A] to-[#2A2A2A] text-[#C9A962] rounded-xl font-bold border border-[#C9A962]"
+            className="inline-block w-full py-3 bg-[#1F4FD8] text-white rounded-xl font-bold hover:bg-[#1A44BF] transition-colors"
           >
             Ir para login agora
           </Link>
@@ -127,18 +127,18 @@ function ResetPasswordContent() {
     <div className="w-full max-w-md">
       <Link
         href="/login"
-        className="inline-flex items-center gap-2 text-[#475569] hover:text-[#1A1A1A] mb-6 text-sm font-medium"
+        className="inline-flex items-center gap-2 text-[#475569] hover:text-[#1F4FD8] mb-6 text-sm font-medium"
       >
         <ArrowLeft size={16} />
         Voltar para login
       </Link>
 
-      <div className="bg-white rounded-2xl shadow-xl p-8 border border-[#E5E7EB]">
+      <div className="bg-white rounded-2xl shadow-xl p-8 border border-[#E2E8F0]">
         <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-[#1A1A1A] rounded-2xl mb-4">
-            <span className="text-[#C9A962] text-2xl font-bold">U</span>
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-[#1F4FD8]/10 rounded-2xl mb-4">
+            <Lock className="text-[#1F4FD8]" size={28} />
           </div>
-          <h1 className="text-2xl font-bold text-[#1A1A1A]">
+          <h1 className="text-2xl font-bold text-[#0F172A]">
             Nova senha
           </h1>
           <p className="text-sm text-[#475569] mt-2">
@@ -148,13 +148,13 @@ function ResetPasswordContent() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-[#1A1A1A] mb-1">
+            <label className="block text-sm font-medium text-[#0F172A] mb-1">
               Nova senha
             </label>
             <div className="relative">
               <Lock
                 size={18}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]"
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-[#64748B]"
               />
               <input
                 type={showPassword ? 'text' : 'password'}
@@ -162,14 +162,14 @@ function ResetPasswordContent() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Sua nova senha"
-                className="w-full pl-10 pr-10 py-3 bg-[#F8FAFC] border border-[#E5E7EB] rounded-xl text-[#1A1A1A] placeholder:text-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#C9A962]"
+                className="w-full pl-10 pr-10 py-3 bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl text-[#0F172A] placeholder:text-[#64748B] focus:outline-none focus:ring-2 focus:ring-[#1F4FD8]"
                 disabled={isLoading}
                 autoFocus
               />
               <button
                 type="button"
                 onClick={() => setShowPassword((v) => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#1A1A1A]"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-[#0F172A]"
                 tabIndex={-1}
               >
                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -178,13 +178,13 @@ function ResetPasswordContent() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-[#1A1A1A] mb-1">
+            <label className="block text-sm font-medium text-[#0F172A] mb-1">
               Confirmar senha
             </label>
             <div className="relative">
               <Lock
                 size={18}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]"
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-[#64748B]"
               />
               <input
                 type={showConfirm ? 'text' : 'password'}
@@ -192,13 +192,13 @@ function ResetPasswordContent() {
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="Digite novamente"
-                className="w-full pl-10 pr-10 py-3 bg-[#F8FAFC] border border-[#E5E7EB] rounded-xl text-[#1A1A1A] placeholder:text-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#C9A962]"
+                className="w-full pl-10 pr-10 py-3 bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl text-[#0F172A] placeholder:text-[#64748B] focus:outline-none focus:ring-2 focus:ring-[#1F4FD8]"
                 disabled={isLoading}
               />
               <button
                 type="button"
                 onClick={() => setShowConfirm((v) => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#1A1A1A]"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-[#0F172A]"
                 tabIndex={-1}
               >
                 {showConfirm ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -227,7 +227,7 @@ function ResetPasswordContent() {
           <button
             type="submit"
             disabled={isLoading || !isValid}
-            className="w-full bg-gradient-to-r from-[#1A1A1A] to-[#2A2A2A] hover:from-[#2A2A2A] hover:to-[#1A1A1A] text-[#C9A962] font-bold py-4 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg border border-[#C9A962]"
+            className="w-full bg-[#1F4FD8] hover:bg-[#1A44BF] text-white font-bold py-4 rounded-xl transition-all disabled:bg-[#CBD5E1] disabled:text-[#475569] disabled:cursor-not-allowed shadow-lg"
           >
             {isLoading ? 'Salvando...' : 'Redefinir senha'}
           </button>
@@ -245,12 +245,12 @@ function Rule({ ok, text }: { ok: boolean; text: string }) {
   return (
     <div
       className={`flex items-center gap-2 text-xs ${
-        ok ? 'text-green-700' : 'text-[#94A3B8]'
+        ok ? 'text-[#166534]' : 'text-[#64748B]'
       }`}
     >
       <span
         className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] ${
-          ok ? 'bg-green-500 text-white' : 'bg-[#E5E7EB] text-[#94A3B8]'
+          ok ? 'bg-[#16A34A] text-white' : 'bg-[#E2E8F0] text-[#64748B]'
         }`}
       >
         {ok ? '✓' : '·'}
@@ -262,7 +262,7 @@ function Rule({ ok, text }: { ok: boolean; text: string }) {
 
 export default function ResetPasswordPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#F5F0E6] via-white to-[#F5F0E6] flex items-center justify-center px-4 py-12">
+    <div className="min-h-screen bg-gradient-to-br from-[#F8FAFC] via-white to-[#EFF6FF] flex items-center justify-center px-4 py-12">
       <Suspense
         fallback={
           <div className="text-[#475569] text-sm">Carregando...</div>

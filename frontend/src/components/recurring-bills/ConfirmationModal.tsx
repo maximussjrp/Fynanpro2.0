@@ -1,6 +1,7 @@
 'use client';
 
 import { X, AlertCircle } from 'lucide-react';
+import Button from '@/components/ui/Button';
 
 interface ConfirmationModalProps {
   isOpen: boolean;
@@ -92,20 +93,22 @@ export default function ConfirmationModal({
 
         {/* Footer */}
         <div className="flex gap-3 p-6 bg-[#F9FAFB] border-t border-gray-200">
-          <button
+          <Button
             onClick={onClose}
             disabled={loading}
-            className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-xl font-semibold hover:bg-gray-100 transition-all duration-200 disabled:opacity-50"
+            variant="secondary"
+            className="flex-1"
           >
             {cancelText}
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={onConfirm}
             disabled={loading}
-            className={`flex-1 px-4 py-3 text-white rounded-xl font-semibold transition-all duration-200 disabled:opacity-50 ${colors.button}`}
+            variant={type === 'danger' ? 'danger' : 'primary'}
+            className="flex-1"
           >
             {loading ? 'Processando...' : confirmText}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

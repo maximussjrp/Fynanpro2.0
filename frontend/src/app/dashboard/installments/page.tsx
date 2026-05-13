@@ -59,10 +59,10 @@ export default function InstallmentsPage() {
         <div className="mb-6">
           <button
             onClick={() => setShowNewTransactionModal(true)}
-            className="flex items-center gap-3 p-4 bg-gradient-to-r from-[#1A1A1A] to-[#2A2A2A] border border-[#C9A962] rounded-xl hover:shadow-lg transition-all group"
+            className="flex items-center gap-3 p-4 bg-[#1F4FD8] border border-[#1F4FD8] rounded-xl hover:bg-[#1A44BF] hover:shadow-lg transition-all group"
           >
-            <div className="w-12 h-12 rounded-lg bg-[#C9A962]/20 flex items-center justify-center group-hover:scale-110 transition-transform">
-              <span className="text-2xl">+</span>
+            <div className="w-12 h-12 rounded-lg bg-white/15 flex items-center justify-center group-hover:scale-110 transition-transform">
+              <span className="text-2xl text-white">+</span>
             </div>
             <div className="text-left">
               <p className="text-sm font-semibold text-white">Nova Transação</p>

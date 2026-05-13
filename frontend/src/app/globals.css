@@ -6,14 +6,22 @@
 :root {
   /* UTOP - Paleta Principal */
   --utop-primary: #1F4FD8;
+  --utop-primary-hover: #1A44BF;
   --utop-secondary: #2ECC9A;
   --utop-accent: #9AF0C6;
+  --utop-success-accent: #2ECC9A;
   
   /* Paleta Neutra */
   --utop-dark: #0F172A;
   --utop-gray: #475569;
   --utop-light: #CBD5E1;
   --utop-background: #F8FAFC;
+  --utop-surface: #FFFFFF;
+  --utop-surface-2: #F8FAFC;
+  --utop-border: #E2E8F0;
+  --utop-text-primary: #0F172A;
+  --utop-text-secondary: #334155;
+  --utop-text-muted: #64748B;
   
   /* Alertas */
   --utop-success: #22C55E;
@@ -100,6 +108,15 @@ body {
   --v2-shadow-card: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 8px 24px rgba(0, 0, 0, 0.35);
   --v2-radius: 16px;
 
+  --utop-primary-hover: #1A44BF;
+  --utop-success-accent: #2ECC9A;
+  --utop-surface: var(--v2-bg-surface);
+  --utop-surface-2: var(--v2-bg-surface-2);
+  --utop-border: var(--v2-border);
+  --utop-text-primary: var(--v2-text-primary);
+  --utop-text-secondary: #CBD5E1;
+  --utop-text-muted: var(--v2-text-muted);
+
   background: var(--v2-bg-app);
   color: var(--v2-text-primary);
   font-family: 'Inter', sans-serif;
@@ -140,10 +157,14 @@ body {
   color: var(--v2-text-primary);
 }
 .utop-v2 .utop-nav-item[data-active="true"] {
-  background: linear-gradient(90deg, rgba(201, 169, 98, 0.18) 0%, rgba(201, 169, 98, 0.04) 100%);
-  color: #F5E6BD;
+  background: linear-gradient(90deg, rgba(31, 79, 216, 0.20) 0%, rgba(31, 79, 216, 0.04) 100%);
+  color: #F5F7FB;
   font-weight: 500;
-  box-shadow: inset 2px 0 0 #C9A962;
+  box-shadow: inset 2px 0 0 #1F4FD8;
+}
+.utop-v2 .utop-nav-item[data-active="true"]:focus {
+  outline: 2px solid rgba(31, 79, 216, 0.6);
+  outline-offset: -2px;
 }
 .utop-v2 .utop-nav-danger {
   color: #FCA5A5;

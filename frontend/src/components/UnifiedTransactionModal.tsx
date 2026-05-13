@@ -9,6 +9,8 @@ import {
 } from 'lucide-react';
 import api from '@/lib/api';
 import { toast } from 'sonner';
+import Button from '@/components/ui/Button';
+import Textarea from '@/components/ui/Textarea';
 
 // ==================== INTERFACES ====================
 
@@ -891,7 +893,7 @@ export default function UnifiedTransactionModal({
                   type="button"
                   onClick={handleAiSuggestCategory}
                   disabled={aiSuggesting || !formData.description || formData.description.length < 3}
-                  className="flex items-center gap-1.5 text-xs font-medium text-purple-600 hover:text-purple-800 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors"
+                  className="flex items-center gap-1.5 text-xs font-medium text-[#1F4FD8] hover:text-[#1A44BF] disabled:text-gray-400 disabled:cursor-not-allowed transition-colors"
                   title="Sugerir categoria com IA"
                 >
                   {aiSuggesting ? (
@@ -915,12 +917,12 @@ export default function UnifiedTransactionModal({
             />
             {/* Mostrar sugestão da IA */}
             {aiSuggestion && (
-              <div className="mt-2 p-3 bg-purple-900/30 border border-purple-700/50 rounded-lg">
+              <div className="mt-2 p-3 bg-blue-900/30 border border-blue-700/50 rounded-lg">
                 <div className="flex items-start gap-2">
-                  <Sparkles className="w-4 h-4 text-purple-400 mt-0.5 flex-shrink-0" />
+                  <Sparkles className="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-medium text-purple-300">
+                      <span className="text-sm font-medium text-blue-300">
                         {aiSuggestion.categoryName}
                       </span>
                       <span className={`text-xs px-2 py-0.5 rounded-full ${
@@ -933,7 +935,7 @@ export default function UnifiedTransactionModal({
                         {Math.round(aiSuggestion.confidence * 100)}% confiança
                       </span>
                     </div>
-                    <p className="text-xs text-purple-400 mt-1">{aiSuggestion.reasoning}</p>
+                    <p className="text-xs text-blue-400 mt-1">{aiSuggestion.reasoning}</p>
                     {formData.categoryId !== aiSuggestion.categoryId && (
                       <button
                         type="button"
@@ -942,7 +944,7 @@ export default function UnifiedTransactionModal({
                           setCategorySearch(aiSuggestion.categoryName);
                           toast.success('Categoria aplicada!');
                         }}
-                        className="mt-2 text-xs font-medium text-purple-300 hover:text-purple-200 underline"
+                        className="mt-2 text-xs font-medium text-blue-300 hover:text-blue-200 underline"
                       >
                         Aplicar esta categoria
                       </button>
@@ -1032,8 +1034,8 @@ export default function UnifiedTransactionModal({
 
           {/* === CAMPOS ESPECÍFICOS PARCELADO === */}
           {transactionType === 'installment' && (
-            <div className="bg-purple-900/20 border border-purple-700/50 rounded-xl p-4 space-y-4">
-              <h3 className="font-semibold text-purple-400 flex items-center gap-2">
+            <div className="bg-blue-900/20 border border-blue-700/50 rounded-xl p-4 space-y-4">
+              <h3 className="font-semibold text-blue-400 flex items-center gap-2">
                 <CardIcon className="w-5 h-5" />
                 Configurações de Parcelamento
               </h3>
@@ -1045,7 +1047,7 @@ export default function UnifiedTransactionModal({
                 <select
                   value={installmentData.totalInstallments}
                   onChange={(e) => setInstallmentData({ ...installmentData, totalInstallments: parseInt(e.target.value) })}
-                  className="w-full px-3 py-2.5 border-2 border-[#2A3F5F]/50 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 bg-[#1A2332] text-[#F5F7FB]"
+                  className="w-full px-3 py-2.5 border-2 border-[#2A3F5F]/50 rounded-lg focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] bg-[#1A2332] text-[#F5F7FB]"
                   title="Número de parcelas"
                 >
                   {Array.from({ length: 71 }, (_, i) => i + 2).map(num => (
@@ -1060,7 +1062,7 @@ export default function UnifiedTransactionModal({
                   id="hasDownPayment"
                   checked={installmentData.hasDownPayment}
                   onChange={(e) => setInstallmentData({ ...installmentData, hasDownPayment: e.target.checked })}
-                  className="w-5 h-5 text-purple-600 rounded focus:ring-purple-500 bg-[#1A2332] border-[#2A3F5F]/50"
+                  className="w-5 h-5 text-[#1F4FD8] rounded focus:ring-[#1F4FD8] bg-[#1A2332] border-[#2A3F5F]/50"
                 />
                 <label htmlFor="hasDownPayment" className="text-sm font-medium text-[#F5F7FB]">
                   Tem entrada (1 + parcelas)
@@ -1074,14 +1076,14 @@ export default function UnifiedTransactionModal({
                   </label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <span className="text-purple-400 font-semibold">R$</span>
+                      <span className="text-blue-400 font-semibold">R$</span>
                     </div>
                     <input
                       type="number"
                       step="0.01"
                       value={installmentData.downPaymentAmount}
                       onChange={(e) => setInstallmentData({ ...installmentData, downPaymentAmount: e.target.value })}
-                      className="w-full pl-12 pr-4 py-2.5 border-2 border-[#2A3F5F]/50 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 bg-[#1A2332] text-[#F5F7FB]"
+                      className="w-full pl-12 pr-4 py-2.5 border-2 border-[#2A3F5F]/50 rounded-lg focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] bg-[#1A2332] text-[#F5F7FB]"
                       placeholder="0,00"
                     />
                   </div>
@@ -1100,13 +1102,13 @@ export default function UnifiedTransactionModal({
                             Entrada: R$ {parseFloat(installmentData.downPaymentAmount).toFixed(2)} + {' '}
                           </span>
                         )}
-                        <span className="font-semibold text-purple-400">
+                        <span className="font-semibold text-blue-400">
                           {installmentData.hasDownPayment ? installmentData.totalInstallments - 1 : installmentData.totalInstallments}x 
                           de R$ {parseFloat(formData.amount.replace(',', '.')).toFixed(2)}
                         </span>
                       </span>
                     </div>
-                    <div className="font-bold text-purple-300 text-base">
+                    <div className="font-bold text-blue-300 text-base">
                       💰 Total: R$ {calculateInstallmentTotal().toFixed(2)}
                     </div>
                   </div>
@@ -1284,7 +1286,7 @@ export default function UnifiedTransactionModal({
               </div>
               
               {showQuickPaymentMethod && (
-                <div className="mb-3 p-3 bg-purple-900/20 border border-purple-700/50 rounded-lg space-y-2">
+                <div className="mb-3 p-3 bg-blue-900/20 border border-blue-700/50 rounded-lg space-y-2">
                   <input
                     type="text"
                     placeholder="Ex: PIX Nubank, Cartão Inter, Dinheiro..."
@@ -1304,7 +1306,7 @@ export default function UnifiedTransactionModal({
                     <button
                       type="button"
                       onClick={handleQuickCreatePaymentMethod}
-                      className="px-3 py-1.5 text-sm bg-purple-600 text-white rounded hover:bg-purple-700"
+                      className="px-3 py-1.5 text-sm bg-[#1F4FD8] text-white rounded hover:bg-[#1A44BF]"
                     >
                       Criar
                     </button>
@@ -1443,10 +1445,10 @@ export default function UnifiedTransactionModal({
             <label className="block text-sm font-semibold text-[#F5F7FB] mb-2">
               Observações <span className="text-[#94A3B8] font-normal">(opcional)</span>
             </label>
-            <textarea
+            <Textarea
               value={formData.notes}
               onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-              className="w-full px-4 py-3 min-h-[44px] border-2 border-[#2A3F5F]/50 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] transition-all bg-[#1A2332] text-[#F5F7FB] placeholder:text-[#475569] resize-none"
+              className="min-h-[44px] border-2 border-[#2A3F5F]/50 bg-[var(--v2-bg-surface-2)] text-[var(--v2-text-primary)] placeholder:text-[#475569] resize-none"
               rows={2}
               placeholder="Adicione notas ou observações..."
             />
@@ -1456,22 +1458,22 @@ export default function UnifiedTransactionModal({
         {/* Footer com Botões */}
         <div className="border-t-2 border-[#2A3F5F]/30 px-6 py-4 bg-[#0B1020] text-[#F5F7FB]">
           <div className="flex gap-3">
-            <button
+            <Button
               type="button"
               onClick={onClose}
-              className="flex-1 px-6 py-3.5 border-2 border-[#2A3F5F]/50 text-[#F5F7FB] rounded-xl hover:bg-[#1A2332] hover:shadow-sm transition-all font-semibold disabled:opacity-50"
+              variant="secondary"
+              size="lg"
+              className="flex-1"
               disabled={loading}
             >
               Cancelar
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
               onClick={handleSubmit}
-              className={`flex-1 px-6 py-3.5 rounded-xl font-bold transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5 text-white ${
-                formData.type === 'income'
-                  ? 'bg-gradient-to-r from-[#2ECC9A] to-[#27B589] hover:from-[#27B589] hover:to-[#1D9A6B]'
-                  : 'bg-gradient-to-r from-[#EF4444] to-[#DC2626] hover:from-[#DC2626] hover:to-[#B91C1C]'
-              } disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center justify-center gap-2`}
+              variant={formData.type === 'income' ? 'success' : 'danger'}
+              size="lg"
+              className="flex-1"
               disabled={loading}
             >
               {loading ? (
@@ -1487,7 +1489,7 @@ export default function UnifiedTransactionModal({
                   Criar {transactionType === 'recurring' ? 'Recorrente' : transactionType === 'installment' ? 'Parcelada' : 'Transação'}
                 </>
               )}
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -1519,24 +1521,26 @@ export default function UnifiedTransactionModal({
               autoFocus
             />
             <div className="flex gap-3 mt-4">
-              <button
+              <Button
                 onClick={() => {
                   setShowEditPaymentMethodModal(false);
                   setEditingPaymentMethod(null);
                   setEditPaymentMethodName('');
                 }}
-                className="flex-1 px-4 py-2.5 border border-[#2A3F5F]/50 text-[#F5F7FB] rounded-xl hover:bg-[#1A2332]"
+                variant="secondary"
+                className="flex-1"
                 disabled={paymentMethodActionLoading}
               >
                 Cancelar
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={handleSaveEditPaymentMethod}
-                className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50"
+                variant="primary"
+                className="flex-1"
                 disabled={paymentMethodActionLoading}
               >
                 {paymentMethodActionLoading ? 'Salvando...' : 'Salvar'}
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -1566,23 +1570,25 @@ export default function UnifiedTransactionModal({
               ⚠️ Se houver transações vinculadas, a exclusão será bloqueada. Nesse caso, você pode inativar o meio de pagamento.
             </p>
             <div className="flex gap-3">
-              <button
+              <Button
                 onClick={() => {
                   setShowDeletePaymentMethodModal(false);
                   setDeletingPaymentMethod(null);
                 }}
-                className="flex-1 px-4 py-2.5 border border-[#2A3F5F]/50 text-[#F5F7FB] rounded-xl hover:bg-[#1A2332]"
+                variant="secondary"
+                className="flex-1"
                 disabled={paymentMethodActionLoading}
               >
                 Cancelar
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={handleConfirmDeletePaymentMethod}
-                className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 disabled:opacity-50"
+                variant="danger"
+                className="flex-1"
                 disabled={paymentMethodActionLoading}
               >
                 {paymentMethodActionLoading ? 'Excluindo...' : 'Excluir'}
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -1590,3 +1596,4 @@ export default function UnifiedTransactionModal({
     </div>
   );
 }
+

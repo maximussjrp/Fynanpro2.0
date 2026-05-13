@@ -1,6 +1,18 @@
 'use client';
 
 import { formatCurrency } from '@/lib/energyColors';
+import Badge from '@/components/ui/Badge';
+import { Card, CardContent } from '@/components/ui/Card';
+import EmptyState from '@/components/ui/EmptyState';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/Table';
 
 export interface UpcomingItem {
   id: string;
@@ -34,33 +46,42 @@ const STATUS_STYLES: Record<UpcomingItem['status'], { label: string; bg: string;
 
 export default function UpcomingTable({ items, onItemClick }: UpcomingTableProps) {
   if (items.length === 0) {
-    return <div className="text-sm v2-faint py-8 text-center">Nenhum compromisso à vista. Bom trabalho 👏</div>;
+    return (
+      <Card className="border-dashed">
+        <CardContent className="py-6">
+          <EmptyState
+            title="Nenhum compromisso à vista"
+            description="Bom trabalho! 👏"
+            variant="compact"
+          />
+        </CardContent>
+      </Card>
+    );
   }
 
   return (
-    <div className="overflow-x-auto -mx-2">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="text-left v2-faint text-xs uppercase tracking-wider">
-            <th className="py-2 px-2 font-medium">Descrição</th>
-            <th className="py-2 px-2 font-medium">Vencimento</th>
-            <th className="py-2 px-2 font-medium text-right">Valor</th>
-            <th className="py-2 px-2 font-medium hidden md:table-cell">Conta</th>
-            <th className="py-2 px-2 font-medium text-right">Status</th>
-          </tr>
-        </thead>
-        <tbody>
+    <TableContainer className="-mx-2">
+      <Table>
+        <TableHeader>
+          <TableRow className="text-left v2-faint">
+            <TableHead>Descrição</TableHead>
+            <TableHead>Vencimento</TableHead>
+            <TableHead className="text-right">Valor</TableHead>
+            <TableHead className="hidden md:table-cell">Conta</TableHead>
+            <TableHead className="text-right">Status</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {items.map((item) => {
             const sty = STATUS_STYLES[item.status];
             return (
-              <tr
+              <TableRow
                 key={item.id}
                 onClick={onItemClick ? () => onItemClick(item.id) : undefined}
-                className={`border-t border-[var(--v2-border)] ${
-                  onItemClick ? 'cursor-pointer hover:bg-[var(--v2-bg-elevated)]/40' : ''
-                } transition-colors`}
+                hover={!!onItemClick}
+                className={onItemClick ? 'cursor-pointer hover:bg-[var(--v2-bg-elevated)]/40' : ''}
               >
-                <td className="py-3 px-2">
+                <TableCell>
                   <div className="flex items-center gap-2.5">
                     {item.icon && (
                       <span className="w-7 h-7 rounded-lg bg-[var(--v2-bg-elevated)] flex items-center justify-center text-sm" aria-hidden>
@@ -69,23 +90,24 @@ export default function UpcomingTable({ items, onItemClick }: UpcomingTableProps
                     )}
                     <span className="text-[var(--v2-text-primary)] truncate">{item.description}</span>
                   </div>
-                </td>
-                <td className="py-3 px-2 v2-muted">{formatBrDate(item.dueDate)}</td>
-                <td className="py-3 px-2 text-right v2-num text-[var(--v2-text-primary)]">{formatCurrency(item.amount)}</td>
-                <td className="py-3 px-2 v2-muted hidden md:table-cell truncate max-w-[160px]">{item.account || '—'}</td>
-                <td className="py-3 px-2 text-right">
-                  <span
-                    className="inline-flex items-center text-xs px-2.5 py-1 rounded-full font-medium"
-                    style={{ background: sty.bg, color: sty.color }}
+                </TableCell>
+                <TableCell className="v2-muted">{formatBrDate(item.dueDate)}</TableCell>
+                <TableCell className="text-right v2-num text-[var(--v2-text-primary)]">{formatCurrency(item.amount)}</TableCell>
+                <TableCell className="v2-muted hidden md:table-cell truncate max-w-[160px]">{item.account || '—'}</TableCell>
+                <TableCell className="text-right">
+                  <Badge
+                    variant={
+                      item.status === 'upcoming' ? 'info' : item.status === 'overdue' ? 'danger' : 'success'
+                    }
                   >
                     {sty.label}
-                  </span>
-                </td>
-              </tr>
+                  </Badge>
+                </TableCell>
+              </TableRow>
             );
           })}
-        </tbody>
-      </table>
-    </div>
+        </TableBody>
+      </Table>
+    </TableContainer>
   );
 }

@@ -58,7 +58,7 @@ export default function DashboardLayout({
     return (
       <div className="utop-v2 flex h-screen items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#C9A962] mx-auto"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#1F4FD8] mx-auto"></div>
           <p className="mt-4" style={{ color: 'var(--v2-text-muted)', fontFamily: 'Inter, sans-serif' }}>Carregando...</p>
         </div>
       </div>

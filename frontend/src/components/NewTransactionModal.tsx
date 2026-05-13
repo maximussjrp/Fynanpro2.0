@@ -4,6 +4,9 @@ import { useState, useEffect, useRef } from 'react';
 import { X, Plus, DollarSign, Calendar, FileText, Tag, CreditCard, Wallet, Edit2, Trash2, AlertTriangle, ChevronDown } from 'lucide-react';
 import api from '@/lib/api';
 import { toast } from 'sonner';
+import Button from '@/components/ui/Button';
+import FormField from '@/components/ui/FormField';
+import Textarea from '@/components/ui/Textarea';
 
 interface Category {
   id: string;
@@ -529,7 +532,7 @@ export default function TransactionModal({
         <form onSubmit={handleSubmit} className="p-6 space-y-5 overflow-y-auto flex-1 font-inter">
           {/* Tipo: Receita ou Despesa */}
           <div>
-            <label className="block text-sm font-semibold text-[#1A1A1A] mb-2">
+            <label className="block text-sm font-semibold text-gray-900 mb-2">
               Tipo de Transação *
             </label>
             <div className="flex gap-3">
@@ -552,7 +555,7 @@ export default function TransactionModal({
               </label>
               <label className={`flex-1 flex items-center justify-center gap-3 p-4 border-2 rounded-xl cursor-pointer transition-all hover:shadow-md ${
                 formData.type === 'income'
-                  ? 'border-[#2563EB] bg-[#DBEAFE]'
+                  ? 'border-[#2563EB] bg-blue-50'
                   : 'border-gray-200 bg-white hover:border-gray-300'
               }`}>
                 <input
@@ -573,7 +576,7 @@ export default function TransactionModal({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {/* Valor */}
             <div>
-              <label className="block text-sm font-semibold text-[#1A1A1A] mb-2">
+              <label className="block text-sm font-semibold text-gray-900 mb-2">
                 Valor *
               </label>
               <div className="relative">
@@ -585,7 +588,7 @@ export default function TransactionModal({
                   step="0.01"
                   value={formData.amount}
                   onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                  className="w-full pl-14 pr-4 py-3 min-h-[44px] border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] transition-all bg-[#F9FAFB] text-gray-900 placeholder:text-gray-400"
+                  className="w-full pl-14 pr-4 py-3 min-h-[44px] border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] transition-all bg-gray-50 text-gray-900 placeholder:text-gray-400"
                   placeholder="0,00"
                   required
                 />
@@ -594,7 +597,7 @@ export default function TransactionModal({
 
             {/* Data */}
             <div>
-              <label className="block text-sm font-semibold text-[#1A1A1A] mb-2">
+              <label className="block text-sm font-semibold text-gray-900 mb-2">
                 Data *
               </label>
               <div className="relative">
@@ -605,7 +608,7 @@ export default function TransactionModal({
                   type="date"
                   value={formData.transactionDate}
                   onChange={(e) => setFormData({ ...formData, transactionDate: e.target.value })}
-                  className="w-full pl-12 pr-4 py-3 min-h-[44px] border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] transition-all bg-[#F9FAFB] text-gray-900 appearance-none"
+                  className="w-full pl-12 pr-4 py-3 min-h-[44px] border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] transition-all bg-gray-50 text-gray-900 appearance-none"
                   style={{ colorScheme: 'light' }}
                   required
                   title="Data da transação"
@@ -617,14 +620,14 @@ export default function TransactionModal({
 
           {/* Descrição */}
           <div>
-            <label className="block text-sm font-semibold text-[#1A1A1A] mb-2">
+            <label className="block text-sm font-semibold text-gray-900 mb-2">
               Descrição *
             </label>
             <input
               type="text"
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              className="w-full px-4 py-3 min-h-[44px] border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] transition-all bg-[#F9FAFB] text-gray-900 placeholder:text-gray-400"
+              className="w-full px-4 py-3 min-h-[44px] border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] transition-all bg-gray-50 text-gray-900 placeholder:text-gray-400"
               placeholder="Ex: Salário, Aluguel, Compras..."
               required
             />
@@ -632,7 +635,7 @@ export default function TransactionModal({
 
           {/* Categoria com busca */}
           <div>
-            <label className="block text-sm font-semibold text-[#1A1A1A] mb-2">
+            <label className="block text-sm font-semibold text-gray-900 mb-2">
               Categoria *
             </label>
             <div className="relative" ref={categoryDropdownRef}>
@@ -647,7 +650,7 @@ export default function TransactionModal({
                   setShowCategoryDropdown(true);
                 }}
                 onFocus={() => setShowCategoryDropdown(true)}
-                className="w-full pl-12 pr-4 py-3 min-h-[44px] border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] transition-all bg-[#F9FAFB] text-gray-900 placeholder:text-gray-400"
+                className="w-full pl-12 pr-4 py-3 min-h-[44px] border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] transition-all bg-gray-50 text-gray-900 placeholder:text-gray-400"
                 placeholder="Buscar categoria..."
                 required
               />
@@ -673,7 +676,7 @@ export default function TransactionModal({
                       <span className="text-xl">{category.icon}</span>
                       <div className="flex-1">
                         <p className={`${level === 1 ? 'font-bold' : level === 2 ? 'font-semibold' : 'font-medium'} ${
-                          hasChildren ? 'text-gray-500' : 'text-[#1A1A1A]'
+                          hasChildren ? 'text-gray-500' : 'text-gray-900'
                         }`}>
                           {category.name}
                         </p>
@@ -698,7 +701,7 @@ export default function TransactionModal({
             {/* Conta Bancária */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-semibold text-[#1A1A1A]">
+                <label className="text-sm font-semibold text-gray-900">
                   Conta Bancária *
                 </label>
                 <button
@@ -711,7 +714,7 @@ export default function TransactionModal({
               </div>
               
               {showQuickBankAccount && (
-                <div className="mb-3 p-3 bg-[#EFF6FF] border border-blue-200 rounded-lg space-y-2">
+                <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-2">
                   <input
                     type="text"
                     placeholder="Nome da conta"
@@ -764,7 +767,7 @@ export default function TransactionModal({
                 <select
                   value={formData.bankAccountId}
                   onChange={(e) => setFormData({ ...formData, bankAccountId: e.target.value })}
-                  className="w-full pl-12 pr-4 py-3 min-h-[44px] border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] transition-all bg-[#F9FAFB] text-gray-900 appearance-none cursor-pointer"
+                  className="w-full pl-12 pr-4 py-3 min-h-[44px] border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] transition-all bg-gray-50 text-gray-900 appearance-none cursor-pointer"
                   required
                   title="Selecione conta bancária"
                   aria-label="Conta Bancária"
@@ -782,7 +785,7 @@ export default function TransactionModal({
             {/* Meio de Pagamento (opcional) */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-semibold text-[#1A1A1A]">
+                <label className="text-sm font-semibold text-gray-900">
                   Meio de Pagamento <span className="text-gray-400 font-normal">(opcional)</span>
                 </label>
                 <button
@@ -795,7 +798,7 @@ export default function TransactionModal({
               </div>
               
               {showQuickPaymentMethod && (
-                <div className="mb-3 p-3 bg-purple-50 border border-purple-200 rounded-lg space-y-2">
+                <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-2">
                   <input
                     type="text"
                     placeholder="Ex: PIX Nubank, Cartão Inter, Dinheiro..."
@@ -815,7 +818,7 @@ export default function TransactionModal({
                     <button
                       type="button"
                       onClick={handleQuickCreatePaymentMethod}
-                      className="px-3 py-1.5 text-sm bg-purple-600 text-white rounded hover:bg-purple-700"
+                      className="px-3 py-1.5 text-sm bg-[#1F4FD8] text-white rounded hover:bg-[#1A44BF]"
                     >
                       Criar
                     </button>
@@ -831,7 +834,7 @@ export default function TransactionModal({
                 <button
                   type="button"
                   onClick={() => setShowPaymentMethodDropdown(!showPaymentMethodDropdown)}
-                  className="w-full pl-12 pr-10 py-3 min-h-[44px] border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] transition-all bg-[#F9FAFB] text-gray-900 text-left cursor-pointer"
+                  className="w-full pl-12 pr-10 py-3 min-h-[44px] border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] transition-all bg-gray-50 text-gray-900 text-left cursor-pointer"
                   aria-label="Meio de Pagamento"
                   aria-expanded={showPaymentMethodDropdown}
                 >
@@ -910,13 +913,13 @@ export default function TransactionModal({
 
           {/* Status */}
           <div>
-            <label className="block text-sm font-semibold text-[#1A1A1A] mb-2">
+            <label className="block text-sm font-semibold text-gray-900 mb-2">
               Status
             </label>
             <div className="flex gap-3">
               <label className="flex-1 flex items-center gap-3 p-4 border-2 rounded-xl cursor-pointer transition-all hover:shadow-md ${
                 formData.status === 'completed'
-                  ? 'border-[#2563EB] bg-[#DBEAFE]'
+                  ? 'border-[#2563EB] bg-blue-50'
                   : 'border-gray-200 bg-white hover:border-gray-300'
               }">
                 <input
@@ -930,7 +933,7 @@ export default function TransactionModal({
               </label>
               <label className="flex-1 flex items-center gap-3 p-4 border-2 rounded-xl cursor-pointer transition-all hover:shadow-md ${
                 formData.status === 'pending'
-                  ? 'border-[#F59E0B] bg-[#FEF3C7]'
+                  ? 'border-[#F59E0B] bg-amber-50'
                   : 'border-gray-200 bg-white hover:border-gray-300'
               }">
                 <input
@@ -983,43 +986,42 @@ export default function TransactionModal({
           )}
 
           {/* Observações */}
-          <div>
-            <label className="block text-sm font-semibold text-[#1A1A1A] mb-2">
-              Observações <span className="text-gray-400 font-normal">(opcional)</span>
-            </label>
-            <textarea
+          <FormField
+            label={<><span>Observações</span> <span className="text-gray-400 font-normal">(opcional)</span></>}
+          >
+            <Textarea
               value={formData.notes}
               onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-              className="w-full px-4 py-3 min-h-[44px] border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] transition-all bg-[#F9FAFB] text-gray-900 placeholder:text-gray-400 resize-none"
+              className="min-h-[44px] border-2 border-gray-200 bg-gray-50 text-gray-900 placeholder:text-gray-400 resize-none"
               rows={3}
               placeholder="Adicione notas ou observações..."
             />
-          </div>
+          </FormField>
         </form>
 
         {/* Footer com Botões */}
-        <div className="border-t-2 border-gray-100 px-6 py-4 bg-[#F9FAFB] text-gray-900">
+        <div className="border-t-2 border-gray-100 px-6 py-4 bg-gray-50 text-gray-900">
           <div className="flex gap-3">
-            <button
+            <Button
               type="button"
+              variant="secondary"
+              size="lg"
               onClick={onClose}
-              className="flex-1 px-6 py-3.5 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-white hover:shadow-sm transition-all font-semibold"
+              className="flex-1"
               disabled={loading}
             >
               Cancelar
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
               onClick={handleSubmit}
-              className={`flex-1 px-6 py-3.5 rounded-xl font-bold transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5 text-white ${
-                formData.type === 'income'
-                  ? 'bg-gradient-to-r from-[#2563EB] to-[#1D4ED8] hover:from-[#1D4ED8] hover:to-[#1E40AF]'
-                  : 'bg-gradient-to-r from-[#E11D48] to-[#BE123C] hover:from-[#BE123C] hover:to-[#9F1239]'
-              } disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none`}
+              variant={formData.type === 'income' ? 'primary' : 'danger'}
+              size="lg"
+              className="flex-1"
               disabled={loading}
             >
               {loading ? 'Salvando...' : transaction ? 'Atualizar Transação' : 'Criar Transação'}
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -1095,10 +1097,10 @@ export default function TransactionModal({
               <button
                 onClick={() => handleScopeSelect('all')}
                 disabled={loading}
-                className="w-full p-4 text-left border-2 border-gray-200 rounded-xl hover:border-[#C9A962] hover:bg-[#F5F0E6] transition-all group"
+                className="w-full p-4 text-left border-2 border-gray-200 rounded-xl hover:border-[#1F4FD8] hover:bg-blue-50 transition-all group"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-gray-100 group-hover:bg-[#C9A962] rounded-lg flex items-center justify-center transition-all">
+                  <div className="w-10 h-10 bg-gray-100 group-hover:bg-[#1F4FD8] group-hover:text-white rounded-lg flex items-center justify-center transition-all">
                     <span className="text-xl">🔄</span>
                   </div>
                   <div>
@@ -1118,13 +1120,15 @@ export default function TransactionModal({
 
             {/* Footer do popup */}
             <div className="border-t border-gray-100 px-6 py-4 bg-gray-50">
-              <button
+              <Button
                 onClick={handleScopeCancel}
                 disabled={loading}
-                className="w-full px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-white transition-all font-semibold"
+                variant="secondary"
+                size="md"
+                className="w-full"
               >
                 Cancelar
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -1170,24 +1174,26 @@ export default function TransactionModal({
             </div>
             
             <div className="flex gap-3 p-6 border-t border-gray-100">
-              <button
+              <Button
                 onClick={() => {
                   setShowEditPaymentMethodModal(false);
                   setEditingPaymentMethod(null);
                   setEditPaymentMethodName('');
                 }}
                 disabled={paymentMethodActionLoading}
-                className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-all font-semibold"
+                variant="secondary"
+                className="flex-1"
               >
                 Cancelar
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={handleSaveEditPaymentMethod}
                 disabled={paymentMethodActionLoading || !editPaymentMethodName.trim()}
-                className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                variant="primary"
+                className="flex-1"
               >
                 {paymentMethodActionLoading ? 'Salvando...' : 'Salvar'}
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -1237,23 +1243,25 @@ export default function TransactionModal({
             </div>
             
             <div className="flex gap-3 p-6 border-t border-gray-100">
-              <button
+              <Button
                 onClick={() => {
                   setShowDeletePaymentMethodModal(false);
                   setDeletingPaymentMethod(null);
                 }}
                 disabled={paymentMethodActionLoading}
-                className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-all font-semibold"
+                variant="secondary"
+                className="flex-1"
               >
                 Cancelar
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={handleConfirmDeletePaymentMethod}
                 disabled={paymentMethodActionLoading || deletingPaymentMethodTransactionCount > 0}
-                className="flex-1 px-4 py-3 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-all font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                variant="danger"
+                className="flex-1"
               >
                 {paymentMethodActionLoading ? 'Excluindo...' : 'Excluir'}
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -1261,3 +1269,4 @@ export default function TransactionModal({
     </div>
   );
 }
+

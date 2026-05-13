@@ -517,7 +517,7 @@ export default function ReportsPage() {
   const tabs = [
     { id: 'cashflow', label: '📈 Fluxo', fullLabel: '📈 Fluxo de Caixa' },
     { id: 'categories', label: '🍕 Categorias', fullLabel: '🍕 Por Categoria' },
-    { id: 'dre', label: '�️ Mapa', fullLabel: '🗺️ Mapa Financeiro' },
+    { id: 'dre', label: '🗺️ Mapa', fullLabel: '🗺️ Mapa Financeiro' },
     { id: 'comparison', label: '⚖️ Comparativo', fullLabel: '⚖️ Receitas x Despesas' },
     { id: 'budgets', label: '💰 Orçamentos', fullLabel: '💰 Orçamentos' },
   ] as const;
@@ -526,7 +526,7 @@ export default function ReportsPage() {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-[#C9A962] border-t-transparent rounded-full animate-spin"></div>
+          <div className="w-12 h-12 border-4 border-[#1F4FD8] border-t-transparent rounded-full animate-spin"></div>
           <p className="text-lg text-gray-600">Carregando relatórios...</p>
         </div>
       </div>

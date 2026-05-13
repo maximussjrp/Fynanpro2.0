@@ -94,7 +94,7 @@ export default function DashboardHeader({ onAddTransaction, showAddButton = true
               <input
                 type="text"
                 placeholder="Buscar..."
-                className="pl-10 pr-4 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A962]"
+                className="pl-10 pr-4 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1F4FD8]"
                 style={{
                   background: 'var(--v2-bg-surface-2)',
                   border: '1px solid var(--v2-border)',
@@ -120,9 +120,9 @@ export default function DashboardHeader({ onAddTransaction, showAddButton = true
                 onClick={onAddTransaction}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg transition-all font-medium"
                 style={{
-                  background: '#1A1A1A',
-                  color: '#C9A962',
-                  border: '1px solid #C9A962',
+                  background: '#1F4FD8',
+                  color: '#FFFFFF',
+                  border: '1px solid #1F4FD8',
                   fontFamily: 'Inter, sans-serif',
                 }}
               >

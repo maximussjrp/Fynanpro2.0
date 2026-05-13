@@ -23,6 +23,7 @@ import {
   CheckCircle2,
   BarChart3
 } from 'lucide-react';
+import Tabs from '@/components/ui/Tabs';
 
 interface MonthData {
   month: number;
@@ -278,27 +279,17 @@ export default function PlanningPage() {
       {/* Tabs */}
       <div className="bg-white rounded-xl shadow-sm border">
         <div className="border-b px-4">
-          <div className="flex gap-4 overflow-x-auto">
-            {[
-              { key: 'overview', label: 'Visão Geral', icon: BarChart3 },
-              { key: 'incomes', label: 'Receitas Fixas', icon: TrendingUp },
-              { key: 'expenses', label: 'Despesas Fixas', icon: TrendingDown },
-              { key: 'projection', label: 'Projeção 12 Meses', icon: Calendar },
-            ].map(tab => (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key as any)}
-                className={`flex items-center gap-2 py-4 px-3 border-b-2 transition-colors whitespace-nowrap ${
-                  activeTab === tab.key 
-                    ? 'border-[#6C5CE7] text-[#6C5CE7] font-medium' 
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                <tab.icon className="w-4 h-4" />
-                {tab.label}
-              </button>
-            ))}
-          </div>
+          <Tabs
+            variant="underline"
+            activeTab={activeTab}
+            onChange={(id) => setActiveTab(id as typeof activeTab)}
+            tabs={[
+              { id: 'overview', label: 'Visão Geral', icon: <BarChart3 className="w-4 h-4" /> },
+              { id: 'incomes', label: 'Receitas Fixas', icon: <TrendingUp className="w-4 h-4" /> },
+              { id: 'expenses', label: 'Despesas Fixas', icon: <TrendingDown className="w-4 h-4" /> },
+              { id: 'projection', label: 'Projeção 12 Meses', icon: <Calendar className="w-4 h-4" /> },
+            ]}
+          />
         </div>
 
         <div className="p-6">

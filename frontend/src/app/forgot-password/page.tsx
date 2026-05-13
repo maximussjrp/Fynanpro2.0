@@ -31,7 +31,7 @@ export default function ForgotPasswordPage() {
     } catch (error: any) {
       // Por segurança o backend sempre retorna sucesso, mas tratamos erro de rede
       setMessage(
-        '❌ Erro de conexão. Verifique sua internet e tente novamente.'
+        'Erro de conexão. Verifique sua internet e tente novamente.'
       );
     } finally {
       setIsLoading(false);
@@ -39,23 +39,23 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#F5F0E6] via-white to-[#F5F0E6] flex items-center justify-center px-4 py-12">
+    <div className="min-h-screen bg-gradient-to-br from-[#F8FAFC] via-white to-[#EFF6FF] flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-md">
         <Link
           href="/login"
-          className="inline-flex items-center gap-2 text-[#475569] hover:text-[#1A1A1A] mb-6 text-sm font-medium"
+          className="inline-flex items-center gap-2 text-[#475569] hover:text-[#1F4FD8] mb-6 text-sm font-medium"
         >
           <ArrowLeft size={16} />
           Voltar para login
         </Link>
 
-        <div className="bg-white rounded-2xl shadow-xl p-8 border border-[#E5E7EB]">
+        <div className="bg-white rounded-2xl shadow-xl p-8 border border-[#E2E8F0]">
           <div className="text-center mb-6">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-[#1A1A1A] rounded-2xl mb-4">
-              <span className="text-[#C9A962] text-2xl font-bold">U</span>
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-[#1F4FD8]/10 rounded-2xl mb-4">
+              <Mail className="text-[#1F4FD8]" size={28} />
             </div>
             <h1
-              className="text-2xl font-bold text-[#1A1A1A]"
+              className="text-2xl font-bold text-[#0F172A]"
               style={{ fontFamily: 'Inter, sans-serif' }}
             >
               Esqueceu sua senha?
@@ -70,7 +70,7 @@ export default function ForgotPasswordPage() {
           {submitted ? (
             <div className="space-y-4">
               <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex gap-3">
-                <CheckCircle className="text-green-600 flex-shrink-0 mt-0.5" size={20} />
+                <CheckCircle className="text-[#16A34A] flex-shrink-0 mt-0.5" size={20} />
                 <div className="text-sm text-green-800">
                   <p className="font-semibold mb-1">Email enviado!</p>
                   <p>{message}</p>
@@ -87,14 +87,14 @@ export default function ForgotPasswordPage() {
                   setEmail('');
                   setMessage('');
                 }}
-                className="w-full py-3 border-2 border-[#C9A962] text-[#1A1A1A] rounded-xl font-semibold hover:bg-[#F5F0E6] transition-colors"
+                className="w-full py-3 border-2 border-[#CBD5E1] text-[#0F172A] rounded-xl font-semibold hover:bg-[#F8FAFC] transition-colors"
               >
                 Enviar para outro email
               </button>
 
               <Link
                 href="/login"
-                className="block text-center w-full py-3 bg-gradient-to-r from-[#1A1A1A] to-[#2A2A2A] text-[#C9A962] rounded-xl font-bold border border-[#C9A962]"
+                className="block text-center w-full py-3 bg-[#1F4FD8] text-white rounded-xl font-bold hover:bg-[#1A44BF] transition-colors"
               >
                 Voltar para login
               </Link>
@@ -102,13 +102,13 @@ export default function ForgotPasswordPage() {
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-[#1A1A1A] mb-1">
+                <label className="block text-sm font-medium text-[#0F172A] mb-1">
                   Email
                 </label>
                 <div className="relative">
                   <Mail
                     size={18}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]"
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-[#64748B]"
                   />
                   <input
                     type="email"
@@ -116,7 +116,7 @@ export default function ForgotPasswordPage() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="seu@email.com"
-                    className="w-full pl-10 pr-4 py-3 bg-[#F8FAFC] border border-[#E5E7EB] rounded-xl text-[#1A1A1A] placeholder:text-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#C9A962] focus:border-transparent"
+                    className="w-full pl-10 pr-4 py-3 bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl text-[#0F172A] placeholder:text-[#64748B] focus:outline-none focus:ring-2 focus:ring-[#1F4FD8] focus:border-transparent"
                     disabled={isLoading}
                     autoFocus
                   />
@@ -132,7 +132,7 @@ export default function ForgotPasswordPage() {
               <button
                 type="submit"
                 disabled={isLoading || !email}
-                className="w-full bg-gradient-to-r from-[#1A1A1A] to-[#2A2A2A] hover:from-[#2A2A2A] hover:to-[#1A1A1A] text-[#C9A962] font-bold py-4 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg border border-[#C9A962]"
+                className="w-full bg-[#1F4FD8] hover:bg-[#1A44BF] text-white font-bold py-4 rounded-xl transition-all disabled:bg-[#CBD5E1] disabled:text-[#475569] disabled:cursor-not-allowed shadow-lg"
               >
                 {isLoading ? 'Enviando...' : 'Enviar link de recuperação'}
               </button>
@@ -141,7 +141,7 @@ export default function ForgotPasswordPage() {
                 Lembrou a senha?{' '}
                 <Link
                   href="/login"
-                  className="text-[#C9A962] hover:underline font-medium"
+                  className="text-[#1F4FD8] hover:underline font-medium"
                 >
                   Entrar
                 </Link>
