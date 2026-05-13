@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useAuth } from '@/stores/auth';
 import { useState, useEffect, useRef, useMemo } from 'react';
@@ -7,7 +7,7 @@ import api from '@/lib/api';
 import { toast } from 'sonner';
 import EditTransactionModal from '@/components/NewTransactionModal';
 import CreateTransactionModal from '@/components/UnifiedTransactionModal';
-import { Receipt, Filter, Edit2, Trash2, Calendar, CheckCircle, XCircle, Clock, Plus, ArrowLeft, ChevronUp, ChevronDown, Check, User, ArrowRightLeft, Search, X, Tag, Eye, EyeOff } from 'lucide-react';
+import { Receipt, Filter, Edit2, Trash2, Calendar, CheckCircle, XCircle, Clock, Plus, ArrowLeft, ChevronUp, ChevronDown, Check, User, ArrowRightLeft, Search, X, Tag, Eye, EyeOff , Loader2 } from 'lucide-react';
 
 interface UserProfile {
   id: string;
@@ -24,7 +24,7 @@ interface Transaction {
   description: string;
   type: 'income' | 'expense' | 'transfer';
   transactionDate: string;
-  dueDate?: string; // Para ocorrências
+  dueDate?: string; // Para ocorrÃªncias
   paidDate?: string; // Data real do pagamento
   isPaidEarly?: boolean;
   isPaidLate?: boolean;
@@ -35,14 +35,14 @@ interface Transaction {
   bankAccountId: string;
   paymentMethodId?: string;
   userProfileId?: string;
-  isRecurringOccurrence?: boolean; // Flag para identificar ocorrências
+  isRecurringOccurrence?: boolean; // Flag para identificar ocorrÃªncias
   recurringBillId?: string;
   isInstallment?: boolean; // Flag para identificar parcelas individuais
   installmentPurchaseId?: string;
-  parentId?: string; // ID do template pai (para transações filhas de recorrentes/parcelamentos)
-  frequency?: string; // Frequência da recorrência (daily, weekly, monthly, yearly)
-  transactionType?: 'single' | 'recurring' | 'installment'; // Tipo de transação
-  installmentNumber?: number; // Número da parcela atual
+  parentId?: string; // ID do template pai (para transaÃ§Ãµes filhas de recorrentes/parcelamentos)
+  frequency?: string; // FrequÃªncia da recorrÃªncia (daily, weekly, monthly, yearly)
+  transactionType?: 'single' | 'recurring' | 'installment'; // Tipo de transaÃ§Ã£o
+  installmentNumber?: number; // NÃºmero da parcela atual
   totalInstallments?: number; // Total de parcelas
   category: {
     id: string;
@@ -106,6 +106,7 @@ export default function TransactionsPage() {
   const router = useRouter();
   const { accessToken, isAuthenticated } = useAuth();
   const [loading, setLoading] = useState(true);
+  const [loadingTransactionId, setLoadingTransactionId] = useState<string | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
@@ -115,7 +116,7 @@ export default function TransactionsPage() {
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   
-  // Ordenação e Filtros por Coluna
+  // OrdenaÃ§Ã£o e Filtros por Coluna
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
   const [columnFilters, setColumnFilters] = useState<{
     categories: string[];
@@ -129,7 +130,7 @@ export default function TransactionsPage() {
     statuses: [],
   });
   const [dateColumnFilter, setDateColumnFilter] = useState<{ startDate: string; endDate: string } | null>(null);
-  // Draft para filtro de data da coluna (evita filtrar ao navegar no calendário)
+  // Draft para filtro de data da coluna (evita filtrar ao navegar no calendÃ¡rio)
   const [draftDateColumnFilter, setDraftDateColumnFilter] = useState<{ startDate: string; endDate: string } | null>(null);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [columnFilterSearch, setColumnFilterSearch] = useState('');
@@ -152,7 +153,7 @@ export default function TransactionsPage() {
   const [categoryForm, setCategoryForm] = useState<CategoryForm>({
     name: '',
     type: 'expense',
-    icon: '📝',
+    icon: 'ðŸ“',
     color: '#3B82F6',
     parentId: null,
   });
@@ -169,7 +170,7 @@ export default function TransactionsPage() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
   
-  // Helper para obter datas do mês atual
+  // Helper para obter datas do mÃªs atual
   const getDefaultDateRange = () => {
     const now = new Date();
     return {
@@ -188,20 +189,20 @@ export default function TransactionsPage() {
     bankAccountId: '',
     paymentMethodId: '',
     type: 'all' as 'all' | 'income' | 'expense' | 'transfer',
-    status: 'all' as 'all' | 'completed' | 'pending',
+    status: 'all' as 'all' | 'completed' | 'pending' | 'overdue',
   });
 
-  // Filtros DRAFT (o que o usuário está escolhendo no formulário)
+  // Filtros DRAFT (o que o usuÃ¡rio estÃ¡ escolhendo no formulÃ¡rio)
   const [draftDateRange, setDraftDateRange] = useState({
     startDate: defaultRange.startDate,
     endDate: defaultRange.endDate,
   });
 
-  // Flag para indicar se o draft é diferente do aplicado
+  // Flag para indicar se o draft Ã© diferente do aplicado
   const dateFilterPending = draftDateRange.startDate !== appliedFilters.startDate || 
                             draftDateRange.endDate !== appliedFilters.endDate;
 
-  // Função para aplicar o filtro de data
+  // FunÃ§Ã£o para aplicar o filtro de data
   const applyDateFilter = () => {
     setAppliedFilters(prev => ({
       ...prev,
@@ -217,14 +218,14 @@ export default function TransactionsPage() {
     setAppliedFilters(prev => ({ ...prev, startDate: today, endDate: today }));
   };
 
-  // Atalho: Aplicar "Este Mês"
+  // Atalho: Aplicar "Este MÃªs"
   const applyThisMonth = () => {
     const range = getDefaultDateRange();
     setDraftDateRange(range);
     setAppliedFilters(prev => ({ ...prev, ...range }));
   };
 
-  // Atalho: Aplicar "Mês Anterior"
+  // Atalho: Aplicar "MÃªs Anterior"
   const applyLastMonth = () => {
     const now = new Date();
     const startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split('T')[0];
@@ -233,7 +234,7 @@ export default function TransactionsPage() {
     setAppliedFilters(prev => ({ ...prev, startDate, endDate }));
   };
 
-  // Referência ao antigo estado "filters" (agora aponta para appliedFilters para compatibilidade)
+  // ReferÃªncia ao antigo estado "filters" (agora aponta para appliedFilters para compatibilidade)
   const filters = appliedFilters;
   const setFilters = (valueOrUpdater: typeof appliedFilters | ((prev: typeof appliedFilters) => typeof appliedFilters)) => {
     if (typeof valueOrUpdater === 'function') {
@@ -254,7 +255,7 @@ export default function TransactionsPage() {
     }
   };
 
-  // Verificar se há parâmetros na URL
+  // Verificar se hÃ¡ parÃ¢metros na URL
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const dateParam = urlParams.get('date');
@@ -267,19 +268,19 @@ export default function TransactionsPage() {
       // Data de hoje formatada
       const today = new Date().toISOString().split('T')[0];
       
-      // Se status for overdue, expandir range para pegar transações antigas (últimos 2 anos até hoje)
+      // Se status for overdue, expandir range para pegar transaÃ§Ãµes antigas (Ãºltimos 2 anos atÃ© hoje)
       const isOverdue = statusParam === 'overdue';
       const overdueStartDate = new Date();
       overdueStartDate.setFullYear(overdueStartDate.getFullYear() - 2);
       
       setFilters(prev => ({
         ...prev,
-        // Se for overdue, expandir range para últimos 2 anos até hoje
+        // Se for overdue, expandir range para Ãºltimos 2 anos atÃ© hoje
         ...(isOverdue && { 
           startDate: overdueStartDate.toISOString().split('T')[0], 
           endDate: today 
         }),
-        // Se tiver date específico, usa como start e end
+        // Se tiver date especÃ­fico, usa como start e end
         ...(!isOverdue && dateParam && { startDate: dateParam, endDate: dateParam }),
         // Se tiver startDate e endDate, usa eles
         ...(!isOverdue && startDateParam && { startDate: startDateParam }),
@@ -314,7 +315,7 @@ export default function TransactionsPage() {
       const params: any = {
         startDate: filters.startDate,
         endDate: filters.endDate,
-        limit: 10000, // Buscar todas as transações do período (sem limite prático)
+        limit: 10000, // Buscar todas as transaÃ§Ãµes do perÃ­odo (sem limite prÃ¡tico)
       };
 
       if (filters.categoryId) params.categoryId = filters.categoryId;
@@ -323,7 +324,7 @@ export default function TransactionsPage() {
       if (filters.type !== 'all') params.type = filters.type;
       if (filters.status !== 'all') params.status = filters.status;
 
-      // Buscar transações realizadas + ocorrências pendentes + parcelas
+      // Buscar transaÃ§Ãµes realizadas + ocorrÃªncias pendentes + parcelas
       const [transactionsRes, occurrencesRes, installmentsRes, categoriesRes, accountsRes, paymentMethodsRes] = await Promise.all([
         api.get('/transactions', { params }),
         api.get('/recurring-bills/occurrences', { params }),
@@ -333,18 +334,18 @@ export default function TransactionsPage() {
         api.get('/payment-methods?isActive=true'),
       ]);
 
-      // Combinar transações com ocorrências de recorrências
+      // Combinar transaÃ§Ãµes com ocorrÃªncias de recorrÃªncias
       const transactionsList = transactionsRes.data.data.transactions || [];
       const occurrencesList = occurrencesRes.data.data?.occurrences || [];
       const purchasesList = installmentsRes.data?.data?.purchases || installmentsRes.data?.purchases || [];
 
-      // Mapear ocorrências PENDENTES para formato de transação (ignorar as já pagas)
+      // Mapear ocorrÃªncias PENDENTES para formato de transaÃ§Ã£o (ignorar as jÃ¡ pagas)
       const mappedOccurrences = occurrencesList
-        .filter((occ: any) => occ.status === 'pending') // ✅ Só mostrar pendentes
+        .filter((occ: any) => occ.status === 'pending') // âœ… SÃ³ mostrar pendentes
         .map((occ: any) => ({
           id: occ.id,
           amount: occ.amount.toString(),
-          description: occ.recurringBill?.name || 'Recorrência',
+          description: occ.recurringBill?.name || 'RecorrÃªncia',
           transactionDate: occ.dueDate,
           dueDate: occ.dueDate,
           status: occ.status,
@@ -354,13 +355,13 @@ export default function TransactionsPage() {
           paymentMethodId: occ.recurringBill?.paymentMethodId,
           isRecurringOccurrence: true,
           recurringBillId: occ.recurringBillId,
-          category: occ.recurringBill?.category || { id: '', name: 'Sem categoria', type: 'expense', icon: '❓', color: '#999' },
+          category: occ.recurringBill?.category || { id: '', name: 'Sem categoria', type: 'expense', icon: 'â“', color: '#999' },
           bankAccount: occ.recurringBill?.bankAccount || { id: '', name: 'Sem conta', type: 'bank', currentBalance: 0 },
           paymentMethod: occ.recurringBill?.paymentMethod,
           createdAt: occ.createdAt,
       }));
 
-      // Mapear PARCELAS individuais (Installments) para formato de transação
+      // Mapear PARCELAS individuais (Installments) para formato de transaÃ§Ã£o
       const mappedInstallments = purchasesList.flatMap((p: any) =>
         (p.installments || [])
           .filter((inst: any) => inst.status === 'pending')
@@ -380,7 +381,7 @@ export default function TransactionsPage() {
             installmentPurchaseId: p.id,
             installmentNumber: inst.installmentNumber,
             totalInstallments: p.numberOfInstallments,
-            category: p.category || { id: '', name: 'Sem categoria', type: 'expense', icon: '❓', color: '#999' },
+            category: p.category || { id: '', name: 'Sem categoria', type: 'expense', icon: 'â“', color: '#999' },
             bankAccount: inst.bankAccount || { id: '', name: 'Sem conta', type: 'bank', currentBalance: 0 },
             paymentMethod: inst.paymentMethod,
             createdAt: inst.createdAt,
@@ -390,15 +391,15 @@ export default function TransactionsPage() {
       // Combinar listas
       const combined = [...transactionsList, ...mappedOccurrences, ...mappedInstallments];
       
-      // Remover duplicatas: se uma transação tem parentId, ela é filha de recorrente
-      // e NÃO deve aparecer como occurrence também
+      // Remover duplicatas: se uma transaÃ§Ã£o tem parentId, ela Ã© filha de recorrente
+      // e NÃƒO deve aparecer como occurrence tambÃ©m
       const uniqueTransactions = combined.reduce((acc: Transaction[], curr) => {
-        // Se for occurrence, verificar se já existe uma transaction com mesmo ID ou mesma data+descrição
+        // Se for occurrence, verificar se jÃ¡ existe uma transaction com mesmo ID ou mesma data+descriÃ§Ã£o
         if (curr.isRecurringOccurrence) {
           const isDuplicate = acc.some(t => 
             // Mesmo ID
             t.id === curr.id ||
-            // Ou mesma data + descrição (transação filha já existe)
+            // Ou mesma data + descriÃ§Ã£o (transaÃ§Ã£o filha jÃ¡ existe)
             (t.description === curr.description && 
              new Date(t.transactionDate).toDateString() === new Date(curr.transactionDate).toDateString())
           );
@@ -407,7 +408,7 @@ export default function TransactionsPage() {
             acc.push(curr);
           }
         } else {
-          // Transações normais sempre adicionar
+          // TransaÃ§Ãµes normais sempre adicionar
           acc.push(curr);
         }
         return acc;
@@ -434,26 +435,26 @@ export default function TransactionsPage() {
 
   const handleDelete = async (transaction: Transaction) => {
     try {
-      // Verificar se é uma transação recorrente (tem frequency ou parentId com transactionType = recurring)
+      // Verificar se Ã© uma transaÃ§Ã£o recorrente (tem frequency ou parentId com transactionType = recurring)
       const isRecurring = transaction.frequency || (transaction.parentId && transaction.transactionType === 'recurring');
       
-      // Verificar se é parcelamento (tem parentId com transactionType = installment ou installmentNumber)
+      // Verificar se Ã© parcelamento (tem parentId com transactionType = installment ou installmentNumber)
       const isInstallment = (transaction.parentId && transaction.transactionType === 'installment') || 
                            (transaction.installmentNumber && transaction.totalInstallments);
       
       if (isRecurring || isInstallment) {
-        // Para recorrentes/parcelamentos, usar o parentId se existir, senão usar o próprio id (é o template)
+        // Para recorrentes/parcelamentos, usar o parentId se existir, senÃ£o usar o prÃ³prio id (Ã© o template)
         const parentId = transaction.parentId || transaction.id;
-        const typeLabel = isInstallment ? 'parcelamento' : 'recorrência';
+        const typeLabel = isInstallment ? 'parcelamento' : 'recorrÃªncia';
         
-        // Verificar se há transações pagas
+        // Verificar se hÃ¡ transaÃ§Ãµes pagas
         const checkResponse = await api.get(`/transactions/${parentId}/check-paid`);
         const hasPaidTransactions = checkResponse.data.data?.hasPaidTransactions || false;
         
         if (hasPaidTransactions) {
           // Mostrar modal perguntando o que fazer
           const deleteAll = confirm(
-            `Este ${typeLabel} possui transações pagas. Deseja excluir:\n\n` +
+            `Este ${typeLabel} possui transaÃ§Ãµes pagas. Deseja excluir:\n\n` +
             'OK = Todas (incluindo pagas)\n' +
             'Cancelar = Apenas as pendentes'
           );
@@ -462,41 +463,43 @@ export default function TransactionsPage() {
           await api.delete(`/transactions/${parentId}?cascade=true&deleteMode=${deleteMode}`);
           
           if (deleteMode === 'all') {
-            toast.success(`Todas as transações do ${typeLabel} foram excluídas!`);
+            toast.success(`Todas as transaÃ§Ãµes do ${typeLabel} foram excluÃ­das!`);
           } else {
-            toast.success('Transações pendentes excluídas. As pagas foram mantidas.');
+            toast.success('TransaÃ§Ãµes pendentes excluÃ­das. As pagas foram mantidas.');
           }
         } else {
-          // Sem transações pagas, apenas confirmar exclusão
-          if (!confirm(`Tem certeza que deseja excluir todas as ${isInstallment ? 'parcelas deste parcelamento' : 'ocorrências desta recorrência'}?`)) return;
+          // Sem transaÃ§Ãµes pagas, apenas confirmar exclusÃ£o
+          if (!confirm(`Tem certeza que deseja excluir todas as ${isInstallment ? 'parcelas deste parcelamento' : 'ocorrÃªncias desta recorrÃªncia'}?`)) return;
           
           await api.delete(`/transactions/${parentId}?cascade=true&deleteMode=all`);
-          toast.success(`${isInstallment ? 'Parcelamento' : 'Recorrência'} excluído(a) com sucesso!`);
+          toast.success(`${isInstallment ? 'Parcelamento' : 'RecorrÃªncia'} excluÃ­do(a) com sucesso!`);
         }
       } else {
-        // Transação normal
-        if (!confirm('Tem certeza que deseja excluir esta transação?')) return;
+        // TransaÃ§Ã£o normal
+        if (!confirm('Tem certeza que deseja excluir esta transaÃ§Ã£o?')) return;
         await api.delete(`/transactions/${transaction.id}`);
-        toast.success('Transação excluída com sucesso!');
+        toast.success('TransaÃ§Ã£o excluÃ­da com sucesso!');
       }
       
       loadData();
     } catch (error: any) {
-      console.error('Erro ao excluir transação:', error);
-      toast.error(error.response?.data?.error?.message || 'Erro ao excluir transação');
+      console.error('Erro ao excluir transaÃ§Ã£o:', error);
+      toast.error(error.response?.data?.error?.message || 'Erro ao excluir transaÃ§Ã£o');
     }
   };
 
   const togglePaidStatus = async (transaction: Transaction) => {
+    if (loadingTransactionId === transaction.id) return;
+    setLoadingTransactionId(transaction.id);
     try {
-      // Se for ocorrência do modelo ANTIGO (RecurringBillOccurrence), usar endpoint específico
+      // Se for ocorrÃªncia do modelo ANTIGO (RecurringBillOccurrence), usar endpoint especÃ­fico
       // Identificamos pelo campo isRecurringOccurrence que vem do mapeamento de /recurring-bills/occurrences
       if (transaction.isRecurringOccurrence && transaction.recurringBillId && !transaction.parentId) {
         await api.post(`/recurring-bills/${transaction.recurringBillId}/occurrences/${transaction.id}/pay`, {
           paidDate: new Date().toISOString(),
           paidAmount: transaction.amount,
         });
-        toast.success('Recorrência paga com sucesso!');
+        toast.success('RecorrÃªncia paga com sucesso!');
       } else if (transaction.isInstallment && transaction.installmentPurchaseId) {
         await api.put(`/installments/${transaction.installmentPurchaseId}/installments/${transaction.id}/pay`);
         toast.success('Parcela paga com sucesso!');
@@ -512,6 +515,8 @@ export default function TransactionsPage() {
     } catch (error: any) {
       console.error('Erro ao atualizar status:', error);
       toast.error('Erro ao atualizar status');
+    } finally {
+      setLoadingTransactionId(null);
     }
   };
 
@@ -537,11 +542,11 @@ export default function TransactionsPage() {
     loadData();
   };
 
-  // Funções para gerenciar categorias
+  // FunÃ§Ãµes para gerenciar categorias
   const handleCreateCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!categoryForm.name.trim()) {
-      toast.error('Nome da categoria é obrigatório');
+      toast.error('Nome da categoria Ã© obrigatÃ³rio');
       return;
     }
     setSubmittingCategory(true);
@@ -549,7 +554,7 @@ export default function TransactionsPage() {
       await api.post('/categories', categoryForm);
       toast.success('Categoria criada com sucesso!');
       setShowCategoryModal(false);
-      setCategoryForm({ name: '', type: 'expense', icon: '📝', color: '#3B82F6', parentId: null });
+      setCategoryForm({ name: '', type: 'expense', icon: 'ðŸ“', color: '#3B82F6', parentId: null });
       loadData(); // Recarrega categorias
     } catch (error: any) {
       console.error('Erro ao criar categoria:', error);
@@ -568,7 +573,7 @@ export default function TransactionsPage() {
       toast.success('Categoria atualizada com sucesso!');
       setShowEditCategoryModal(false);
       setEditingCategory(null);
-      setCategoryForm({ name: '', type: 'expense', icon: '📝', color: '#3B82F6', parentId: null });
+      setCategoryForm({ name: '', type: 'expense', icon: 'ðŸ“', color: '#3B82F6', parentId: null });
       loadData();
     } catch (error: any) {
       console.error('Erro ao editar categoria:', error);
@@ -583,7 +588,7 @@ export default function TransactionsPage() {
     setCategoryForm({
       name: category.name,
       type: category.type as 'income' | 'expense',
-      icon: category.icon || '📝',
+      icon: category.icon || 'ðŸ“',
       color: category.color || '#3B82F6',
       parentId: category.parentId || null,
     });
@@ -601,10 +606,10 @@ export default function TransactionsPage() {
   };
 
   const handleDeleteCategory = async (category: Category) => {
-    if (!confirm(`Tem certeza que deseja excluir a categoria "${category.name}"? Esta ação não pode ser desfeita.`)) return;
+    if (!confirm(`Tem certeza que deseja excluir a categoria "${category.name}"? Esta aÃ§Ã£o nÃ£o pode ser desfeita.`)) return;
     try {
       await api.delete(`/categories/${category.id}`);
-      toast.success('Categoria excluída com sucesso!');
+      toast.success('Categoria excluÃ­da com sucesso!');
       loadData();
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Erro ao excluir categoria');
@@ -620,19 +625,19 @@ export default function TransactionsPage() {
     );
   };
 
-  // Função para realizar transferência
+  // FunÃ§Ã£o para realizar transferÃªncia
   const handleTransfer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!transferForm.fromAccountId || !transferForm.toAccountId || !transferForm.amount) {
-      toast.error('Preencha todos os campos obrigatórios');
+      toast.error('Preencha todos os campos obrigatÃ³rios');
       return;
     }
     if (transferForm.fromAccountId === transferForm.toAccountId) {
-      toast.error('Conta de origem e destino não podem ser iguais');
+      toast.error('Conta de origem e destino nÃ£o podem ser iguais');
       return;
     }
 
-    // Verificar se o saldo ficará negativo
+    // Verificar se o saldo ficarÃ¡ negativo
     const fromAccount = bankAccounts.find(acc => acc.id === transferForm.fromAccountId);
     const amount = parseFloat(transferForm.amount);
     const currentBalance = Number(fromAccount?.currentBalance) || 0;
@@ -641,10 +646,10 @@ export default function TransactionsPage() {
     if (newBalance < 0) {
       const formatValue = (val: number) => val.toFixed(2).replace('.', ',');
       const confirmed = confirm(
-        `⚠️ ATENÇÃO: O saldo da conta "${fromAccount?.name}" ficará NEGATIVO!\n\n` +
+        `âš ï¸ ATENÃ‡ÃƒO: O saldo da conta "${fromAccount?.name}" ficarÃ¡ NEGATIVO!\n\n` +
         `Saldo atual: R$ ${formatValue(currentBalance)}\n` +
-        `Valor da transferência: R$ ${formatValue(amount)}\n` +
-        `Saldo após transferência: R$ ${formatValue(newBalance)}\n\n` +
+        `Valor da transferÃªncia: R$ ${formatValue(amount)}\n` +
+        `Saldo apÃ³s transferÃªncia: R$ ${formatValue(newBalance)}\n\n` +
         `Deseja continuar mesmo assim?`
       );
       if (!confirmed) {
@@ -658,10 +663,10 @@ export default function TransactionsPage() {
         fromAccountId: transferForm.fromAccountId,
         toAccountId: transferForm.toAccountId,
         amount: amount,
-        description: transferForm.description || 'Transferência entre contas',
+        description: transferForm.description || 'TransferÃªncia entre contas',
         transactionDate: transferForm.transactionDate,
       });
-      toast.success('Transferência realizada com sucesso!');
+      toast.success('TransferÃªncia realizada com sucesso!');
       setShowTransferModal(false);
       setTransferForm({
         fromAccountId: '',
@@ -675,7 +680,7 @@ export default function TransactionsPage() {
       console.error('Erro ao transferir:', error);
       const errorMessage = error.response?.data?.error?.message || 
                           error.response?.data?.message || 
-                          'Erro ao realizar transferência';
+                          'Erro ao realizar transferÃªncia';
       toast.error(errorMessage);
     } finally {
       setSubmittingTransfer(false);
@@ -693,7 +698,7 @@ export default function TransactionsPage() {
     return new Date(dateString).toLocaleDateString('pt-BR');
   };
 
-  // Função para ordenar
+  // FunÃ§Ã£o para ordenar
   const handleSort = (key: string) => {
     let direction: 'asc' | 'desc' = 'asc';
     if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
@@ -702,7 +707,7 @@ export default function TransactionsPage() {
     setSortConfig({ key, direction });
   };
 
-  // Função para toggle de filtro checkbox
+  // FunÃ§Ã£o para toggle de filtro checkbox
   const toggleColumnFilter = (filterType: 'categories' | 'accounts' | 'paymentMethods' | 'statuses', value: string) => {
     setColumnFilters(prev => {
       const current = prev[filterType];
@@ -730,7 +735,7 @@ export default function TransactionsPage() {
     setColumnFilters(prev => ({ ...prev, [filterType]: [] }));
   };
 
-  // Obter valores únicos para filtros
+  // Obter valores Ãºnicos para filtros
   const uniqueCategories = [...new Map(transactions.map(t => [t.category?.id, t.category])).values()].filter(Boolean);
   const uniqueAccounts = [...new Map(transactions.map(t => [t.bankAccount?.id, t.bankAccount])).values()].filter(Boolean);
   const uniquePaymentMethods = [...new Map(transactions.map(t => [t.paymentMethod?.id, t.paymentMethod])).values()].filter(Boolean);
@@ -740,7 +745,7 @@ export default function TransactionsPage() {
     { id: 'overdue', name: 'Atrasado' },
   ];
 
-  // Aplicar filtros e ordenação
+  // Aplicar filtros e ordenaÃ§Ã£o
   const getFilteredAndSortedTransactions = () => {
     let result = [...transactions];
 
@@ -773,7 +778,7 @@ export default function TransactionsPage() {
       });
     }
 
-    // Aplicar ordenação
+    // Aplicar ordenaÃ§Ã£o
     if (sortConfig) {
       result.sort((a, b) => {
         let aValue: any;
@@ -823,7 +828,7 @@ export default function TransactionsPage() {
 
   const filteredTransactions = getFilteredAndSortedTransactions();
 
-  // Calcular o total das transações filtradas
+  // Calcular o total das transaÃ§Ãµes filtradas
   const totalFiltered = useMemo(() => {
     return filteredTransactions.reduce((sum, t) => {
       const amount = Number(t.amount);
@@ -831,7 +836,7 @@ export default function TransactionsPage() {
     }, 0);
   }, [filteredTransactions]);
 
-  // Componente de cabeçalho de coluna com ordenação e filtro
+  // Componente de cabeÃ§alho de coluna com ordenaÃ§Ã£o e filtro
   const ColumnHeader = ({ 
     label, 
     sortKey, 
@@ -855,7 +860,7 @@ export default function TransactionsPage() {
         <div className="flex items-center gap-1">
           <span>{label}</span>
           
-          {/* Botão de ordenação */}
+          {/* BotÃ£o de ordenaÃ§Ã£o */}
           {sortKey && (
             <button
               onClick={() => handleSort(sortKey)}
@@ -869,7 +874,7 @@ export default function TransactionsPage() {
             </button>
           )}
           
-          {/* Botão de filtro de data */}
+          {/* BotÃ£o de filtro de data */}
           {isDateFilter && (
             <button
               onClick={() => setOpenDropdown(isOpen ? null : 'date')}
@@ -880,7 +885,7 @@ export default function TransactionsPage() {
             </button>
           )}
           
-          {/* Botão de filtro */}
+          {/* BotÃ£o de filtro */}
           {filterType && filterOptions && !isDateFilter && (
             <button
               onClick={() => setOpenDropdown(isOpen ? null : filterType)}
@@ -974,7 +979,7 @@ export default function TransactionsPage() {
           >
             <div className="space-y-3">
               <div className="text-xs text-gray-500 bg-blue-50 p-2 rounded-lg border border-blue-100">
-                💡 Digite as datas e clique em <strong>"Aplicar Filtro"</strong>
+                ðŸ’¡ Digite as datas e clique em <strong>"Aplicar Filtro"</strong>
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Data Inicial</label>
@@ -1050,7 +1055,7 @@ export default function TransactionsPage() {
                   maxLength={10}
                 />
               </div>
-              {/* Botão Aplicar - sempre visível se há dados no draft */}
+              {/* BotÃ£o Aplicar - sempre visÃ­vel se hÃ¡ dados no draft */}
               <button
                 onClick={() => {
                   if (draftDateColumnFilter) {
@@ -1065,7 +1070,7 @@ export default function TransactionsPage() {
                     : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                 }`}
               >
-                ✓ Aplicar Filtro
+                âœ“ Aplicar Filtro
               </button>
               <div className="flex gap-2 pt-2 border-t border-gray-100">
                 <button
@@ -1088,7 +1093,7 @@ export default function TransactionsPage() {
                   }}
                   className="flex-1 px-3 py-1.5 text-xs bg-gray-100 text-gray-700 hover:bg-gray-200 rounded transition-colors"
                 >
-                  Este Mês
+                  Este MÃªs
                 </button>
               </div>
               {dateColumnFilter && (
@@ -1115,7 +1120,7 @@ export default function TransactionsPage() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Carregando transações...</p>
+          <p className="text-gray-600">Carregando transaÃ§Ãµes...</p>
         </div>
       </div>
     );
@@ -1137,14 +1142,14 @@ export default function TransactionsPage() {
             <div>
               <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-2">
                 <Receipt className="w-8 h-8" />
-                Histórico de Transações
+                HistÃ³rico de TransaÃ§Ãµes
               </h1>
               <p className="text-gray-600 mt-1">
-                {filteredTransactions.length} de {transactions.length} transações
+                {filteredTransactions.length} de {transactions.length} transaÃ§Ãµes
                 {(columnFilters.categories.length > 0 || columnFilters.accounts.length > 0 || columnFilters.paymentMethods.length > 0 || columnFilters.statuses.length > 0) && (
                   <span className="text-blue-600 ml-2">(filtradas)</span>
                 )}
-                <span className="mx-2">•</span>
+                <span className="mx-2">â€¢</span>
                 <span className="font-semibold">
                   Total: 
                   <span className={`ml-1 ${totalFiltered >= 0 ? 'text-green-600' : 'text-red-600'}`}>
@@ -1169,7 +1174,7 @@ export default function TransactionsPage() {
             <button
               onClick={() => setShowTransferModal(true)}
               className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2"
-              title="Transferência entre contas"
+              title="TransferÃªncia entre contas"
             >
               <ArrowRightLeft className="w-5 h-5" />
               <span className="hidden sm:inline">Transferir</span>
@@ -1187,7 +1192,7 @@ export default function TransactionsPage() {
               className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
             >
               <Plus className="w-5 h-5" />
-              <span className="hidden sm:inline">Nova Transação</span>
+              <span className="hidden sm:inline">Nova TransaÃ§Ã£o</span>
             </button>
           </div>
         </div>
@@ -1200,7 +1205,7 @@ export default function TransactionsPage() {
               <div className="flex-1 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
                 <div className="col-span-2 flex items-end gap-1">
                   <div className="flex flex-col flex-1 min-w-[100px]">
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Período</label>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">PerÃ­odo</label>
                     <div className="flex items-center gap-1">
                       <input
                         type="date"
@@ -1211,7 +1216,7 @@ export default function TransactionsPage() {
                         title="Data inicial do filtro"
                         aria-label="Data inicial"
                       />
-                      <span className="text-gray-500 text-xs">até</span>
+                      <span className="text-gray-500 text-xs">atÃ©</span>
                       <input
                         type="date"
                         value={draftDateRange.endDate}
@@ -1229,7 +1234,7 @@ export default function TransactionsPage() {
                             ? 'bg-blue-600 text-white hover:bg-blue-700' 
                             : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                         }`}
-                        title={dateFilterPending ? 'Aplicar filtro de data' : 'Filtro já aplicado'}
+                        title={dateFilterPending ? 'Aplicar filtro de data' : 'Filtro jÃ¡ aplicado'}
                       >
                         <Filter className="w-3 h-3" />
                         Aplicar
@@ -1237,10 +1242,10 @@ export default function TransactionsPage() {
                     </div>
                     <div className="flex flex-wrap gap-1 mt-1">
                       <button onClick={applyToday} className="px-2 py-0.5 text-[11px] bg-gray-100 text-gray-700 hover:bg-gray-200 rounded transition-colors">Hoje</button>
-                      <button onClick={applyThisMonth} className="px-2 py-0.5 text-[11px] bg-gray-100 text-gray-700 hover:bg-gray-200 rounded transition-colors">Este Mês</button>
-                      <button onClick={applyLastMonth} className="px-2 py-0.5 text-[11px] bg-gray-100 text-gray-700 hover:bg-gray-200 rounded transition-colors">Mês Anterior</button>
+                      <button onClick={applyThisMonth} className="px-2 py-0.5 text-[11px] bg-gray-100 text-gray-700 hover:bg-gray-200 rounded transition-colors">Este MÃªs</button>
+                      <button onClick={applyLastMonth} className="px-2 py-0.5 text-[11px] bg-gray-100 text-gray-700 hover:bg-gray-200 rounded transition-colors">MÃªs Anterior</button>
                       {dateFilterPending && (
-                        <span className="flex items-center text-[11px] text-amber-600 font-medium ml-2">⚠️ Clique em "Aplicar"</span>
+                        <span className="flex items-center text-[11px] text-amber-600 font-medium ml-2">âš ï¸ Clique em "Aplicar"</span>
                       )}
                     </div>
                   </div>
@@ -1308,7 +1313,7 @@ export default function TransactionsPage() {
                     <option value="all">Todas</option>
                     <option value="income">Receitas</option>
                     <option value="expense">Despesas</option>
-                    <option value="transfer">Transferências</option>
+                    <option value="transfer">TransferÃªncias</option>
                   </select>
                 </div>
 
@@ -1323,6 +1328,7 @@ export default function TransactionsPage() {
                     <option value="all">Todas</option>
                     <option value="completed">Pagas</option>
                     <option value="pending">Pendentes</option>
+                    <option value="overdue">Vencidas</option>
                   </select>
                 </div>
               </div>
@@ -1330,7 +1336,7 @@ export default function TransactionsPage() {
             <div className="flex gap-2 mt-2">
               <button
                 onClick={() => {
-                  // Ver Tudo: Limpa o filtro de data para ver todas as transações
+                  // Ver Tudo: Limpa o filtro de data para ver todas as transaÃ§Ãµes
                   const twoYearsAgo = new Date();
                   twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
                   const twoYearsLater = new Date();
@@ -1351,7 +1357,7 @@ export default function TransactionsPage() {
               </button>
               <button
                 onClick={() => {
-                  // Limpar Filtros: Reseta todos os filtros para o padrão (mês atual)
+                  // Limpar Filtros: Reseta todos os filtros para o padrÃ£o (mÃªs atual)
                   const today = new Date();
                   const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
                   const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().split('T')[0];
@@ -1394,14 +1400,14 @@ export default function TransactionsPage() {
           </div>
         )}
 
-        {/* Lista de Transações */}
+        {/* Lista de TransaÃ§Ãµes */}
         <div className="bg-white rounded-lg shadow-md overflow-hidden flex-1 flex flex-col">
           <div className="overflow-auto flex-1">
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
                 <tr>
                   <ColumnHeader label="Data" sortKey="date" isDateFilter />
-                  <ColumnHeader label="Descrição" sortKey="description" />
+                  <ColumnHeader label="DescriÃ§Ã£o" sortKey="description" />
                   <ColumnHeader 
                     label="Categoria" 
                     sortKey="category" 
@@ -1435,7 +1441,7 @@ export default function TransactionsPage() {
                     selectedFilters={columnFilters.statuses}
                   />
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Ações
+                    AÃ§Ãµes
                   </th>
                 </tr>
               </thead>
@@ -1456,17 +1462,17 @@ export default function TransactionsPage() {
                             {transaction.isRecurringOccurrence && (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 w-fit">
                                 <Clock className="w-3 h-3" />
-                                Recorrência
+                                RecorrÃªncia
                               </span>
                             )}
                             {transaction.isPaidEarly && transaction.daysEarlyLate && (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 w-fit">
-                                ⏰ Antecipado ({transaction.daysEarlyLate}d)
+                                â° Antecipado ({transaction.daysEarlyLate}d)
                               </span>
                             )}
                             {transaction.isPaidLate && transaction.daysEarlyLate && (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 w-fit">
-                                ⚠️ Atrasado ({transaction.daysEarlyLate}d)
+                                âš ï¸ Atrasado ({transaction.daysEarlyLate}d)
                               </span>
                             )}
                           </div>
@@ -1492,7 +1498,7 @@ export default function TransactionsPage() {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                        {transaction.bankAccount?.name || 'Não informada'}
+                        {transaction.bankAccount?.name || 'NÃ£o informada'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
                         {transaction.userProfile ? (
@@ -1528,7 +1534,7 @@ export default function TransactionsPage() {
                               ? 'text-blue-600' 
                               : 'text-red-600'
                         }>
-                          {transaction.type === 'income' ? '+' : transaction.type === 'transfer' ? '↔' : '-'} {formatCurrency(Math.abs(Number(transaction.amount)))}
+                          {transaction.type === 'income' ? '+' : transaction.type === 'transfer' ? 'â†”' : '-'} {formatCurrency(Math.abs(Number(transaction.amount)))}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
@@ -1604,14 +1610,14 @@ export default function TransactionsPage() {
                     <td colSpan={8} className="px-6 py-16 text-center">
                       <div className="flex flex-col items-center justify-center">
                         <Receipt className="w-16 h-16 text-gray-300 mb-4" />
-                        <p className="text-gray-500 text-lg">Nenhuma transação encontrada</p>
-                        <p className="text-gray-400 text-sm mt-2">Limpe os filtros nas colunas acima ou adicione novas transações</p>
+                        <p className="text-gray-500 text-lg">Nenhuma transaÃ§Ã£o encontrada</p>
+                        <p className="text-gray-400 text-sm mt-2">Limpe os filtros nas colunas acima ou adicione novas transaÃ§Ãµes</p>
                         <button
                           onClick={handleAddNew}
                           className="mt-4 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors inline-flex items-center gap-2"
                         >
                           <Plus className="w-5 h-5" />
-                          Adicionar Transação
+                          Adicionar TransaÃ§Ã£o
                         </button>
                       </div>
                     </td>
@@ -1623,7 +1629,7 @@ export default function TransactionsPage() {
         </div>
       </div>
 
-      {/* Modal de Criar - com tabs Única/Recorrente/Parcelada */}
+      {/* Modal de Criar - com tabs Ãšnica/Recorrente/Parcelada */}
       {isCreating && (
         <CreateTransactionModal
           isOpen={showModal}
@@ -1632,7 +1638,7 @@ export default function TransactionsPage() {
         />
       )}
 
-      {/* Modal de Editar - formulário simples */}
+      {/* Modal de Editar - formulÃ¡rio simples */}
       {!isCreating && editingTransaction && (
         <EditTransactionModal
           isOpen={showModal}
@@ -1642,14 +1648,14 @@ export default function TransactionsPage() {
         />
       )}
 
-      {/* Modal de Transferência */}
+      {/* Modal de TransferÃªncia */}
       {showTransferModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
             <div className="bg-gradient-to-r from-purple-600 to-purple-700 px-6 py-5 flex items-center justify-between rounded-t-2xl">
               <h2 className="text-xl font-bold text-white flex items-center gap-3">
                 <ArrowRightLeft className="w-6 h-6" />
-                Transferência entre Contas
+                TransferÃªncia entre Contas
               </h2>
               <button
                 onClick={() => setShowTransferModal(false)}
@@ -1711,7 +1717,7 @@ export default function TransactionsPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Data da Transferência *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Data da TransferÃªncia *</label>
                 <input
                   type="date"
                   required
@@ -1723,13 +1729,13 @@ export default function TransactionsPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Descrição</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">DescriÃ§Ã£o</label>
                 <input
                   type="text"
                   value={transferForm.description}
                   onChange={(e) => setTransferForm({ ...transferForm, description: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-gray-900 bg-white"
-                  placeholder="Ex: Transferência para reserva"
+                  placeholder="Ex: TransferÃªncia para reserva"
                 />
               </div>
 
@@ -1772,7 +1778,7 @@ export default function TransactionsPage() {
             </div>
 
             <div className="p-6 overflow-y-auto flex-1">
-              {/* Formulário de Nova Categoria */}
+              {/* FormulÃ¡rio de Nova Categoria */}
               <div className="mb-6 p-4 bg-gray-50 rounded-xl">
                 <h3 className="text-lg font-semibold text-gray-800 mb-4">Nova Categoria</h3>
                 <form onSubmit={handleCreateCategory} className="space-y-4">
@@ -1816,13 +1822,13 @@ export default function TransactionsPage() {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Ícone</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Ãcone</label>
                       <input
                         type="text"
                         value={categoryForm.icon}
                         onChange={(e) => setCategoryForm({ ...categoryForm, icon: e.target.value })}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 text-gray-900 bg-white"
-                        placeholder="Ex: 🏠, 🚗, 💰"
+                        placeholder="Ex: ðŸ , ðŸš—, ðŸ’°"
                       />
                     </div>
                     <div>
@@ -1866,7 +1872,7 @@ export default function TransactionsPage() {
                               className="w-8 h-8 rounded-lg flex items-center justify-center text-lg"
                               style={{ backgroundColor: category.color || (category.type === 'income' ? '#dcfce7' : '#fee2e2') }}
                             >
-                              {category.icon || (category.type === 'income' ? '💰' : '💸')}
+                              {category.icon || (category.type === 'income' ? 'ðŸ’°' : 'ðŸ’¸')}
                             </span>
                             <div>
                               <span className="font-medium text-gray-800">{category.name}</span>
@@ -1878,7 +1884,7 @@ export default function TransactionsPage() {
                                   <span className="text-gray-400">Subcategoria</span>
                                 )}
                                 {category._count?.transactions !== undefined && (
-                                  <span className="text-gray-400">{category._count.transactions} transações</span>
+                                  <span className="text-gray-400">{category._count.transactions} transaÃ§Ãµes</span>
                                 )}
                               </div>
                             </div>
@@ -1917,7 +1923,7 @@ export default function TransactionsPage() {
                               >
                                 <div className="flex items-center justify-between">
                                   <div className="flex items-center gap-2">
-                                    <span className="text-sm">{sub.icon || '📁'}</span>
+                                    <span className="text-sm">{sub.icon || 'ðŸ“'}</span>
                                     <span className="text-sm text-gray-700">{sub.name}</span>
                                   </div>
                                   <div className="flex items-center gap-1">
@@ -2027,13 +2033,13 @@ export default function TransactionsPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Ícone</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Ãcone</label>
                 <input
                   type="text"
                   value={categoryForm.icon}
                   onChange={(e) => setCategoryForm({ ...categoryForm, icon: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
-                  placeholder="Ex: 🏠, 🚗, 💰"
+                  placeholder="Ex: ðŸ , ðŸš—, ðŸ’°"
                 />
               </div>
 
@@ -2070,3 +2076,5 @@ export default function TransactionsPage() {
     </div>
   );
 }
+
+
