@@ -1194,163 +1194,139 @@ export default function TransactionsPage() {
 
         {/* Filtros */}
         {showFilters && (
-          <div className="bg-white rounded-lg shadow-md p-6 mb-6 animate-fadeIn">
-            <h3 className="text-lg font-semibold mb-4">Filtros</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {/* Seção de Datas com Draft e Apply */}
-              <div className="lg:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Período</label>
-                <div className="flex flex-col gap-3">
-                  <div className="flex flex-wrap gap-2">
-                    <div className="flex-1 min-w-[140px]">
+          <div className="bg-white rounded-lg shadow-md p-3 mb-3 animate-fadeIn">
+            <div className="flex flex-col lg:flex-row lg:items-end lg:gap-2 gap-2 mb-2">
+              <span className="text-base font-semibold text-gray-700 mr-2 mb-0 lg:mb-0">Filtros</span>
+              <div className="flex-1 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
+                <div className="col-span-2 flex items-end gap-1">
+                  <div className="flex flex-col flex-1 min-w-[100px]">
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Período</label>
+                    <div className="flex items-center gap-1">
                       <input
                         type="date"
                         value={draftDateRange.startDate}
                         onChange={(e) => setDraftDateRange(prev => ({ ...prev, startDate: e.target.value }))}
-                        className={`w-full px-4 py-2 min-h-[44px] border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white appearance-none ${dateFilterPending ? 'border-amber-400' : 'border-gray-300'}`}
+                        className={`w-full px-2 py-1 min-h-[32px] border rounded focus:ring-1 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white appearance-none text-xs ${dateFilterPending ? 'border-amber-400' : 'border-gray-300'}`}
                         style={{ colorScheme: 'light' }}
-                        title="Data inicial do filtro (navegue sem aplicar automaticamente)"
+                        title="Data inicial do filtro"
                         aria-label="Data inicial"
                       />
-                    </div>
-                    <span className="flex items-center text-gray-500">até</span>
-                    <div className="flex-1 min-w-[140px]">
+                      <span className="text-gray-500 text-xs">até</span>
                       <input
                         type="date"
                         value={draftDateRange.endDate}
                         onChange={(e) => setDraftDateRange(prev => ({ ...prev, endDate: e.target.value }))}
-                        className={`w-full px-4 py-2 min-h-[44px] border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white appearance-none ${dateFilterPending ? 'border-amber-400' : 'border-gray-300'}`}
+                        className={`w-full px-2 py-1 min-h-[32px] border rounded focus:ring-1 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white appearance-none text-xs ${dateFilterPending ? 'border-amber-400' : 'border-gray-300'}`}
                         style={{ colorScheme: 'light' }}
-                        title="Data final do filtro (navegue sem aplicar automaticamente)"
+                        title="Data final do filtro"
                         aria-label="Data final"
                       />
+                      <button
+                        onClick={applyDateFilter}
+                        disabled={!dateFilterPending}
+                        className={`px-2 py-1 rounded transition-colors flex items-center gap-1 min-h-[32px] text-xs ${
+                          dateFilterPending 
+                            ? 'bg-blue-600 text-white hover:bg-blue-700' 
+                            : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                        }`}
+                        title={dateFilterPending ? 'Aplicar filtro de data' : 'Filtro já aplicado'}
+                      >
+                        <Filter className="w-3 h-3" />
+                        Aplicar
+                      </button>
                     </div>
-                    <button
-                      onClick={applyDateFilter}
-                      disabled={!dateFilterPending}
-                      className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 min-h-[44px] ${
-                        dateFilterPending 
-                          ? 'bg-blue-600 text-white hover:bg-blue-700' 
-                          : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                      }`}
-                      title={dateFilterPending ? 'Aplicar filtro de data' : 'Filtro já aplicado'}
-                    >
-                      <Filter className="w-4 h-4" />
-                      Aplicar
-                    </button>
-                  </div>
-                  {/* Atalhos rápidos */}
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      onClick={applyToday}
-                      className="px-3 py-1.5 text-xs bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
-                    >
-                      Hoje
-                    </button>
-                    <button
-                      onClick={applyThisMonth}
-                      className="px-3 py-1.5 text-xs bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
-                    >
-                      Este Mês
-                    </button>
-                    <button
-                      onClick={applyLastMonth}
-                      className="px-3 py-1.5 text-xs bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
-                    >
-                      Mês Anterior
-                    </button>
-                    {dateFilterPending && (
-                      <span className="flex items-center text-xs text-amber-600 font-medium">
-                        ⚠️ Clique em "Aplicar" para filtrar
-                      </span>
-                    )}
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      <button onClick={applyToday} className="px-2 py-0.5 text-[11px] bg-gray-100 text-gray-700 hover:bg-gray-200 rounded transition-colors">Hoje</button>
+                      <button onClick={applyThisMonth} className="px-2 py-0.5 text-[11px] bg-gray-100 text-gray-700 hover:bg-gray-200 rounded transition-colors">Este Mês</button>
+                      <button onClick={applyLastMonth} className="px-2 py-0.5 text-[11px] bg-gray-100 text-gray-700 hover:bg-gray-200 rounded transition-colors">Mês Anterior</button>
+                      {dateFilterPending && (
+                        <span className="flex items-center text-[11px] text-amber-600 font-medium ml-2">⚠️ Clique em "Aplicar"</span>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Categoria</label>
-                <select
-                  value={filters.categoryId}
-                  onChange={(e) => setFilters({ ...filters, categoryId: e.target.value })}
-                  className="w-full px-4 py-2 min-h-[44px] border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white"
-                  title="Filtrar por categoria"
-                >
-                  <option value="">Todas</option>
-                  {categories.filter(c => c.type === filters.type || filters.type === 'all').map((cat) => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.icon} {cat.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Categoria</label>
+                  <select
+                    value={filters.categoryId}
+                    onChange={(e) => setFilters({ ...filters, categoryId: e.target.value })}
+                    className="w-full px-2 py-1 min-h-[32px] border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white text-xs"
+                    title="Filtrar por categoria"
+                  >
+                    <option value="">Todas</option>
+                    {categories.filter(c => c.type === filters.type || filters.type === 'all').map((cat) => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.icon} {cat.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Conta</label>
-                <select
-                  value={filters.bankAccountId}
-                  onChange={(e) => setFilters({ ...filters, bankAccountId: e.target.value })}
-                  className="w-full px-4 py-2 min-h-[44px] border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white"
-                  title="Filtrar por conta"
-                >
-                  <option value="">Todas</option>
-                  {bankAccounts.map((account) => (
-                    <option key={account.id} value={account.id}>
-                      {account.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Conta</label>
+                  <select
+                    value={filters.bankAccountId}
+                    onChange={(e) => setFilters({ ...filters, bankAccountId: e.target.value })}
+                    className="w-full px-2 py-1 min-h-[32px] border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white text-xs"
+                    title="Filtrar por conta"
+                  >
+                    <option value="">Todas</option>
+                    {bankAccounts.map((account) => (
+                      <option key={account.id} value={account.id}>
+                        {account.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Meio de Pagamento</label>
-                <select
-                  value={filters.paymentMethodId}
-                  onChange={(e) => setFilters({ ...filters, paymentMethodId: e.target.value })}
-                  className="w-full px-4 py-2 min-h-[44px] border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white"
-                  title="Filtrar por meio de pagamento"
-                >
-                  <option value="">Todos</option>
-                  {paymentMethods.map((pm) => (
-                    <option key={pm.id} value={pm.id}>
-                      {pm.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Meio de Pagamento</label>
+                  <select
+                    value={filters.paymentMethodId}
+                    onChange={(e) => setFilters({ ...filters, paymentMethodId: e.target.value })}
+                    className="w-full px-2 py-1 min-h-[32px] border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white text-xs"
+                    title="Filtrar por meio de pagamento"
+                  >
+                    <option value="">Todos</option>
+                    {paymentMethods.map((pm) => (
+                      <option key={pm.id} value={pm.id}>
+                        {pm.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Tipo</label>
-                <select
-                  value={filters.type}
-                  onChange={(e) => setFilters({ ...filters, type: e.target.value as any })}
-                  className="w-full px-4 py-2 min-h-[44px] border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white"
-                  title="Filtrar por tipo"
-                >
-                  <option value="all">Todas</option>
-                  <option value="income">Receitas</option>
-                  <option value="expense">Despesas</option>
-                  <option value="transfer">Transferências</option>
-                </select>
-              </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Tipo</label>
+                  <select
+                    value={filters.type}
+                    onChange={(e) => setFilters({ ...filters, type: e.target.value as any })}
+                    className="w-full px-2 py-1 min-h-[32px] border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white text-xs"
+                    title="Filtrar por tipo"
+                  >
+                    <option value="all">Todas</option>
+                    <option value="income">Receitas</option>
+                    <option value="expense">Despesas</option>
+                    <option value="transfer">Transferências</option>
+                  </select>
+                </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-                <select
-                  value={filters.status}
-                  onChange={(e) => setFilters({ ...filters, status: e.target.value as any })}
-                  className="w-full px-4 py-2 min-h-[44px] border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white"
-                  title="Filtrar por status"
-                >
-                  <option value="all">Todas</option>
-                  <option value="completed">Pagas</option>
-                  <option value="pending">Pendentes</option>
-                </select>
-              </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Status</label>
+                  <select
+                    value={filters.status}
+                    onChange={(e) => setFilters({ ...filters, status: e.target.value as any })}
+                    className="w-full px-2 py-1 min-h-[32px] border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white text-xs"
+                    title="Filtrar por status"
+                  >
+                    <option value="all">Todas</option>
+                    <option value="completed">Pagas</option>
+                    <option value="pending">Pendentes</option>
+                  </select>
+                </div>
             </div>
-
-            {/* Botões de ação do filtro */}
-            <div className="flex gap-3 mt-6 pt-4 border-t border-gray-200">
+            <div className="flex gap-2 mt-2">
               <button
                 onClick={() => {
                   // Ver Tudo: Limpa o filtro de data para ver todas as transações
@@ -1358,17 +1334,15 @@ export default function TransactionsPage() {
                   twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
                   const twoYearsLater = new Date();
                   twoYearsLater.setFullYear(twoYearsLater.getFullYear() + 2);
-                  
                   const startDate = twoYearsAgo.toISOString().split('T')[0];
                   const endDate = twoYearsLater.toISOString().split('T')[0];
-                  
                   setDraftDateRange({ startDate, endDate });
                   setAppliedFilters(prev => ({ ...prev, startDate, endDate }));
                   setFilters(prev => ({ ...prev, startDate, endDate }));
                 }}
-                className="flex-1 px-4 py-2.5 text-sm bg-blue-600 text-white hover:bg-blue-700 rounded-lg transition-colors font-medium flex items-center justify-center gap-2"
+                className="px-3 py-1.5 text-xs bg-blue-600 text-white hover:bg-blue-700 rounded transition-colors flex items-center gap-1"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                 </svg>
@@ -1380,7 +1354,6 @@ export default function TransactionsPage() {
                   const today = new Date();
                   const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
                   const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().split('T')[0];
-                  
                   setDraftDateRange({ startDate: startOfMonth, endDate: endOfMonth });
                   setAppliedFilters({
                     startDate: startOfMonth,
@@ -1409,9 +1382,9 @@ export default function TransactionsPage() {
                     statuses: []
                   });
                 }}
-                className="flex-1 px-4 py-2.5 text-sm bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-lg transition-colors font-medium flex items-center justify-center gap-2"
+                className="px-3 py-1.5 text-xs bg-gray-100 text-gray-700 hover:bg-gray-200 rounded transition-colors flex items-center gap-1"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
                 Limpar Filtros
