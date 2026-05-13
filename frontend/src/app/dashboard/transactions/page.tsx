@@ -1542,18 +1542,30 @@ export default function TransactionsPage() {
                           const isOverdue = transaction.status !== 'completed' && 
                             new Date(transaction.dueDate || transaction.transactionDate) < new Date(new Date().setHours(0, 0, 0, 0));
                           
+                          const isLoading = loadingTransactionId === transaction.id;
                           return (
                             <button
                               onClick={() => togglePaidStatus(transaction)}
-                              className={`px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1 transition-colors hover:opacity-80 ${
+                              disabled={isLoading}
+                              className={`px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1 transition-colors ${
+                                isLoading
+                                  ? 'opacity-50 cursor-not-allowed'
+                                  : 'hover:opacity-80'
+                              } ${
                                 transaction.status === 'completed'
                                   ? 'bg-green-100 text-green-800'
                                   : isOverdue
                                     ? 'bg-red-100 text-red-800'
                                     : 'bg-yellow-100 text-yellow-800'
                               }`}
+                              title={isLoading ? 'Atualizando status...' : 'Clique para alternar status'}
                             >
-                              {transaction.status === 'completed' ? (
+                              {isLoading ? (
+                                <>
+                                  <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                  Atualizando...
+                                </>
+                              ) : transaction.status === 'completed' ? (
                                 <>
                                   <CheckCircle className="w-3 h-3" />
                                   Paga
