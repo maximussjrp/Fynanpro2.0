@@ -149,6 +149,59 @@ router.get('/pending-alerts', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// GET /api/v1/transactions/ai-status
+router.get('/ai-status', async (req: AuthRequest, res: Response) => {
+  try {
+    const isAvailable = aiCategorizationService.isAvailable();
+
+    return successResponse(res, {
+      available: isAvailable,
+      model: isAvailable ? 'gemini-2.5-flash-lite' : null,
+      message: isAvailable
+        ? 'Serviço de categorização com IA disponível'
+        : 'GEMINI_API_KEY não configurada',
+    });
+  } catch (error) {
+    log.error('AI status check error', { error });
+    return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao verificar status', 500);
+  }
+});
+
+// PUT /api/v1/transactions/update-status
+router.put('/update-status', async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId!;
+    const { prisma } = await import('../utils/prisma-client');
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const updated = await prisma.transaction.updateMany({
+      where: {
+        tenantId,
+        status: 'pending',
+        transactionDate: {
+          lt: today
+        },
+        deletedAt: null
+      },
+      data: {
+        status: 'overdue'
+      }
+    });
+
+    log.info('Updated overdue transactions', { tenantId, count: updated.count });
+
+    return successResponse(res, {
+      updated: updated.count,
+      message: `${updated.count} transação(ões) atualizada(s) para vencida(s)`
+    });
+  } catch (error: any) {
+    log.error('Update status error', { error, tenantId: req.tenantId });
+    return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao atualizar status', 500);
+  }
+});
+
 /**
  * @swagger
  * /transactions/{id}:
@@ -688,43 +741,6 @@ router.get('/stats/summary', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// ==================== UPDATE OVERDUE TRANSACTIONS ====================
-// PUT /api/v1/transactions/update-status
-router.put('/update-status', async (req: AuthRequest, res: Response) => {
-  try {
-    const tenantId = req.tenantId!;
-    const { prisma } = await import('../utils/prisma-client');
-    
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    // Atualizar para overdue
-    const updated = await prisma.transaction.updateMany({
-      where: {
-        tenantId,
-        status: 'pending',
-        transactionDate: {
-          lt: today
-        },
-        deletedAt: null
-      },
-      data: {
-        status: 'overdue'
-      }
-    });
-
-    log.info('Updated overdue transactions', { tenantId, count: updated.count });
-
-    return successResponse(res, {
-      updated: updated.count,
-      message: `${updated.count} transação(ões) atualizada(s) para vencida(s)`
-    });
-  } catch (error: any) {
-    log.error('Update status error', { error, tenantId: req.tenantId });
-    return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao atualizar status', 500);
-  }
-});
-
 // ==================== PAY TRANSACTION ====================
 // POST /api/v1/transactions/:id/pay
 router.post('/:id/pay', async (req: AuthRequest, res: Response) => {
@@ -1175,32 +1191,4 @@ router.post('/suggest-category', async (req: AuthRequest, res: Response) => {
   }
 });
 
-/**
- * @swagger
- * /transactions/ai-status:
- *   get:
- *     summary: Verificar status do serviço de IA
- *     description: Verifica se o serviço de categorização com IA está disponível
- *     tags: [Transactions]
- *     security:
- *       - bearerAuth: []
- */
-router.get('/ai-status', async (req: AuthRequest, res: Response) => {
-  try {
-    const isAvailable = aiCategorizationService.isAvailable();
-    
-    return successResponse(res, {
-      available: isAvailable,
-      model: isAvailable ? 'gemini-2.5-flash-lite' : null,
-      message: isAvailable 
-        ? 'Serviço de categorização com IA disponível' 
-        : 'GEMINI_API_KEY não configurada',
-    });
-  } catch (error) {
-    log.error('AI status check error', { error });
-    return errorResponse(res, 'INTERNAL_ERROR', 'Erro ao verificar status', 500);
-  }
-});
-
 export default router;
-
