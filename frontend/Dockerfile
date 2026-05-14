@@ -35,6 +35,7 @@ COPY --from=builder /app/public ./public
 # Set environment
 ENV NODE_ENV=production
 ENV PORT=3001
+ENV HOSTNAME=0.0.0.0
 
 # Expose port
 EXPOSE 3001
