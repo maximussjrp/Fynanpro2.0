@@ -78,4 +78,40 @@ describe('Reports reliability — hierarchical case fix', () => {
     expect(data.income.categories.length).toBeGreaterThan(0);
     expect(data.expense.categories.length).toBeGreaterThan(0);
   });
+  it('agrupa o mapa financeiro nas faixas 50/30/20', async () => {
+    categoryFindMany.mockResolvedValue([
+      { id: 'cat-income', name: 'Salário', type: 'income', parentId: null, level: 1, icon: '💵', semantics: null },
+      { id: 'cat-needs', name: 'Moradia', type: 'expense', parentId: null, level: 1, icon: '🏠', semantics: null },
+      { id: 'cat-wants', name: 'Lazer', type: 'expense', parentId: null, level: 1, icon: '🎮', semantics: null },
+      { id: 'cat-priorities', name: 'Investimentos', type: 'expense', parentId: null, level: 1, icon: '📈', semantics: null },
+    ]);
+    transactionFindMany.mockResolvedValue([
+      { categoryId: 'cat-income', type: 'income', amount: 10000, status: 'completed', transactionDate: new Date('2026-01-05') },
+      { categoryId: 'cat-needs', type: 'expense', amount: 5000, status: 'completed', transactionDate: new Date('2026-01-10') },
+      { categoryId: 'cat-wants', type: 'expense', amount: 3000, status: 'completed', transactionDate: new Date('2026-01-11') },
+      { categoryId: 'cat-priorities', type: 'expense', amount: 2000, status: 'completed', transactionDate: new Date('2026-01-12') },
+    ]);
+
+    const res = await request(app)
+      .get('/reports/dre?year=2026')
+      .set('Authorization', `Bearer ${bearer}`);
+
+    expect(res.status).toBe(200);
+    const groups = res.body.data.despesas.expenseGroups;
+    expect(groups).toHaveLength(3);
+
+    const needs = groups.find((g: any) => g.key === 'needs');
+    const wants = groups.find((g: any) => g.key === 'wants');
+    const priorities = groups.find((g: any) => g.key === 'priorities');
+
+    expect(needs.total.realizado).toBe(5000);
+    expect(needs.targetPercent).toBe(50);
+    expect(needs.actualPercent).toBe(50);
+    expect(wants.total.realizado).toBe(3000);
+    expect(wants.targetPercent).toBe(30);
+    expect(wants.actualPercent).toBe(30);
+    expect(priorities.total.realizado).toBe(2000);
+    expect(priorities.targetPercent).toBe(20);
+    expect(priorities.actualPercent).toBe(20);
+  });
 });

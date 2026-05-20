@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { AuthRequest, authenticateToken } from '../middleware/auth';
 import { log } from '../utils/logger';
 import { parsePeriod } from '../utils/date-helpers';
+import { autoClassifyCategory } from '../contracts/energy-auto-classification';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -759,7 +760,18 @@ router.get('/dre', authenticateToken, async (req: AuthRequest, res: Response) =>
         icon: true,
         type: true,
         parentId: true,
-        level: true
+        level: true,
+        semantics: {
+          select: {
+            survivalWeight: true,
+            choiceWeight: true,
+            futureWeight: true,
+            lossWeight: true,
+            isEssential: true,
+            isInvestment: true,
+            userOverride: true,
+          },
+        },
       },
       orderBy: [{ type: 'asc' }, { name: 'asc' }]
     });
@@ -920,6 +932,135 @@ router.get('/dre', authenticateToken, async (req: AuthRequest, res: Response) =>
     const receitaCategories = buildFinancialTree(null, 1, 'income');
     const despesaCategories = buildFinancialTree(null, 1, 'expense');
 
+    type Budget503020GroupKey = 'needs' | 'wants' | 'priorities';
+
+    const budget503020GroupsConfig: Array<{
+      key: Budget503020GroupKey;
+      name: string;
+      targetPercent: number;
+      description: string;
+    }> = [
+      {
+        key: 'needs',
+        name: '🏠 NECESSIDADES ESSENCIAIS',
+        targetPercent: 50,
+        description: 'Moradia, alimentação básica, saúde, transporte obrigatório e funcionamento da vida.',
+      },
+      {
+        key: 'wants',
+        name: '✨ DESEJOS E ESTILO DE VIDA',
+        targetPercent: 30,
+        description: 'Lazer, conforto, compras opcionais, estética, hobbies e escolhas de padrão de vida.',
+      },
+      {
+        key: 'priorities',
+        name: '🎯 PRIORIDADES FINANCEIRAS E INVESTIMENTOS',
+        targetPercent: 20,
+        description: 'Reserva, investimentos, metas financeiras, educação de futuro e quitação de dívidas.',
+      },
+    ];
+
+    const normalizeCategoryName = (name: string) => name
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^\p{L}\p{N}\s/&-]/gu, '')
+      .toLowerCase()
+      .trim();
+
+    const rootCategoryById = new Map(allCategories.map(cat => [cat.id, cat]));
+
+    const classifyExpenseRootCategory = (categoryId: string): Budget503020GroupKey => {
+      const category = rootCategoryById.get(categoryId);
+      if (!category) return 'wants';
+
+      const normalizedName = normalizeCategoryName(category.name);
+
+      const priorityNameMatches = [
+        'investimentos',
+        'investimentos & poupanca',
+        'poupanca',
+        'metas financeiras',
+        'dividas',
+        'educacao',
+      ];
+
+      const needsNameMatches = [
+        'moradia',
+        'alimentacao',
+        'saude',
+        'transporte',
+        'trabalho',
+        'impostos',
+        'contas & servicos',
+        'familia',
+        'pets',
+      ];
+
+      const wantsNameMatches = [
+        'lazer',
+        'lazer & entretenimento',
+        'beleza',
+        'beleza e saude',
+        'bem-estar',
+        'vestuario',
+        'vestuario & beleza',
+        'vicios',
+        'impulso financeiro',
+        'outros',
+      ];
+
+      if (priorityNameMatches.some(match => normalizedName.includes(match))) return 'priorities';
+      if (needsNameMatches.some(match => normalizedName.includes(match))) return 'needs';
+      if (wantsNameMatches.some(match => normalizedName.includes(match))) return 'wants';
+
+      const semantics = category.semantics;
+      if (semantics) {
+        const survival = Number(semantics.survivalWeight);
+        const choice = Number(semantics.choiceWeight);
+        const future = Number(semantics.futureWeight);
+        const loss = Number(semantics.lossWeight);
+
+        if (semantics.isInvestment || future >= Math.max(survival, choice)) return 'priorities';
+        if (semantics.isEssential || survival >= Math.max(choice, future, loss)) return 'needs';
+        if (loss > Math.max(survival, choice, future)) return 'priorities';
+        return 'wants';
+      }
+
+      const autoClassification = autoClassifyCategory(category.name, 'expense');
+      const { survival, choice, future, loss } = autoClassification.distribution;
+      if (autoClassification.flags.isInvestment || future >= Math.max(survival, choice)) return 'priorities';
+      if (autoClassification.flags.isEssential || survival >= Math.max(choice, future, loss)) return 'needs';
+      if (loss > Math.max(survival, choice, future)) return 'priorities';
+
+      return 'wants';
+    };
+
+    const buildEmptyMonthlyTotals = () => {
+      const months = {} as { [key: string]: { esperado: number; realizado: number } };
+      monthNames.forEach(month => {
+        months[month] = { esperado: 0, realizado: 0 };
+      });
+      return months;
+    };
+
+    const expenseGroups = budget503020GroupsConfig.map(group => ({
+      ...group,
+      categories: [] as FinancialMapRow[],
+      monthly: buildEmptyMonthlyTotals(),
+      total: { esperado: 0, realizado: 0 },
+      actualPercent: 0,
+      targetAmount: 0,
+      varianceFromTarget: 0,
+    }));
+
+    const expenseGroupMap = new Map(expenseGroups.map(group => [group.key, group]));
+
+    despesaCategories.forEach(category => {
+      const groupKey = classifyExpenseRootCategory(category.id);
+      const group = expenseGroupMap.get(groupKey) || expenseGroupMap.get('wants')!;
+      group.categories.push(category);
+    });
+
     // Calcular totais gerais por mês
     const totaisMensais = {
       receitas: {} as { [key: string]: { esperado: number; realizado: number } },
@@ -1006,6 +1147,28 @@ router.get('/dre', authenticateToken, async (req: AuthRequest, res: Response) =>
       realizado: Object.values(totaisMensais.despesas).reduce((sum, m) => sum + m.realizado, 0)
     };
 
+    expenseGroups.forEach(group => {
+      monthNames.forEach(month => {
+        group.monthly[month] = group.categories.reduce(
+          (sum, category) => ({
+            esperado: sum.esperado + category.months[month].esperado,
+            realizado: sum.realizado + category.months[month].realizado,
+          }),
+          { esperado: 0, realizado: 0 }
+        );
+      });
+
+      group.total = {
+        esperado: Object.values(group.monthly).reduce((sum, month) => sum + month.esperado, 0),
+        realizado: Object.values(group.monthly).reduce((sum, month) => sum + month.realizado, 0),
+      };
+      group.actualPercent = totalAnoReceitas.realizado > 0
+        ? Math.round((group.total.realizado / totalAnoReceitas.realizado) * 10000) / 100
+        : 0;
+      group.targetAmount = Math.round(totalAnoReceitas.realizado * group.targetPercent) / 100;
+      group.varianceFromTarget = Math.round((group.total.realizado - group.targetAmount) * 100) / 100;
+    });
+
     const totalAnoLucro = {
       esperado: totalAnoReceitas.esperado - totalAnoDespesas.esperado,
       realizado: totalAnoReceitas.realizado - totalAnoDespesas.realizado
@@ -1017,6 +1180,21 @@ router.get('/dre', authenticateToken, async (req: AuthRequest, res: Response) =>
         name: '📈 RECEITA/FATURAMENTO',
         months: totaisMensais.receitas,
         totalYear: totalAnoReceitas
+      },
+      NECESSIDADES_50: {
+        name: '🏠 NECESSIDADES ESSENCIAIS (50%)',
+        months: expenseGroupMap.get('needs')?.monthly || {},
+        totalYear: expenseGroupMap.get('needs')?.total || { esperado: 0, realizado: 0 }
+      },
+      DESEJOS_30: {
+        name: '✨ DESEJOS E ESTILO DE VIDA (30%)',
+        months: expenseGroupMap.get('wants')?.monthly || {},
+        totalYear: expenseGroupMap.get('wants')?.total || { esperado: 0, realizado: 0 }
+      },
+      PRIORIDADES_20: {
+        name: '🎯 PRIORIDADES FINANCEIRAS E INVESTIMENTOS (20%)',
+        months: expenseGroupMap.get('priorities')?.monthly || {},
+        totalYear: expenseGroupMap.get('priorities')?.total || { esperado: 0, realizado: 0 }
       },
       CUSTOS_VARIAVEIS: {
         name: '📊 CUSTOS VARIÁVEIS',
@@ -1090,6 +1268,7 @@ router.get('/dre', authenticateToken, async (req: AuthRequest, res: Response) =>
         },
         despesas: {
           categories: despesaCategories,
+          expenseGroups,
           total: totalAnoDespesas,
           monthly: totaisMensais.despesas
         },

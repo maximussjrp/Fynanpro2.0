@@ -176,6 +176,18 @@ interface DREData {
   };
   despesas: {
     categories: DRERowData[];
+    expenseGroups?: Array<{
+      key: 'needs' | 'wants' | 'priorities';
+      name: string;
+      targetPercent: number;
+      description: string;
+      categories: DRERowData[];
+      monthly: { [key: string]: { esperado: number; realizado: number } };
+      total: { esperado: number; realizado: number };
+      actualPercent: number;
+      targetAmount: number;
+      varianceFromTarget: number;
+    }>;
     total: { esperado: number; realizado: number };
     monthly: { [key: string]: { esperado: number; realizado: number } };
   };
@@ -1288,6 +1300,94 @@ export default function ReportsPage() {
                     </div>
                   );
                 };
+
+                const expenseGroups = dreData.despesas.expenseGroups?.length
+                  ? dreData.despesas.expenseGroups
+                  : [{
+                      key: 'needs' as const,
+                      name: '🏠 NECESSIDADES ESSENCIAIS',
+                      targetPercent: 50,
+                      description: 'Despesas classificadas como essenciais.',
+                      categories: dreData.despesas.categories,
+                      monthly: dreData.despesas.monthly,
+                      total: dreData.despesas.total,
+                      actualPercent: dreData.summary.totalReceitas > 0
+                        ? (dreData.despesas.total.realizado / dreData.summary.totalReceitas) * 100
+                        : 0,
+                      targetAmount: dreData.summary.totalReceitas * 0.5,
+                      varianceFromTarget: dreData.despesas.total.realizado - (dreData.summary.totalReceitas * 0.5),
+                    }];
+
+                const renderExpenseCategoryRows = (categories: DRERowData[]) => categories.map((cat) => {
+                  const isExpanded = expandedDRERows.has(cat.id);
+                  const hasChildren = cat.children.length > 0;
+                  
+                  return (
+                    <React.Fragment key={cat.id}>
+                      <tr 
+                        className={`hover:bg-gray-50 transition cursor-pointer ${hasChildren ? 'font-medium' : ''}`}
+                        onClick={() => hasChildren && toggleDRERow(cat.id)}
+                      >
+                        <td className="sticky left-0 bg-white hover:bg-gray-50 px-3 py-1.5 flex items-center gap-1">
+                          {hasChildren && (
+                            <span className="text-gray-500">{isExpanded ? '▼' : '▶'}</span>
+                          )}
+                          <span className="pl-2 text-gray-900 font-medium">{cat.icon} {cat.name.replace(new RegExp(`^${cat.icon}\\s*`), '')}</span>
+                        </td>
+                        {displayMonthIndices.map(monthIndex => {
+                          const month = getBackendMonth(monthIndex);
+                          const monthData = cat.months[month] || { esperado: 0, realizado: 0, av: 0, ah: 0 };
+                          return (
+                            <React.Fragment key={`${cat.id}-${monthIndex}`}>
+                              {showExpected && <td className="px-1 py-1.5 text-right border-l border-gray-100 text-gray-600">{monthData.esperado > 0 ? formatCurrency(monthData.esperado) : '-'}</td>}
+                              <td className="px-1 py-1.5 text-right text-rose-700 font-medium">{monthData.realizado > 0 ? formatCurrency(monthData.realizado) : '-'}</td>
+                              <td className="px-1 py-1.5 text-right text-gray-600 text-xs">{monthData.av > 0 ? `${monthData.av.toFixed(1)}%` : '-'}</td>
+                              <td className={`px-1 py-1.5 text-right text-xs ${monthData.ah > 0 ? 'text-red-700' : monthData.ah < 0 ? 'text-green-700' : 'text-gray-500'}`}>
+                                {monthData.ah !== 0 ? `${monthData.ah > 0 ? '+' : ''}${monthData.ah.toFixed(1)}%` : '-'}
+                              </td>
+                            </React.Fragment>
+                          );
+                        })}
+                        {showYearTotal && (
+                          <>
+                            {showExpected && <td className="px-1 py-1.5 text-right border-l border-gray-200 bg-teal-50/50 text-gray-600">{cat.totalYear.esperado > 0 ? formatCurrency(cat.totalYear.esperado) : '-'}</td>}
+                            <td className="px-1 py-1.5 text-right text-rose-700 font-semibold bg-teal-50/50">{cat.totalYear.realizado > 0 ? formatCurrency(cat.totalYear.realizado) : '-'}</td>
+                            <td className="px-1 py-1.5 text-right text-gray-600 text-xs bg-teal-50/50">{cat.totalYear.av > 0 ? `${cat.totalYear.av.toFixed(1)}%` : '-'}</td>
+                          </>
+                        )}
+                      </tr>
+                      
+                      {hasChildren && isExpanded && cat.children.map((child) => (
+                        <tr key={child.id} className="bg-gray-50/50 hover:bg-gray-100 transition text-sm">
+                          <td className="sticky left-0 bg-gray-50/50 hover:bg-gray-100 px-3 py-1 pl-8 text-gray-800">
+                            {child.icon} {child.name.replace(new RegExp(`^${child.icon}\\s*`), '')}
+                          </td>
+                          {displayMonthIndices.map(monthIndex => {
+                            const month = getBackendMonth(monthIndex);
+                            const monthData = child.months[month] || { esperado: 0, realizado: 0, av: 0, ah: 0 };
+                            return (
+                              <React.Fragment key={`${child.id}-${monthIndex}`}>
+                                {showExpected && <td className="px-1 py-1 text-right border-l border-gray-100 text-gray-500 text-xs">{monthData.esperado > 0 ? formatCurrency(monthData.esperado) : '-'}</td>}
+                                <td className="px-1 py-1 text-right text-rose-600 text-xs">{monthData.realizado > 0 ? formatCurrency(monthData.realizado) : '-'}</td>
+                                <td className="px-1 py-1 text-right text-gray-500 text-xs">{monthData.av > 0 ? `${monthData.av.toFixed(1)}%` : '-'}</td>
+                                <td className={`px-1 py-1 text-right text-xs ${monthData.ah > 0 ? 'text-red-600' : monthData.ah < 0 ? 'text-green-600' : 'text-gray-400'}`}>
+                                  {monthData.ah !== 0 ? `${monthData.ah > 0 ? '+' : ''}${monthData.ah.toFixed(1)}%` : '-'}
+                                </td>
+                              </React.Fragment>
+                            );
+                          })}
+                          {showYearTotal && (
+                            <>
+                              {showExpected && <td className="px-1 py-1 text-right border-l border-gray-200 bg-teal-50/30 text-gray-500 text-xs">{child.totalYear.esperado > 0 ? formatCurrency(child.totalYear.esperado) : '-'}</td>}
+                              <td className="px-1 py-1 text-right text-rose-600 text-xs bg-teal-50/30">{child.totalYear.realizado > 0 ? formatCurrency(child.totalYear.realizado) : '-'}</td>
+                              <td className="px-1 py-1 text-right text-gray-500 text-xs bg-teal-50/30">{child.totalYear.av > 0 ? `${child.totalYear.av.toFixed(1)}%` : '-'}</td>
+                            </>
+                          )}
+                        </tr>
+                      ))}
+                    </React.Fragment>
+                  );
+                });
                 
                 return (
                 <>
@@ -1421,7 +1521,15 @@ export default function ReportsPage() {
                         <span className="font-bold text-sm">{formatCurrency(dreData.despesas.total.realizado)}</span>
                       </div>
                       <div className="space-y-2">
-                        {dreData.despesas.categories.map(cat => renderMobileCard(cat, false))}
+                        {expenseGroups.map(group => (
+                          <div key={group.key} className="space-y-2">
+                            <div className="bg-slate-800 text-white px-3 py-2 rounded-lg flex items-center justify-between">
+                              <span className="font-semibold text-xs">{group.name}</span>
+                              <span className="font-bold text-xs">{group.actualPercent.toFixed(1)}% / {group.targetPercent}%</span>
+                            </div>
+                            {group.categories.map(cat => renderMobileCard(cat, false))}
+                          </div>
+                        ))}
                       </div>
                     </div>
                     
@@ -1611,6 +1719,40 @@ export default function ReportsPage() {
                       {/* Separador */}
                       <tr className="h-2 bg-gray-200"></tr>
 
+                      {expenseGroups.map((group) => (
+                        <React.Fragment key={group.key}>
+                          <tr className="bg-orange-100 font-semibold hover:bg-orange-200 transition">
+                            <td className="sticky left-0 bg-orange-100 hover:bg-orange-200 px-3 py-2">
+                              ▶ {group.name} ({group.actualPercent.toFixed(1)}% / meta {group.targetPercent}%)
+                            </td>
+                            {displayMonthIndices.map(monthIndex => {
+                              const month = getBackendMonth(monthIndex);
+                              const data = group.monthly[month] || { esperado: 0, realizado: 0 };
+                              return (
+                                <React.Fragment key={`${group.key}-${monthIndex}`}>
+                                  {showExpected && <td className="px-1 py-2 text-right border-l border-gray-200">{formatCurrency(data.esperado)}</td>}
+                                  <td className="px-1 py-2 text-right text-orange-700 font-semibold">{formatCurrency(data.realizado)}</td>
+                                  <td className="px-1 py-2 text-right text-gray-600">{group.actualPercent.toFixed(1)}%</td>
+                                  <td className={`px-1 py-2 text-right ${group.varianceFromTarget > 0 ? 'text-red-700' : 'text-green-700'}`}>
+                                    {formatCurrency(group.varianceFromTarget)}
+                                  </td>
+                                </React.Fragment>
+                              );
+                            })}
+                            {showYearTotal && (
+                              <>
+                                {showExpected && <td className="px-1 py-2 text-right border-l border-gray-300 bg-teal-50">{formatCurrency(group.total.esperado)}</td>}
+                                <td className="px-1 py-2 text-right text-orange-700 font-semibold bg-teal-50">{formatCurrency(group.total.realizado)}</td>
+                                <td className="px-1 py-2 text-right text-gray-600 bg-teal-50">{group.actualPercent.toFixed(1)}%</td>
+                              </>
+                            )}
+                          </tr>
+                          {renderExpenseCategoryRows(group.categories)}
+                        </React.Fragment>
+                      ))}
+
+                      {!expenseGroups.length && (
+                        <>
                       {/* Linha CUSTOS VARIÁVEIS */}
                       <tr className="bg-orange-100 font-semibold hover:bg-orange-200 transition">
                         <td className="sticky left-0 bg-orange-100 hover:bg-orange-200 px-3 py-2">
@@ -1714,6 +1856,9 @@ export default function ReportsPage() {
                       <tr className="h-2 bg-gray-200"></tr>
 
                       {/* Linha RESULTADO LÍQUIDO */}
+                        </>
+                      )}
+
                       <tr className="bg-green-100 font-bold hover:bg-green-200 transition">
                         <td className="sticky left-0 bg-green-100 hover:bg-green-200 px-3 py-2 text-green-800">
                           ✅ {dreData.linhasCalculadas.RESULTADO_LIQUIDO?.name || 'RESULTADO LÍQUIDO'}
