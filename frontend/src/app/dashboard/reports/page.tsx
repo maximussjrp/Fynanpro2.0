@@ -1347,6 +1347,21 @@ export default function ReportsPage() {
                       color: #14532d !important;
                     }
 
+                    .dre-table tbody tr:not(.bg-blue-900):not(.bg-orange-100):not(.bg-green-100):not(.h-2) td[class*="bg-teal"] {
+                      background-color: #1e293b !important;
+                      color: #cbd5e1 !important;
+                    }
+
+                    .dre-table tbody tr:not(.bg-blue-900):not(.bg-orange-100):not(.bg-green-100):not(.h-2) td[class*="bg-teal"].text-blue-700,
+                    .dre-table tbody tr:not(.bg-blue-900):not(.bg-orange-100):not(.bg-green-100):not(.h-2) td[class*="bg-teal"].text-blue-500 {
+                      color: #60a5fa !important;
+                    }
+
+                    .dre-table tbody tr:not(.bg-blue-900):not(.bg-orange-100):not(.bg-green-100):not(.h-2) td[class*="bg-teal"].text-rose-700,
+                    .dre-table tbody tr:not(.bg-blue-900):not(.bg-orange-100):not(.bg-green-100):not(.h-2) td[class*="bg-teal"].text-rose-600 {
+                      color: #fb7185 !important;
+                    }
+
                     .dre-table .text-gray-900,
                     .dre-table .text-gray-800,
                     .dre-table .text-gray-600,
