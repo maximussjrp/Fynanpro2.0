@@ -1019,13 +1019,13 @@ export default function ReportsPage() {
                     {/* Legenda do gráfico - cores explícitas para mobile */}
                     <div className="space-y-2">
                       {categoryData.categories.slice(0, 8).map((cat, index) => (
-                        <div key={cat.id} className="flex items-center gap-2 text-sm" style={{ color: '#1f2937' }}>
+                        <div key={cat.id} className="flex items-center gap-2 text-sm" style={{ color: '#E2E8F0' }}>
                           <div 
                             className="w-3 h-3 rounded-full flex-shrink-0" 
                             style={{ backgroundColor: COLORS[index % COLORS.length] }}
                           />
-                          <span className="flex-1 truncate" style={{ color: '#374151' }}>{cat.icon} {cat.name}</span>
-                          <span className="font-medium" style={{ color: '#111827' }}>{formatCurrency(cat.total)}</span>
+                          <span className="flex-1 truncate font-medium" style={{ color: '#E2E8F0' }}>{cat.icon} {cat.name}</span>
+                          <span className="font-semibold" style={{ color: '#F8FAFC' }}>{formatCurrency(cat.total)}</span>
                         </div>
                       ))}
                     </div>
@@ -1291,6 +1291,92 @@ export default function ReportsPage() {
                 
                 return (
                 <>
+                  <style jsx global>{`
+                    .dre-table table {
+                      border-collapse: separate;
+                      border-spacing: 0;
+                    }
+
+                    .dre-table th,
+                    .dre-table td {
+                      border-color: #334155 !important;
+                      overflow: hidden;
+                      text-overflow: ellipsis;
+                      white-space: nowrap;
+                    }
+
+                    .dre-table tbody tr:not(.bg-blue-900):not(.bg-orange-100):not(.bg-green-100):not(.h-2) {
+                      background-color: #0f172a !important;
+                    }
+
+                    .dre-table tbody tr:not(.bg-blue-900):not(.bg-orange-100):not(.bg-green-100):not(.h-2):hover {
+                      background-color: #1e293b !important;
+                    }
+
+                    .dre-table tbody td {
+                      color: #cbd5e1;
+                    }
+
+                    .dre-table tbody td.sticky {
+                      display: table-cell !important;
+                      width: 250px;
+                      min-width: 250px;
+                      max-width: 250px;
+                      background-color: #0f172a !important;
+                      color: #f8fafc !important;
+                      border-right: 1px solid #334155 !important;
+                      z-index: 20;
+                    }
+
+                    .dre-table tbody td.sticky span {
+                      color: #f8fafc !important;
+                    }
+
+                    .dre-table tbody tr.bg-blue-900 td {
+                      background-color: #1e3a8a !important;
+                      color: #dbeafe !important;
+                    }
+
+                    .dre-table tbody tr.bg-orange-100 td {
+                      background-color: #ffedd5 !important;
+                      color: #7c2d12 !important;
+                    }
+
+                    .dre-table tbody tr.bg-green-100 td {
+                      background-color: #dcfce7 !important;
+                      color: #14532d !important;
+                    }
+
+                    .dre-table .text-gray-900,
+                    .dre-table .text-gray-800,
+                    .dre-table .text-gray-600,
+                    .dre-table .text-gray-500,
+                    .dre-table .text-gray-400 {
+                      color: #cbd5e1 !important;
+                    }
+
+                    .dre-table .text-blue-700,
+                    .dre-table .text-blue-500 {
+                      color: #60a5fa !important;
+                    }
+
+                    .dre-table .text-rose-700,
+                    .dre-table .text-rose-600 {
+                      color: #fb7185 !important;
+                    }
+
+                    .dre-table .text-green-700,
+                    .dre-table .text-green-600,
+                    .dre-table .text-green-500 {
+                      color: #34d399 !important;
+                    }
+
+                    .dre-table .text-red-700,
+                    .dre-table .text-red-600,
+                    .dre-table .text-red-500 {
+                      color: #fb7185 !important;
+                    }
+                  `}</style>
                   {/* Versão Mobile - Cards empilhados */}
                   <div className="sm:hidden space-y-4">
                     {/* Aviso sobre modo de visualização */}
@@ -1342,12 +1428,30 @@ export default function ReportsPage() {
                   </div>
 
                   {/* Versão Desktop - Tabela completa */}
-                  <div ref={dreTableRef} className="hidden sm:block overflow-x-auto border border-gray-200 rounded-lg">
-                    <table className={`w-full ${dreViewMode === 'year' ? 'min-w-[1800px]' : 'min-w-[500px]'} text-sm`}>
+                  <div ref={dreTableRef} className="dre-table hidden sm:block overflow-x-auto border border-slate-700 rounded-lg bg-slate-950">
+                    <table className={`w-full ${dreViewMode === 'year' ? 'min-w-[2220px]' : 'min-w-[760px]'} text-sm table-fixed`}>
+                      <colgroup>
+                        <col className="w-[250px]" />
+                        {displayMonthIndices.map(monthIndex => (
+                          <React.Fragment key={`cols-${monthIndex}`}>
+                            {showExpected && <col className="w-[110px]" />}
+                            <col className="w-[110px]" />
+                            <col className="w-[64px]" />
+                            <col className="w-[64px]" />
+                          </React.Fragment>
+                        ))}
+                        {showYearTotal && (
+                          <>
+                            {showExpected && <col className="w-[120px]" />}
+                            <col className="w-[120px]" />
+                            <col className="w-[70px]" />
+                          </>
+                        )}
+                      </colgroup>
                       <thead>
                         {/* Header com meses */}
                         <tr className="bg-gray-800 text-white">
-                          <th className="sticky left-0 bg-gray-800 text-left px-3 py-2 font-semibold min-w-[250px]">
+                          <th className="sticky left-0 z-30 bg-gray-800 text-left px-3 py-2 font-semibold min-w-[250px] border-r border-slate-700">
                             <button
                               onClick={expandAllDRE}
                               className="text-gray-300 hover:text-white transition text-xs"
@@ -1369,7 +1473,7 @@ export default function ReportsPage() {
                         </tr>
                         {/* Subheader com Esperado/Realizado/AV/AH */}
                         <tr className="bg-gray-700 text-gray-200 text-xs">
-                          <th className="sticky left-0 bg-gray-700 text-left px-3 py-1"></th>
+                          <th className="sticky left-0 z-30 bg-gray-700 text-left px-3 py-1 border-r border-slate-700"></th>
                           {displayMonthIndices.map(monthIndex => (
                             <React.Fragment key={`sub-${monthIndex}`}>
                               {showExpected && <th className="px-1 py-1 text-right border-l border-gray-600">ESPERADO</th>}
@@ -1389,8 +1493,8 @@ export default function ReportsPage() {
                     </thead>
                     <tbody>
                       {/* Linha RECEITA/FATURAMENTO */}
-                      <tr className="bg-blue-100 font-semibold hover:bg-blue-200 transition">
-                        <td className="sticky left-0 bg-blue-100 hover:bg-blue-200 px-3 py-2">
+                      <tr className="bg-blue-900 font-semibold hover:bg-blue-800 transition">
+                        <td className="sticky left-0 z-20 bg-blue-900 hover:bg-blue-800 px-3 py-2 text-white border-r border-slate-700 truncate">
                           ▶ {dreData.linhasCalculadas.RECEITA_FATURAMENTO?.name || '📈 RECEITA/FATURAMENTO'}
                         </td>
                         {displayMonthIndices.map(monthIndex => {

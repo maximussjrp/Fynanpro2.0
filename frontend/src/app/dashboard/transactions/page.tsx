@@ -107,7 +107,15 @@ export default function TransactionsPage() {
   const { accessToken, isAuthenticated } = useAuth();
   const [loading, setLoading] = useState(true);
   const [loadingTransactionId, setLoadingTransactionId] = useState<string | null>(null);
+  const [bulkLoading, setBulkLoading] = useState(false);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [selectedTransactionIds, setSelectedTransactionIds] = useState<string[]>([]);
+  const [paymentModal, setPaymentModal] = useState<{
+    open: boolean;
+    mode: 'single' | 'bulk';
+    transaction?: Transaction;
+  }>({ open: false, mode: 'single' });
+  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
@@ -468,6 +476,80 @@ export default function TransactionsPage() {
     }
   };
 
+  const isPayableTransaction = (transaction: Transaction) => transaction.status !== 'completed';
+
+  const payTransaction = async (transaction: Transaction, paidDate: string) => {
+    const paidDateIso = new Date(`${paidDate}T12:00:00`).toISOString();
+
+    if (transaction.isRecurringOccurrence && transaction.recurringBillId && !transaction.parentId) {
+      await api.post(`/recurring-bills/${transaction.recurringBillId}/occurrences/${transaction.id}/pay`, {
+        paidDate: paidDateIso,
+        paidAmount: Number(transaction.amount),
+      });
+      return;
+    }
+
+    if (transaction.isInstallment && transaction.installmentPurchaseId) {
+      await api.post(`/installments/${transaction.installmentPurchaseId}/installments/${transaction.id}/pay`, {
+        paidDate: paidDateIso,
+        paidAmount: Number(transaction.amount),
+      });
+      return;
+    }
+
+    await api.patch(`/transactions/${transaction.id}/status`, {
+      status: 'completed',
+      paidDate: paidDateIso,
+      paidAmount: Number(transaction.amount),
+    });
+  };
+
+  const openPaymentModal = (mode: 'single' | 'bulk', transaction?: Transaction) => {
+    setPaymentDate(new Date().toISOString().split('T')[0]);
+    setPaymentModal({ open: true, mode, transaction });
+  };
+
+  const closePaymentModal = () => {
+    setPaymentModal({ open: false, mode: 'single' });
+    setPaymentDate(new Date().toISOString().split('T')[0]);
+  };
+
+  const confirmPayment = async () => {
+    const targets = paymentModal.mode === 'single'
+      ? (paymentModal.transaction ? [paymentModal.transaction] : [])
+      : transactions.filter(transaction =>
+          selectedTransactionIds.includes(transaction.id) && isPayableTransaction(transaction)
+        );
+
+    if (targets.length === 0) {
+      toast.error('Selecione pelo menos um lançamento pendente');
+      return;
+    }
+
+    setBulkLoading(true);
+    if (paymentModal.mode === 'single' && paymentModal.transaction) {
+      setLoadingTransactionId(paymentModal.transaction.id);
+    }
+
+    try {
+      await Promise.all(targets.map(transaction => payTransaction(transaction, paymentDate)));
+      toast.success(
+        targets.length === 1
+          ? 'Lançamento marcado como pago'
+          : `${targets.length} lançamentos marcados como pagos`
+      );
+      setSelectedTransactionIds(prev => prev.filter(id => !targets.some(target => target.id === id)));
+      closePaymentModal();
+      loadData();
+    } catch (error: any) {
+      console.error('Erro ao registrar pagamento:', error);
+      toast.error(error.response?.data?.error?.message || 'Erro ao registrar pagamento');
+    } finally {
+      setBulkLoading(false);
+      setLoadingTransactionId(null);
+    }
+  };
+
   const handleDelete = async (transaction: Transaction) => {
     try {
       // Verificar se é uma transação recorrente (tem frequency ou parentId com transactionType = recurring)
@@ -525,26 +607,17 @@ export default function TransactionsPage() {
 
   const togglePaidStatus = async (transaction: Transaction) => {
     if (loadingTransactionId === transaction.id) return;
+    if (transaction.status !== 'completed') {
+      openPaymentModal('single', transaction);
+      return;
+    }
+
     setLoadingTransactionId(transaction.id);
     try {
-      // Se for ocorrência do modelo ANTIGO (RecurringBillOccurrence), usar endpoint específico
-      // Identificamos pelo campo isRecurringOccurrence que vem do mapeamento de /recurring-bills/occurrences
-      if (transaction.isRecurringOccurrence && transaction.recurringBillId && !transaction.parentId) {
-        await api.post(`/recurring-bills/${transaction.recurringBillId}/occurrences/${transaction.id}/pay`, {
-          paidDate: new Date().toISOString(),
-          paidAmount: transaction.amount,
-        });
-        toast.success('Recorrência paga com sucesso!');
-      } else if (transaction.isInstallment && transaction.installmentPurchaseId) {
-        await api.post(`/installments/${transaction.installmentPurchaseId}/installments/${transaction.id}/pay`);
-        toast.success('Parcela paga com sucesso!');
-      } else {
-        const newStatus = transaction.status === 'completed' ? 'pending' : 'completed';
-        await api.put(`/transactions/${transaction.id}`, {
-          status: newStatus,
-        });
-        toast.success(`Status alterado para ${newStatus === 'completed' ? 'Pago' : 'Pendente'}`);
-      }
+      await api.patch(`/transactions/${transaction.id}/status`, {
+        status: 'pending',
+      });
+      toast.success('Status alterado para Pendente');
       
       loadData();
     } catch (error: any) {
@@ -862,6 +935,34 @@ export default function TransactionsPage() {
   };
 
   const filteredTransactions = getFilteredAndSortedTransactions();
+  const payableFilteredTransactions = filteredTransactions.filter(isPayableTransaction);
+  const selectedTransactions = transactions.filter(transaction => selectedTransactionIds.includes(transaction.id));
+  const selectedPayableTransactions = selectedTransactions.filter(isPayableTransaction);
+  const allPayableFilteredSelected = payableFilteredTransactions.length > 0 &&
+    payableFilteredTransactions.every(transaction => selectedTransactionIds.includes(transaction.id));
+
+  useEffect(() => {
+    setSelectedTransactionIds(prev => prev.filter(id => transactions.some(transaction => transaction.id === id)));
+  }, [transactions]);
+
+  const toggleTransactionSelection = (transaction: Transaction) => {
+    if (!isPayableTransaction(transaction)) return;
+    setSelectedTransactionIds(prev =>
+      prev.includes(transaction.id)
+        ? prev.filter(id => id !== transaction.id)
+        : [...prev, transaction.id]
+    );
+  };
+
+  const toggleAllPayableSelection = () => {
+    const visiblePayableIds = payableFilteredTransactions.map(transaction => transaction.id);
+    if (allPayableFilteredSelected) {
+      setSelectedTransactionIds(prev => prev.filter(id => !visiblePayableIds.includes(id)));
+      return;
+    }
+
+    setSelectedTransactionIds(prev => Array.from(new Set([...prev, ...visiblePayableIds])));
+  };
 
   // Calcular o total das transações filtradas
   const totalFiltered = useMemo(() => {
@@ -1437,10 +1538,44 @@ export default function TransactionsPage() {
 
         {/* Lista de Transações */}
         <div className="bg-white rounded-lg shadow-md overflow-hidden flex-1 flex flex-col">
+          {selectedPayableTransactions.length > 0 && (
+            <div className="px-4 py-3 bg-blue-50 border-b border-blue-100 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="text-sm text-blue-900">
+                <span className="font-semibold">{selectedPayableTransactions.length}</span>
+                {' lançamento(s) pendente(s) selecionado(s)'}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={() => openPaymentModal('bulk')}
+                  disabled={bulkLoading}
+                  className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm font-medium inline-flex items-center gap-2"
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  Marcar como pago
+                </button>
+                <button
+                  onClick={() => setSelectedTransactionIds([])}
+                  className="px-3 py-2 bg-white text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-sm"
+                >
+                  Limpar seleção
+                </button>
+              </div>
+            </div>
+          )}
           <div className="overflow-auto flex-1">
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
                 <tr>
+                  <th className="px-4 py-3 text-left">
+                    <input
+                      type="checkbox"
+                      checked={allPayableFilteredSelected}
+                      onChange={toggleAllPayableSelection}
+                      disabled={payableFilteredTransactions.length === 0}
+                      className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-40"
+                      title="Selecionar lançamentos pendentes visíveis"
+                    />
+                  </th>
                   <ColumnHeader label="Data" sortKey="date" isDateFilter />
                   <ColumnHeader label="Descrição" sortKey="description" />
                   <ColumnHeader 
@@ -1484,10 +1619,20 @@ export default function TransactionsPage() {
                 {filteredTransactions.length > 0 ? (
                   filteredTransactions.map((transaction) => (
                     <tr key={transaction.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-4 py-4 whitespace-nowrap">
+                        <input
+                          type="checkbox"
+                          checked={selectedTransactionIds.includes(transaction.id)}
+                          onChange={() => toggleTransactionSelection(transaction)}
+                          disabled={!isPayableTransaction(transaction)}
+                          className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-30"
+                          title={isPayableTransaction(transaction) ? 'Selecionar lançamento' : 'Lançamento já pago'}
+                        />
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                         <div className="flex items-center gap-2">
                           <Calendar className="w-4 h-4 text-gray-400" />
-                          {formatDate(transaction.transactionDate)}
+                          {formatDate(transaction.status === 'completed' && transaction.paidDate ? transaction.paidDate : transaction.transactionDate)}
                         </div>
                       </td>
                       <td className="px-6 py-4 text-sm">
@@ -1654,7 +1799,7 @@ export default function TransactionsPage() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={8} className="px-6 py-16 text-center">
+                    <td colSpan={10} className="px-6 py-16 text-center">
                       <div className="flex flex-col items-center justify-center">
                         <Receipt className="w-16 h-16 text-gray-300 mb-4" />
                         <p className="text-gray-500 text-lg">Nenhuma transação encontrada</p>
@@ -1693,6 +1838,71 @@ export default function TransactionsPage() {
           onSuccess={handleModalSuccess}
           transaction={editingTransaction}
         />
+      )}
+
+      {paymentModal.open && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full">
+            <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
+              <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                <CheckCircle className="w-5 h-5 text-green-600" />
+                Confirmar pagamento
+              </h2>
+              <button
+                onClick={closePaymentModal}
+                disabled={bulkLoading}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
+                title="Fechar"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="text-sm text-gray-700">
+                {paymentModal.mode === 'single' && paymentModal.transaction ? (
+                  <span>
+                    Marcar <strong>{paymentModal.transaction.description}</strong> como pago.
+                  </span>
+                ) : (
+                  <span>
+                    Marcar <strong>{selectedPayableTransactions.length}</strong> lançamento(s) selecionado(s) como pago(s).
+                  </span>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Data do pagamento</label>
+                <input
+                  type="date"
+                  value={paymentDate}
+                  onChange={(e) => setPaymentDate(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent text-gray-900 bg-white"
+                />
+                <p className="text-xs text-gray-500 mt-2">
+                  Essa data será aplicada apenas aos lançamentos selecionados. Vencimentos futuros de parcelas e recorrências permanecem iguais.
+                </p>
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={closePaymentModal}
+                  disabled={bulkLoading}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmPayment}
+                  disabled={bulkLoading || !paymentDate}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors inline-flex items-center gap-2"
+                >
+                  {bulkLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                  Confirmar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Modal de Transferência */}

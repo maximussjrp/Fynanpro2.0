@@ -1832,7 +1832,7 @@ export class TransactionService {
       let daysEarlyLate: number | null = null;
 
       if (newStatus === 'completed' && transaction.dueDate) {
-        const paymentDate = paidDate || new Date();
+        const paymentDate = effectivePaidDate || new Date();
         const dueDate = new Date(transaction.dueDate);
         const diffTime = dueDate.getTime() - paymentDate.getTime();
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -1867,6 +1867,9 @@ export class TransactionService {
           where: { id },
           data: {
             status: newStatus,
+            transactionDate: newStatus === 'completed'
+              ? effectivePaidDate || transaction.transactionDate
+              : transaction.dueDate || transaction.transactionDate,
             paidDate: effectivePaidDate,
             isPaidEarly,
             isPaidLate,

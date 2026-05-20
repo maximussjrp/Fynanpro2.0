@@ -839,6 +839,56 @@ describe('TransactionService', () => {
       });
     });
 
+    it('deve usar paidDate como data efetiva sem alterar dueDate ao marcar como completed', async () => {
+      const paidDate = new Date('2026-05-20T12:00:00.000Z');
+      const dueDate = new Date('2026-05-10T00:00:00.000Z');
+      const transaction = {
+        id: 'tx-paid-date',
+        tenantId: 'tenant-123',
+        type: 'expense',
+        amount: 120,
+        status: 'pending',
+        bankAccountId: 'bank-123',
+        deletedAt: null,
+        dueDate,
+        paidDate: null,
+        transactionDate: dueDate,
+        transactionType: 'single',
+        parentId: null,
+      };
+
+      const updateMock = jest.fn().mockResolvedValue({
+        ...transaction,
+        status: 'completed',
+        paidDate,
+        transactionDate: paidDate,
+      });
+
+      (prisma.transaction.findFirst as jest.Mock).mockResolvedValue(transaction);
+      (prisma.$transaction as jest.Mock).mockImplementation(async (fn) => {
+        const mockTx = {
+          transaction: {
+            update: updateMock,
+          },
+          bankAccount: {
+            update: jest.fn().mockResolvedValue({ currentBalance: 880 }),
+          },
+        };
+        return fn(mockTx);
+      });
+
+      await transactionService.updateStatus('tx-paid-date', 'completed', 'tenant-123', paidDate);
+
+      expect(updateMock).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({
+          status: 'completed',
+          paidDate,
+          transactionDate: paidDate,
+        }),
+      }));
+      expect(updateMock.mock.calls[0][0].data).not.toHaveProperty('dueDate');
+    });
+
     it('deve tratar retry completed->completed como noop sem tocar saldo nem gerar recorrencia', async () => {
       const completedRecurring = {
         id: 'rec-paid',
