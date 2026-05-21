@@ -295,6 +295,15 @@ export default function UnifiedTransactionModal({
     });
     setSplitEnabled(false);
     setCategorySplits([{ categoryId: '', amount: '', note: '' }]);
+    setShowCategoryDropdown(false);
+    setShowPaymentMethodDropdown(false);
+    setShowQuickBankAccount(false);
+    setShowQuickPaymentMethod(false);
+    setShowEditPaymentMethodModal(false);
+    setShowDeletePaymentMethodModal(false);
+    setEditingPaymentMethod(null);
+    setDeletingPaymentMethod(null);
+    setAiSuggestion(null);
     if (!preserveLocked) {
       setTransactionType(defaultTransactionType);
     }
@@ -599,8 +608,8 @@ export default function UnifiedTransactionModal({
         toast.success('Transação criada com sucesso! Continue lançando...');
       }
 
-      onSuccess();
       resetForm(true); // Preservar campos bloqueados
+      onSuccess();
       // Modal permanece aberto para continuar lançando
     } catch (error: any) {
       console.error('Erro ao salvar transação:', error);
