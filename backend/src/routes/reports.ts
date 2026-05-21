@@ -4,6 +4,7 @@ import { AuthRequest, authenticateToken } from '../middleware/auth';
 import { log } from '../utils/logger';
 import { parsePeriod } from '../utils/date-helpers';
 import { autoClassifyCategory } from '../contracts/energy-auto-classification';
+import { expandCategoryAllocations } from '../utils/category-allocations';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -186,6 +187,19 @@ router.get('/category-analysis', authenticateToken, async (req: AuthRequest, res
             color: true,
             type: true
           }
+        },
+        categorySplits: {
+          include: {
+            category: {
+              select: {
+                id: true,
+                name: true,
+                icon: true,
+                color: true,
+                type: true
+              }
+            }
+          }
         }
       }
     });
@@ -206,10 +220,12 @@ router.get('/category-analysis', authenticateToken, async (req: AuthRequest, res
       budget?: number;
     }>();
 
-    transactions.forEach(t => {
-      if (!t.category) return;
+    const allocations = expandCategoryAllocations(transactions);
 
-      const catId = t.category.id;
+    allocations.forEach(t => {
+      if (!t.category || !t.categoryId) return;
+
+      const catId = t.categoryId;
       if (!categoryMap.has(catId)) {
         const budget = budgets.find(b => b.categoryId === catId);
         categoryMap.set(catId, {
@@ -221,7 +237,7 @@ router.get('/category-analysis', authenticateToken, async (req: AuthRequest, res
       }
 
       const data = categoryMap.get(catId)!;
-      data.total += Number(t.amount);
+      data.total += t.amount;
       data.count++;
     });
 
@@ -305,16 +321,25 @@ router.get('/hierarchical-categories', authenticateToken, async (req: AuthReques
         deletedAt: null
       },
       select: {
+        id: true,
         categoryId: true,
         amount: true,
-        type: true
+        type: true,
+        categorySplits: {
+          select: {
+            categoryId: true,
+            amount: true
+          }
+        }
       }
     });
 
     // Mapear totais por categoria
     const categoryTotals = new Map<string, { income: number; expense: number; count: number }>();
     
-    transactions.forEach(t => {
+    const allocations = expandCategoryAllocations(transactions);
+
+    allocations.forEach(t => {
       if (!t.categoryId) return;
       
       if (!categoryTotals.has(t.categoryId)) {
@@ -323,9 +348,9 @@ router.get('/hierarchical-categories', authenticateToken, async (req: AuthReques
       
       const data = categoryTotals.get(t.categoryId)!;
       if (t.type === 'income') {
-        data.income += Number(t.amount);
+        data.income += t.amount;
       } else {
-        data.expense += Number(t.amount);
+        data.expense += t.amount;
       }
       data.count++;
     });
@@ -400,11 +425,11 @@ router.get('/hierarchical-categories', authenticateToken, async (req: AuthReques
     // Calcular totais gerais
     let totalIncome = 0;
     let totalExpense = 0;
-    transactions.forEach(t => {
+    allocations.forEach(t => {
       if (t.type === 'income') {
-        totalIncome += Number(t.amount);
+        totalIncome += t.amount;
       } else {
-        totalExpense += Number(t.amount);
+        totalExpense += t.amount;
       }
     });
 
@@ -788,11 +813,18 @@ router.get('/dre', authenticateToken, async (req: AuthRequest, res: Response) =>
         status: { not: 'cancelled' } // Excluir apenas canceladas
       },
       select: {
+        id: true,
         categoryId: true,
         amount: true,
         type: true,
         status: true,
-        transactionDate: true
+        transactionDate: true,
+        categorySplits: {
+          select: {
+            categoryId: true,
+            amount: true
+          }
+        }
       }
     });
 
@@ -817,14 +849,16 @@ router.get('/dre', authenticateToken, async (req: AuthRequest, res: Response) =>
 
     // Preencher com transações
     transactions.forEach(t => {
-      if (!t.categoryId) return;
+      const allocations = expandCategoryAllocations([t]);
       
       const month = new Date(t.transactionDate).getMonth();
-      const catData = categoryMonthlyData.get(t.categoryId);
-      if (catData) {
+      allocations.forEach(allocation => {
+        if (!allocation.categoryId) return;
+        const catData = categoryMonthlyData.get(allocation.categoryId);
+        if (!catData) return;
         const monthData = catData.get(month);
         if (monthData) {
-          const amount = Number(t.amount);
+          const amount = allocation.amount;
           
           // ESPERADO: Soma de TODAS as transações lançadas (não canceladas)
           monthData.esperado += amount;
@@ -834,7 +868,7 @@ router.get('/dre', authenticateToken, async (req: AuthRequest, res: Response) =>
             monthData.realizado += amount;
           }
         }
-      }
+      });
     });
 
     // Função para calcular totais recursivamente (incluindo filhos)
@@ -880,7 +914,7 @@ router.get('/dre', authenticateToken, async (req: AuthRequest, res: Response) =>
     }
 
     // Construir árvore hierárquica para Mapa Financeiro
-    const buildFinancialTree = (parentId: string | null, level: number, filterType?: string): FinancialMapRow[] => {
+    const buildFinancialTree = (parentId: string | null, level: number, filterType?: string, includeChildrenTotals = true): FinancialMapRow[] => {
       let cats = allCategories.filter(c => {
         // Para level 1, buscar categorias sem parent (null, undefined, ou '')
         if (parentId === null) {
@@ -898,7 +932,9 @@ router.get('/dre', authenticateToken, async (req: AuthRequest, res: Response) =>
         let totalYearEsperado = 0;
 
         for (let m = 0; m < 12; m++) {
-          const totals = calculateTotalsWithChildren(cat.id, m);
+          const totals = includeChildrenTotals
+            ? calculateTotalsWithChildren(cat.id, m)
+            : (categoryMonthlyData.get(cat.id)?.get(m) || { realizado: 0, esperado: 0 });
           months[monthNames[m]] = {
             esperado: totals.esperado,
             realizado: totals.realizado,
@@ -923,14 +959,15 @@ router.get('/dre', authenticateToken, async (req: AuthRequest, res: Response) =>
             realizado: totalYearRealizado,
             av: 0
           },
-          children: buildFinancialTree(cat.id, (cat.level || 1) + 1)
+          children: buildFinancialTree(cat.id, (cat.level || 1) + 1, undefined, includeChildrenTotals)
         };
       }).sort((a, b) => b.totalYear.realizado - a.totalYear.realizado);
     };
 
     // Separar receitas e despesas (lowercase - como está no banco)
     const receitaCategories = buildFinancialTree(null, 1, 'income');
-    const despesaCategories = buildFinancialTree(null, 1, 'expense');
+    const despesaCategoriesTotal = buildFinancialTree(null, 1, 'expense');
+    const despesaCategories = buildFinancialTree(null, 1, 'expense', false);
 
     type Budget503020GroupKey = 'needs' | 'wants' | 'priorities';
 
@@ -972,6 +1009,19 @@ router.get('/dre', authenticateToken, async (req: AuthRequest, res: Response) =>
     const classifyExpenseRootCategory = (categoryId: string): Budget503020GroupKey => {
       const category = rootCategoryById.get(categoryId);
       if (!category) return 'wants';
+
+      const explicitSemantics = category.semantics;
+      if (explicitSemantics?.userOverride) {
+        const survival = Number(explicitSemantics.survivalWeight);
+        const choice = Number(explicitSemantics.choiceWeight);
+        const future = Number(explicitSemantics.futureWeight);
+        const loss = Number(explicitSemantics.lossWeight);
+
+        if (explicitSemantics.isInvestment || future >= Math.max(survival, choice)) return 'priorities';
+        if (explicitSemantics.isEssential || survival >= Math.max(choice, future, loss)) return 'needs';
+        if (loss > Math.max(survival, choice, future)) return 'priorities';
+        return 'wants';
+      }
 
       const normalizedName = normalizeCategoryName(category.name);
 
@@ -1055,10 +1105,34 @@ router.get('/dre', authenticateToken, async (req: AuthRequest, res: Response) =>
 
     const expenseGroupMap = new Map(expenseGroups.map(group => [group.key, group]));
 
+    const distributeExpenseRow = (row: FinancialMapRow): Array<{ groupKey: Budget503020GroupKey; row: FinancialMapRow }> => {
+      const ownGroupKey = classifyExpenseRootCategory(row.id);
+      const ownRow: FinancialMapRow = { ...row, children: [] };
+      const distributed: Array<{ groupKey: Budget503020GroupKey; row: FinancialMapRow }> = [];
+
+      row.children.forEach(child => {
+        distributeExpenseRow(child).forEach(childEntry => {
+          if (childEntry.groupKey === ownGroupKey) {
+            ownRow.children.push(childEntry.row);
+          } else {
+            distributed.push(childEntry);
+          }
+        });
+      });
+
+      const hasOwnValues = Object.values(ownRow.months).some(month => month.esperado > 0 || month.realizado > 0);
+      if (hasOwnValues || ownRow.children.length > 0) {
+        distributed.unshift({ groupKey: ownGroupKey, row: ownRow });
+      }
+
+      return distributed;
+    };
+
     despesaCategories.forEach(category => {
-      const groupKey = classifyExpenseRootCategory(category.id);
-      const group = expenseGroupMap.get(groupKey) || expenseGroupMap.get('wants')!;
-      group.categories.push(category);
+      distributeExpenseRow(category).forEach(({ groupKey, row }) => {
+        const group = expenseGroupMap.get(groupKey) || expenseGroupMap.get('wants')!;
+        group.categories.push(row);
+      });
     });
 
     // Calcular totais gerais por mês
@@ -1077,7 +1151,7 @@ router.get('/dre', authenticateToken, async (req: AuthRequest, res: Response) =>
         receitaRealizado += cat.months[monthNames[m]].realizado;
       });
 
-      despesaCategories.forEach(cat => {
+      despesaCategoriesTotal.forEach(cat => {
         despesaEsperado += cat.months[monthNames[m]].esperado;
         despesaRealizado += cat.months[monthNames[m]].realizado;
       });
@@ -1147,15 +1221,19 @@ router.get('/dre', authenticateToken, async (req: AuthRequest, res: Response) =>
       realizado: Object.values(totaisMensais.despesas).reduce((sum, m) => sum + m.realizado, 0)
     };
 
+    function sumRowsForMonth(rows: FinancialMapRow[], month: string): { esperado: number; realizado: number } {
+      return rows.reduce((sum, row) => {
+        const childrenTotal = sumRowsForMonth(row.children, month);
+        return {
+          esperado: sum.esperado + row.months[month].esperado + childrenTotal.esperado,
+          realizado: sum.realizado + row.months[month].realizado + childrenTotal.realizado,
+        };
+      }, { esperado: 0, realizado: 0 });
+    }
+
     expenseGroups.forEach(group => {
       monthNames.forEach(month => {
-        group.monthly[month] = group.categories.reduce(
-          (sum, category) => ({
-            esperado: sum.esperado + category.months[month].esperado,
-            realizado: sum.realizado + category.months[month].realizado,
-          }),
-          { esperado: 0, realizado: 0 }
-        );
+        group.monthly[month] = sumRowsForMonth(group.categories, month);
       });
 
       group.total = {

@@ -232,6 +232,104 @@ describe('TransactionService', () => {
       ).rejects.toThrow('Meio de pagamento não encontrado');
     });
 
+    it('deve criar transação com rateio por categoria válido', async () => {
+      const mockTransaction = {
+        id: 'trans-split',
+        type: 'expense',
+        amount: 230,
+        status: 'completed',
+      };
+      const splitDeleteMany = jest.fn().mockResolvedValue({ count: 0 });
+      const splitCreateMany = jest.fn().mockResolvedValue({ count: 3 });
+
+      (prisma.category.findMany as jest.Mock).mockResolvedValue([
+        { id: 'cat-food', type: 'expense' },
+        { id: 'cat-hygiene', type: 'expense' },
+        { id: 'cat-pet', type: 'expense' },
+      ]);
+      (prisma.category.findFirst as jest.Mock).mockResolvedValue({ id: 'cat-food', type: 'expense', tenantId: 'tenant-123' });
+      (prisma.$transaction as jest.Mock).mockImplementation(async (fn) => fn({
+        transaction: { create: jest.fn().mockResolvedValue(mockTransaction) },
+        transactionCategorySplit: {
+          deleteMany: splitDeleteMany,
+          createMany: splitCreateMany,
+        },
+      }));
+
+      const result = await transactionService.create(
+        {
+          type: 'expense',
+          amount: 230,
+          description: 'Supermercado',
+          transactionDate: new Date('2026-05-20'),
+          categorySplits: [
+            { categoryId: 'cat-food', amount: 160 },
+            { categoryId: 'cat-hygiene', amount: 45 },
+            { categoryId: 'cat-pet', amount: 25 },
+          ],
+        },
+        'user-123',
+        'tenant-123'
+      );
+
+      expect(result.categorySplits).toHaveLength(3);
+      expect(splitCreateMany).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.arrayContaining([
+          expect.objectContaining({ categoryId: 'cat-food', amount: 160 }),
+          expect.objectContaining({ categoryId: 'cat-hygiene', amount: 45 }),
+          expect.objectContaining({ categoryId: 'cat-pet', amount: 25 }),
+        ]),
+      }));
+    });
+
+    it('deve rejeitar rateio cuja soma é menor que o total', async () => {
+      await expect(transactionService.create(
+        {
+          type: 'expense',
+          amount: 230,
+          transactionDate: new Date('2026-05-20'),
+          categorySplits: [
+            { categoryId: 'cat-food', amount: 100 },
+            { categoryId: 'cat-hygiene', amount: 50 },
+          ],
+        },
+        'user-123',
+        'tenant-123'
+      )).rejects.toThrow('A soma das categorias precisa ser igual ao valor total do lancamento');
+    });
+
+    it('deve rejeitar rateio cuja soma é maior que o total', async () => {
+      await expect(transactionService.create(
+        {
+          type: 'expense',
+          amount: 230,
+          transactionDate: new Date('2026-05-20'),
+          categorySplits: [
+            { categoryId: 'cat-food', amount: 200 },
+            { categoryId: 'cat-hygiene', amount: 50 },
+          ],
+        },
+        'user-123',
+        'tenant-123'
+      )).rejects.toThrow('A soma das categorias precisa ser igual ao valor total do lancamento');
+    });
+
+    it('deve rejeitar rateio com valor zero ou negativo', async () => {
+      await expect(transactionService.create(
+        {
+          type: 'expense',
+          amount: 230,
+          transactionDate: new Date('2026-05-20'),
+          categorySplits: [
+            { categoryId: 'cat-food', amount: 230 },
+            { categoryId: 'cat-hygiene', amount: 0 },
+          ],
+        },
+        'user-123',
+        'tenant-123'
+      )).rejects.toThrow('Rateio por categoria nao permite valor zero ou negativo');
+    });
+
     it('não deve atualizar saldo se transação pendente', async () => {
       const mockCategory = {
         id: 'cat-123',
@@ -394,6 +492,51 @@ describe('TransactionService', () => {
       expect(result.amount).toBe(150);
       expect(prisma.$transaction).toHaveBeenCalled();
       expect(cacheService.invalidateMultiple).toHaveBeenCalled();
+    });
+
+    it('deve substituir rateios antigos ao editar transação', async () => {
+      const mockExistingTransaction = {
+        id: 'trans-123',
+        tenantId: 'tenant-123',
+        type: 'expense',
+        amount: 230,
+        status: 'pending',
+        bankAccountId: 'bank-123',
+        categoryId: 'cat-old',
+      };
+      const splitDeleteMany = jest.fn().mockResolvedValue({ count: 2 });
+      const splitCreateMany = jest.fn().mockResolvedValue({ count: 2 });
+
+      (prisma.transaction.findFirst as jest.Mock).mockResolvedValue(mockExistingTransaction);
+      (prisma.category.findMany as jest.Mock).mockResolvedValue([
+        { id: 'cat-food', type: 'expense' },
+        { id: 'cat-pet', type: 'expense' },
+      ]);
+      (prisma.category.findFirst as jest.Mock).mockResolvedValue({ id: 'cat-food', type: 'expense', tenantId: 'tenant-123' });
+      (prisma.$transaction as jest.Mock).mockImplementation(async (fn) => fn({
+        transaction: {
+          update: jest.fn().mockResolvedValue({ ...mockExistingTransaction, categoryId: 'cat-food' }),
+        },
+        transactionCategorySplit: {
+          deleteMany: splitDeleteMany,
+          createMany: splitCreateMany,
+        },
+      }));
+
+      const result = await transactionService.update(
+        'trans-123',
+        {
+          categorySplits: [
+            { categoryId: 'cat-food', amount: 200 },
+            { categoryId: 'cat-pet', amount: 30 },
+          ],
+        },
+        'tenant-123'
+      );
+
+      expect(result.categorySplits).toHaveLength(2);
+      expect(splitDeleteMany).toHaveBeenCalledWith({ where: { tenantId: 'tenant-123', transactionId: 'trans-123' } });
+      expect(splitCreateMany).toHaveBeenCalledTimes(1);
     });
 
     it('deve rejeitar atualização de transação inexistente', async () => {

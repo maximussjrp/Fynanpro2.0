@@ -5,6 +5,7 @@ import { successResponse, errorResponse } from '../utils/response';
 import { log } from '../utils/logger';
 import { cacheService, CacheTTL, CacheNamespace } from '../services/cache.service';
 import { parsePeriod } from '../utils/date-helpers';
+import { expandCategoryAllocations } from '../utils/category-allocations';
 import { overdueWhere } from '../utils/overdue';
 
 const router = Router();
@@ -206,17 +207,24 @@ router.get('/expense-ranking', async (req: AuthRequest, res) => {
         ],
       },
       select: {
+        id: true,
         amount: true,
         categoryId: true,
+        type: true,
+        categorySplits: {
+          select: {
+            categoryId: true,
+            amount: true,
+          },
+        },
       },
     });
 
     // Buscar categorias únicas apenas das transações encontradas
-    const categoryIds = [...new Set(expenses.map(e => e.categoryId).filter(Boolean))];
+    const expenseAllocations = expandCategoryAllocations(expenses);
+    const categoryIds = [...new Set(expenseAllocations.map(e => e.categoryId).filter(Boolean))];
     const categories = await prisma.category.findMany({
-      where: {
-        id: { in: categoryIds as string[] },
-      },
+      where: { tenantId, deletedAt: null },
       select: {
         id: true,
         name: true,
@@ -247,8 +255,8 @@ router.get('/expense-ranking', async (req: AuthRequest, res) => {
     let uncategorizedTotal = 0;
     let uncategorizedCount = 0;
 
-    expenses.forEach(transaction => {
-      const amount = Number(transaction.amount);
+    expenseAllocations.forEach(transaction => {
+      const amount = transaction.amount;
       totalExpense += amount;
 
       const rootCategoryName = getRootCategory(transaction.categoryId);
@@ -339,17 +347,24 @@ router.get('/income-ranking', async (req: AuthRequest, res) => {
         deletedAt: null,
       },
       select: {
+        id: true,
         amount: true,
         categoryId: true,
+        type: true,
+        categorySplits: {
+          select: {
+            categoryId: true,
+            amount: true,
+          },
+        },
       },
     });
 
     // Buscar categorias únicas
-    const categoryIds = [...new Set(incomes.map(e => e.categoryId).filter(Boolean))];
+    const incomeAllocations = expandCategoryAllocations(incomes);
+    const categoryIds = [...new Set(incomeAllocations.map(e => e.categoryId).filter(Boolean))];
     const categories = await prisma.category.findMany({
-      where: {
-        id: { in: categoryIds as string[] },
-      },
+      where: { tenantId, deletedAt: null },
       select: {
         id: true,
         name: true,
@@ -375,8 +390,8 @@ router.get('/income-ranking', async (req: AuthRequest, res) => {
     const categoryTotals: any = {};
     let totalIncome = 0;
 
-    incomes.forEach(transaction => {
-      const amount = Number(transaction.amount);
+    incomeAllocations.forEach(transaction => {
+      const amount = transaction.amount;
       totalIncome += amount;
 
       const rootCategoryName = getRootCategory(transaction.categoryId);
@@ -1407,4 +1422,8 @@ function generateFiscalAlerts(
 }
 
 export default router;
+
+
+
+
 

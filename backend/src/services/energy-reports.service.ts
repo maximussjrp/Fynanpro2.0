@@ -7,6 +7,7 @@
 
 import { PrismaClient, Prisma } from '@prisma/client';
 import { autoClassifyCategory } from '../contracts/energy-auto-classification';
+import { expandCategoryAllocations } from '../utils/category-allocations';
 
 const prisma = new PrismaClient();
 
@@ -247,12 +248,25 @@ export async function getEnergyDistribution(
           icon: true,
           type: true
         }
+      },
+      categorySplits: {
+        include: {
+          category: {
+            select: {
+              id: true,
+              name: true,
+              icon: true,
+              type: true
+            }
+          }
+        }
       }
     }
   });
 
   // Buscar semânticas das categorias COM status de validação
-  const categoryIds = [...new Set(transactions.map(t => t.categoryId).filter(Boolean))] as string[];
+  const allocations = expandCategoryAllocations(transactions);
+  const categoryIds = [...new Set(allocations.map(t => t.categoryId).filter(Boolean))] as string[];
   
   const semantics = await prisma.$queryRaw<Array<{
     categoryId: string;
@@ -293,8 +307,8 @@ export async function getEnergyDistribution(
 
   const categoryTotals = new Map<string, { amount: number; weights: any; name: string; icon: string | null }>();
 
-  for (const t of transactions) {
-    const amount = Number(t.amount);
+  for (const t of allocations) {
+    const amount = t.amount;
     
     if (t.type === 'income') {
       generated += amount;
@@ -1474,3 +1488,4 @@ export default {
   updateCategorySemantics,
   getTopPendingCategories
 };
+

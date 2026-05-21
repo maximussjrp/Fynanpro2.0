@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useRef } from 'react';
 import { 
@@ -52,7 +52,7 @@ type TransactionType = 'single' | 'recurring' | 'installment';
 type Frequency = 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'bimonthly' | 'quarterly' | 'semiannual' | 'yearly';
 
 const FREQUENCY_OPTIONS: { value: Frequency; label: string }[] = [
-  { value: 'daily', label: 'Diário' },
+  { value: 'daily', label: 'DiÃ¡rio' },
   { value: 'weekly', label: 'Semanal' },
   { value: 'biweekly', label: 'Quinzenal' },
   { value: 'monthly', label: 'Mensal' },
@@ -77,10 +77,10 @@ export default function UnifiedTransactionModal({
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   
-  // Tab atual (única, recorrente, parcelada)
+  // Tab atual (Ãºnica, recorrente, parcelada)
   const [transactionType, setTransactionType] = useState<TransactionType>(initialTab || defaultTransactionType);
   
-  // Dados do formulário base
+  // Dados do formulÃ¡rio base
   const [formData, setFormData] = useState({
     type: defaultType as 'income' | 'expense',
     amount: '',
@@ -93,7 +93,7 @@ export default function UnifiedTransactionModal({
     notes: '',
   });
 
-  // Dados específicos de recorrente
+  // Dados especÃ­ficos de recorrente
   const [recurringData, setRecurringData] = useState({
     frequency: 'monthly' as Frequency,
     frequencyInterval: 1,
@@ -102,18 +102,23 @@ export default function UnifiedTransactionModal({
     totalOccurrences: undefined as number | undefined,
   });
 
-  // Dados específicos de parcelado
+  // Dados especÃ­ficos de parcelado
   const [installmentData, setInstallmentData] = useState({
     totalInstallments: 2,
     hasDownPayment: false,
     downPaymentAmount: '',
   });
 
+  const [splitEnabled, setSplitEnabled] = useState(false);
+  const [categorySplits, setCategorySplits] = useState<Array<{ categoryId: string; amount: string; note: string }>>([
+    { categoryId: '', amount: '', note: '' },
+  ]);
+
   const [categorySearch, setCategorySearch] = useState('');
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
   const categoryDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Estados para sugestão de categoria com IA
+  // Estados para sugestÃ£o de categoria com IA
   const [aiSuggesting, setAiSuggesting] = useState(false);
   const [aiSuggestion, setAiSuggestion] = useState<{
     categoryId: string;
@@ -123,7 +128,7 @@ export default function UnifiedTransactionModal({
   } | null>(null);
   const [aiAvailable, setAiAvailable] = useState<boolean | null>(null);
 
-  // Estados para criação rápida de conta bancária e meio de pagamento
+  // Estados para criaÃ§Ã£o rÃ¡pida de conta bancÃ¡ria e meio de pagamento
   const [showQuickBankAccount, setShowQuickBankAccount] = useState(false);
   const [showQuickPaymentMethod, setShowQuickPaymentMethod] = useState(false);
   const [quickBankAccount, setQuickBankAccount] = useState({ name: '', type: 'bank', institution: '' });
@@ -139,7 +144,7 @@ export default function UnifiedTransactionModal({
   const [paymentMethodActionLoading, setPaymentMethodActionLoading] = useState(false);
   const paymentMethodDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Estados para modo Múltiplos Lançamentos
+  // Estados para modo MÃºltiplos LanÃ§amentos
   const [multipleModeEnabled, setMultipleModeEnabled] = useState(false);
   const [lockedFields, setLockedFields] = useState<{
     type: boolean;
@@ -158,7 +163,7 @@ export default function UnifiedTransactionModal({
   });
   const [transactionCount, setTransactionCount] = useState(0);
   
-  // Ref para controlar se o modal já foi inicializado (evitar reset durante re-renders)
+  // Ref para controlar se o modal jÃ¡ foi inicializado (evitar reset durante re-renders)
   const wasOpenRef = useRef(false);
   
   // Refs para acessar valores atualizados dentro de closures
@@ -209,12 +214,12 @@ export default function UnifiedTransactionModal({
     }
   }, [isOpen, initialTab]);
 
-  // Função para alternar bloqueio de campo
+  // FunÃ§Ã£o para alternar bloqueio de campo
   const toggleFieldLock = (field: keyof typeof lockedFields) => {
     setLockedFields(prev => ({ ...prev, [field]: !prev[field] }));
   };
 
-  // Componente de botão de bloqueio
+  // Componente de botÃ£o de bloqueio
   const LockButton = ({ field, className = '' }: { field: keyof typeof lockedFields; className?: string }) => {
     if (!multipleModeEnabled) return null;
     const isLocked = lockedFields[field];
@@ -227,7 +232,7 @@ export default function UnifiedTransactionModal({
             ? 'bg-amber-100 text-amber-600 hover:bg-amber-200' 
             : 'bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600'
         } ${className}`}
-        title={isLocked ? 'Desbloquear campo (será limpo após salvar)' : 'Bloquear campo (será mantido após salvar)'}
+        title={isLocked ? 'Desbloquear campo (serÃ¡ limpo apÃ³s salvar)' : 'Bloquear campo (serÃ¡ mantido apÃ³s salvar)'}
       >
         {isLocked ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
       </button>
@@ -239,7 +244,7 @@ export default function UnifiedTransactionModal({
     const isMultipleMode = multipleModeEnabledRef.current;
     const currentLockedFields = lockedFieldsRef.current;
     
-    console.log('🔄 resetForm chamado:', { preserveLocked, isMultipleMode, currentLockedFields });
+    console.log('ðŸ”„ resetForm chamado:', { preserveLocked, isMultipleMode, currentLockedFields });
     
     if (preserveLocked && isMultipleMode) {
       // Preservar campos bloqueados - manter status atual se bloqueado
@@ -252,10 +257,10 @@ export default function UnifiedTransactionModal({
           categoryId: currentLockedFields.categoryId ? prev.categoryId : '',
           bankAccountId: currentLockedFields.bankAccountId ? prev.bankAccountId : '',
           paymentMethodId: currentLockedFields.paymentMethodId ? prev.paymentMethodId : '',
-          status: currentLockedFields.status ? prev.status : prev.status, // Manter status atual no modo múltiplos
+          status: currentLockedFields.status ? prev.status : (transactionType === 'single' ? 'completed' : 'pending'),
           notes: '',
         };
-        console.log('📋 Novo formData (preservando bloqueados):', newData);
+        console.log('ðŸ“‹ Novo formData (preservando bloqueados):', newData);
         return newData;
       });
       // Preservar busca de categoria se bloqueada
@@ -288,6 +293,8 @@ export default function UnifiedTransactionModal({
       hasDownPayment: false,
       downPaymentAmount: '',
     });
+    setSplitEnabled(false);
+    setCategorySplits([{ categoryId: '', amount: '', note: '' }]);
     if (!preserveLocked) {
       setTransactionType(defaultTransactionType);
     }
@@ -305,7 +312,7 @@ export default function UnifiedTransactionModal({
       setBankAccounts(accountsRes.data.data.accounts || []);
       setPaymentMethods(paymentsRes.data.data.methods || []);
 
-      // Verificar se IA está disponível
+      // Verificar se IA estÃ¡ disponÃ­vel
       try {
         const aiStatusRes = await api.get('/transactions/ai-status');
         setAiAvailable(aiStatusRes.data.data?.available || false);
@@ -313,15 +320,15 @@ export default function UnifiedTransactionModal({
         setAiAvailable(false);
       }
     } catch (error: any) {
-      console.error('Erro ao carregar dados do formulário:', error);
-      toast.error('Erro ao carregar dados do formulário');
+      console.error('Erro ao carregar dados do formulÃ¡rio:', error);
+      toast.error('Erro ao carregar dados do formulÃ¡rio');
     }
   };
 
-  // Função para sugerir categoria com IA
+  // FunÃ§Ã£o para sugerir categoria com IA
   const handleAiSuggestCategory = async () => {
     if (!formData.description || formData.description.trim().length < 3) {
-      toast.error('Digite uma descrição para sugerir categoria');
+      toast.error('Digite uma descriÃ§Ã£o para sugerir categoria');
       return;
     }
 
@@ -338,21 +345,21 @@ export default function UnifiedTransactionModal({
       const suggestion = response.data.data?.suggestion;
       if (suggestion) {
         setAiSuggestion(suggestion);
-        // Auto-aplicar se confiança alta
+        // Auto-aplicar se confianÃ§a alta
         if (suggestion.confidence >= 0.7) {
           setFormData(prev => ({ ...prev, categoryId: suggestion.categoryId }));
           setCategorySearch(suggestion.categoryName);
           toast.success(`Categoria sugerida: ${suggestion.categoryName}`);
         } else {
-          toast.info(`Sugestão: ${suggestion.categoryName} (${Math.round(suggestion.confidence * 100)}% confiança)`);
+          toast.info(`SugestÃ£o: ${suggestion.categoryName} (${Math.round(suggestion.confidence * 100)}% confianÃ§a)`);
         }
       } else {
-        toast.warning('Não foi possível sugerir uma categoria');
+        toast.warning('NÃ£o foi possÃ­vel sugerir uma categoria');
       }
     } catch (error: any) {
       console.error('Erro ao sugerir categoria:', error);
       if (error.response?.status === 503) {
-        toast.error('Serviço de IA não configurado');
+        toast.error('ServiÃ§o de IA nÃ£o configurado');
         setAiAvailable(false);
       } else {
         toast.error('Erro ao sugerir categoria');
@@ -362,10 +369,10 @@ export default function UnifiedTransactionModal({
     }
   };
 
-  // Função para criar conta bancária rapidamente
+  // FunÃ§Ã£o para criar conta bancÃ¡ria rapidamente
   const handleQuickCreateBankAccount = async () => {
     if (!quickBankAccount.name || !quickBankAccount.institution) {
-      toast.error('Preencha nome e instituição');
+      toast.error('Preencha nome e instituiÃ§Ã£o');
       return;
     }
     
@@ -379,7 +386,7 @@ export default function UnifiedTransactionModal({
       
       const newAccount = response.data?.data;
       if (!newAccount || !newAccount.id) {
-        toast.error('Erro: resposta inválida da API');
+        toast.error('Erro: resposta invÃ¡lida da API');
         return;
       }
       setBankAccounts(prev => [...prev, newAccount]);
@@ -392,10 +399,10 @@ export default function UnifiedTransactionModal({
     }
   };
 
-  // Função para criar meio de pagamento rapidamente
+  // FunÃ§Ã£o para criar meio de pagamento rapidamente
   const handleQuickCreatePaymentMethod = async () => {
     if (!quickPaymentMethod.name) {
-      toast.error('Preencha o nome do método');
+      toast.error('Preencha o nome do mÃ©todo');
       return;
     }
     
@@ -405,41 +412,41 @@ export default function UnifiedTransactionModal({
         type: quickPaymentMethod.type,
       };
       
-      // Adicionar finais do cartão se informado
+      // Adicionar finais do cartÃ£o se informado
       if (quickPaymentMethod.lastFourDigits && quickPaymentMethod.lastFourDigits.trim()) {
         payload.lastFourDigits = quickPaymentMethod.lastFourDigits.trim();
       }
       
-      console.log('🔵 Criando meio de pagamento:', payload);
+      console.log('ðŸ”µ Criando meio de pagamento:', payload);
       const response = await api.post('/payment-methods', payload);
-      console.log('✅ Resposta da API:', response.data);
+      console.log('âœ… Resposta da API:', response.data);
       
       const newMethod = response.data?.data || response.data;
       if (!newMethod || !newMethod.id) {
-        console.error('❌ Resposta inválida:', response.data);
-        toast.error('Erro: resposta inválida da API');
+        console.error('âŒ Resposta invÃ¡lida:', response.data);
+        toast.error('Erro: resposta invÃ¡lida da API');
         return;
       }
       
-      console.log('✅ Método criado:', newMethod);
+      console.log('âœ… MÃ©todo criado:', newMethod);
       setPaymentMethods(prev => [...prev, newMethod]);
       setFormData(prev => ({ ...prev, paymentMethodId: newMethod.id }));
       setShowQuickPaymentMethod(false);
       setQuickPaymentMethod({ name: '', type: 'pix', lastFourDigits: '' });
-      toast.success('Método criado com sucesso!');
+      toast.success('MÃ©todo criado com sucesso!');
     } catch (error: any) {
-      console.error('❌ Erro ao criar método:', error);
-      toast.error(error.response?.data?.message || 'Erro ao criar método');
+      console.error('âŒ Erro ao criar mÃ©todo:', error);
+      toast.error(error.response?.data?.message || 'Erro ao criar mÃ©todo');
     }
   };
 
-  // Função para selecionar meio de pagamento
+  // FunÃ§Ã£o para selecionar meio de pagamento
   const handleSelectPaymentMethod = (methodId: string) => {
     setFormData(prev => ({ ...prev, paymentMethodId: methodId }));
     setShowPaymentMethodDropdown(false);
   };
 
-  // Função para abrir modal de edição de meio de pagamento
+  // FunÃ§Ã£o para abrir modal de ediÃ§Ã£o de meio de pagamento
   const handleOpenEditPaymentMethod = (e: React.MouseEvent, method: PaymentMethod) => {
     e.stopPropagation();
     setEditingPaymentMethod(method);
@@ -448,7 +455,7 @@ export default function UnifiedTransactionModal({
     setShowPaymentMethodDropdown(false);
   };
 
-  // Função para salvar edição do meio de pagamento
+  // FunÃ§Ã£o para salvar ediÃ§Ã£o do meio de pagamento
   const handleSaveEditPaymentMethod = async () => {
     if (!editingPaymentMethod || !editPaymentMethodName.trim()) {
       toast.error('Preencha o nome do meio de pagamento');
@@ -473,7 +480,7 @@ export default function UnifiedTransactionModal({
     }
   };
 
-  // Função para abrir modal de exclusão de meio de pagamento
+  // FunÃ§Ã£o para abrir modal de exclusÃ£o de meio de pagamento
   const handleOpenDeletePaymentMethod = (e: React.MouseEvent, method: PaymentMethod) => {
     e.stopPropagation();
     setDeletingPaymentMethod(method);
@@ -481,7 +488,7 @@ export default function UnifiedTransactionModal({
     setShowDeletePaymentMethodModal(true);
   };
 
-  // Função para confirmar exclusão do meio de pagamento
+  // FunÃ§Ã£o para confirmar exclusÃ£o do meio de pagamento
   const handleConfirmDeletePaymentMethod = async () => {
     if (!deletingPaymentMethod) return;
     
@@ -489,7 +496,7 @@ export default function UnifiedTransactionModal({
     try {
       await api.delete(`/payment-methods/${deletingPaymentMethod.id}`);
       
-      // Remover da lista e limpar seleção se necessário
+      // Remover da lista e limpar seleÃ§Ã£o se necessÃ¡rio
       setPaymentMethods(prev => prev.filter(m => m.id !== deletingPaymentMethod.id));
       if (formData.paymentMethodId === deletingPaymentMethod.id) {
         setFormData(prev => ({ ...prev, paymentMethodId: '' }));
@@ -497,7 +504,7 @@ export default function UnifiedTransactionModal({
       
       setShowDeletePaymentMethodModal(false);
       setDeletingPaymentMethod(null);
-      toast.success('Meio de pagamento excluído!');
+      toast.success('Meio de pagamento excluÃ­do!');
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Erro ao excluir meio de pagamento');
     } finally {
@@ -508,19 +515,24 @@ export default function UnifiedTransactionModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.amount || !formData.categoryId || !formData.bankAccountId) {
-      toast.error('Preencha todos os campos obrigatórios');
+    if (!formData.amount || (!formData.categoryId && !canUseSplits) || !formData.bankAccountId) {
+      toast.error('Preencha todos os campos obrigatÃ³rios');
       return;
     }
 
-    // Validações específicas
+    if (canUseSplits && !splitRowsValid) {
+      toast.error('A soma das categorias precisa ser igual ao valor total do lançamento.');
+      return;
+    }
+
+    // ValidaÃ§Ãµes especÃ­ficas
     if (transactionType === 'installment' && installmentData.totalInstallments < 2) {
-      toast.error('Número de parcelas deve ser maior que 1');
+      toast.error('NÃºmero de parcelas deve ser maior que 1');
       return;
     }
 
     if (transactionType === 'installment' && installmentData.totalInstallments > 72) {
-      toast.error('Número máximo de parcelas é 72');
+      toast.error('NÃºmero mÃ¡ximo de parcelas Ã© 72');
       return;
     }
 
@@ -532,11 +544,18 @@ export default function UnifiedTransactionModal({
         amount: parseFloat(formData.amount.replace(',', '.')),
         description: formData.description,
         transactionDate: formData.transactionDate,
-        categoryId: formData.categoryId || undefined,
+        categoryId: canUseSplits ? categorySplits[0]?.categoryId : (formData.categoryId || undefined),
         bankAccountId: formData.bankAccountId || undefined,
         paymentMethodId: formData.paymentMethodId || undefined,
         status: formData.status,
         notes: formData.notes || undefined,
+        categorySplits: canUseSplits
+          ? categorySplits.map(split => ({
+              categoryId: split.categoryId,
+              amount: parseMoneyInput(split.amount),
+              note: split.note || undefined,
+            }))
+          : undefined,
       };
 
       let endpoint = '/transactions';
@@ -566,44 +585,44 @@ export default function UnifiedTransactionModal({
         };
       }
 
-      console.log('📤 Enviando payload:', { endpoint, payload });
+      console.log('ðŸ“¤ Enviando payload:', { endpoint, payload });
       const response = await api.post(endpoint, payload);
 
-      // Incrementar contador de transações
+      // Incrementar contador de transaÃ§Ãµes
       setTransactionCount(prev => prev + 1);
 
       if (transactionType === 'recurring') {
-        toast.success('Transação recorrente criada! Continue lançando...');
+        toast.success('TransaÃ§Ã£o recorrente criada! Continue lanÃ§ando...');
       } else if (transactionType === 'installment') {
-        toast.success(`Transação parcelada em ${installmentData.totalInstallments}x criada! Continue lançando...`);
+        toast.success(`TransaÃ§Ã£o parcelada em ${installmentData.totalInstallments}x criada! Continue lanÃ§ando...`);
       } else {
-        toast.success('Transação criada com sucesso! Continue lançando...');
+        toast.success('TransaÃ§Ã£o criada com sucesso! Continue lanÃ§ando...');
       }
 
       onSuccess();
       resetForm(true); // Preservar campos bloqueados
-      // Modal permanece aberto para continuar lançando
+      // Modal permanece aberto para continuar lanÃ§ando
     } catch (error: any) {
-      console.error('Erro ao salvar transação:', error);
-      toast.error(error.response?.data?.error?.message || 'Erro ao salvar transação');
+      console.error('Erro ao salvar transaÃ§Ã£o:', error);
+      toast.error(error.response?.data?.error?.message || 'Erro ao salvar transaÃ§Ã£o');
     } finally {
       setLoading(false);
     }
   };
 
-  // Função para construir lista hierárquica de categorias
+  // FunÃ§Ã£o para construir lista hierÃ¡rquica de categorias
   const buildHierarchicalList = (cats: Category[], searchTerm: string = ''): Array<{ category: Category; level: number; indent: number }> => {
     const result: Array<{ category: Category; level: number; indent: number }> = [];
     const search = searchTerm.toLowerCase().trim();
     
     const addCategoryWithChildren = (cat: Category, indent: number = 0) => {
-      // Se há busca, verificar se a categoria ou algum filho corresponde
+      // Se hÃ¡ busca, verificar se a categoria ou algum filho corresponde
       const catMatches = cat.name.toLowerCase().includes(search);
       const hasMatchingChildren = cat.children?.some(child => 
         child.name.toLowerCase().includes(search)
       );
       
-      // Adicionar categoria se não há busca, ou se ela/filhos correspondem
+      // Adicionar categoria se nÃ£o hÃ¡ busca, ou se ela/filhos correspondem
       if (!search || catMatches || hasMatchingChildren) {
         result.push({ category: cat, level: cat.level || 1, indent });
       }
@@ -612,7 +631,7 @@ export default function UnifiedTransactionModal({
       if (cat.children && cat.children.length > 0) {
         cat.children.forEach(child => {
           const childMatches = child.name.toLowerCase().includes(search);
-          // Se não há busca, ou filho corresponde, ou pai correspondeu
+          // Se nÃ£o hÃ¡ busca, ou filho corresponde, ou pai correspondeu
           if (!search || childMatches || catMatches) {
             result.push({ category: child, level: child.level || 2, indent: indent + 1 });
             
@@ -648,18 +667,43 @@ export default function UnifiedTransactionModal({
     setShowCategoryDropdown(false);
   };
 
-  // Calcular valor total das parcelas (parcela × quantidade)
+  // Calcular valor total das parcelas (parcela Ã— quantidade)
   const calculateInstallmentTotal = () => {
     if (!formData.amount || !installmentData.totalInstallments) return 0;
     const installmentValue = parseFloat(formData.amount.replace(',', '.'));
     const downPayment = installmentData.hasDownPayment && installmentData.downPaymentAmount 
       ? parseFloat(installmentData.downPaymentAmount.replace(',', '.'))
       : 0;
-    // Valor informado É o valor da parcela, calcular total
+    // Valor informado Ã‰ o valor da parcela, calcular total
     const numInstallments = installmentData.hasDownPayment 
       ? installmentData.totalInstallments - 1 
       : installmentData.totalInstallments;
     return (installmentValue * numInstallments) + downPayment;
+  };
+
+  const parseMoneyInput = (value: string) => Number(value.replace(',', '.')) || 0;
+  const toCents = (value: number) => Math.round(value * 100);
+  const transactionAmount = parseMoneyInput(formData.amount);
+  const splitTotal = categorySplits.reduce((sum, split) => sum + parseMoneyInput(split.amount), 0);
+  const splitDifference = transactionAmount - splitTotal;
+  const splitDifferenceCents = toCents(splitDifference);
+  const canUseSplits = splitEnabled && transactionType !== 'installment';
+  const splitRowsValid = !canUseSplits || (
+    categorySplits.length > 0 &&
+    categorySplits.every(split => split.categoryId && toCents(parseMoneyInput(split.amount)) > 0) &&
+    splitDifferenceCents === 0
+  );
+
+  const updateCategorySplit = (index: number, field: 'categoryId' | 'amount' | 'note', value: string) => {
+    setCategorySplits(prev => prev.map((split, i) => i === index ? { ...split, [field]: value } : split));
+  };
+
+  const addCategorySplit = () => {
+    setCategorySplits(prev => [...prev, { categoryId: '', amount: '', note: '' }]);
+  };
+
+  const removeCategorySplit = (index: number) => {
+    setCategorySplits(prev => prev.length > 1 ? prev.filter((_, i) => i !== index) : prev);
   };
 
   if (!isOpen) return null;
@@ -674,7 +718,7 @@ export default function UnifiedTransactionModal({
               <div className="bg-white/20 p-2 rounded-lg backdrop-blur-sm">
                 <DollarSign className="w-6 h-6" />
               </div>
-              Nova Transação
+              Nova TransaÃ§Ã£o
             </h2>
             {transactionCount > 0 && (
               <span className="bg-white/20 backdrop-blur-sm px-3 py-1 rounded-full text-sm font-medium text-white">
@@ -683,7 +727,7 @@ export default function UnifiedTransactionModal({
             )}
           </div>
           <div className="flex items-center gap-3">
-            {/* Toggle Múltiplos Lançamentos */}
+            {/* Toggle MÃºltiplos LanÃ§amentos */}
             <button
               type="button"
               onClick={() => {
@@ -706,11 +750,11 @@ export default function UnifiedTransactionModal({
                   : 'bg-white/20 text-white hover:bg-white/30'
               }`}
               title={multipleModeEnabled 
-                ? 'Modo Múltiplos Lançamentos ATIVO - Clique nos cadeados para bloquear campos' 
-                : 'Ativar Modo Múltiplos Lançamentos'}
+                ? 'Modo MÃºltiplos LanÃ§amentos ATIVO - Clique nos cadeados para bloquear campos' 
+                : 'Ativar Modo MÃºltiplos LanÃ§amentos'}
             >
               <Layers className="w-4 h-4" />
-              <span className="hidden sm:inline">Múltiplos</span>
+              <span className="hidden sm:inline">MÃºltiplos</span>
             </button>
             <button
               onClick={onClose}
@@ -723,16 +767,16 @@ export default function UnifiedTransactionModal({
           </div>
         </div>
 
-        {/* Banner de Múltiplos Lançamentos */}
+        {/* Banner de MÃºltiplos LanÃ§amentos */}
         {multipleModeEnabled && (
           <div className="bg-amber-50 border-b border-amber-200 px-6 py-3">
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2 text-amber-700">
                 <Layers className="w-5 h-5" />
-                <span className="font-semibold text-sm">Modo Múltiplos Lançamentos</span>
+                <span className="font-semibold text-sm">Modo MÃºltiplos LanÃ§amentos</span>
               </div>
               <span className="text-amber-600 text-sm">
-                Clique nos <Lock className="w-3.5 h-3.5 inline mx-0.5" /> ao lado dos campos para mantê-los nas próximas transações
+                Clique nos <Lock className="w-3.5 h-3.5 inline mx-0.5" /> ao lado dos campos para mantÃª-los nas prÃ³ximas transaÃ§Ãµes
               </span>
             </div>
           </div>
@@ -745,7 +789,7 @@ export default function UnifiedTransactionModal({
               type="button"
               onClick={() => {
                 setTransactionType('single');
-                // Não alterar status se estiver bloqueado no modo múltiplos
+                // NÃ£o alterar status se estiver bloqueado no modo mÃºltiplos
                 if (!multipleModeEnabled || !lockedFields.status) {
                   setFormData(prev => ({ ...prev, status: 'completed' }));
                 }
@@ -757,13 +801,13 @@ export default function UnifiedTransactionModal({
               }`}
             >
               <DollarSign className="w-4 h-4" />
-              Única
+              Ãšnica
             </button>
             <button
               type="button"
               onClick={() => {
                 setTransactionType('recurring');
-                // Não alterar status se estiver bloqueado no modo múltiplos
+                // NÃ£o alterar status se estiver bloqueado no modo mÃºltiplos
                 if (!multipleModeEnabled || !lockedFields.status) {
                   setFormData(prev => ({ ...prev, status: 'pending' }));
                 }
@@ -781,7 +825,7 @@ export default function UnifiedTransactionModal({
               type="button"
               onClick={() => {
                 setTransactionType('installment');
-                // Não alterar status se estiver bloqueado no modo múltiplos
+                // NÃ£o alterar status se estiver bloqueado no modo mÃºltiplos
                 if (!multipleModeEnabled || !lockedFields.status) {
                   setFormData(prev => ({ ...prev, status: 'pending' }));
                 }
@@ -813,7 +857,7 @@ export default function UnifiedTransactionModal({
                 } ${lockedFields.type ? 'opacity-75 cursor-not-allowed' : ''}`}
                 disabled={lockedFields.type}
               >
-                💰 Receita
+                ðŸ’° Receita
               </button>
               <button
                 type="button"
@@ -825,7 +869,7 @@ export default function UnifiedTransactionModal({
                 } ${lockedFields.type ? 'opacity-75 cursor-not-allowed' : ''}`}
                 disabled={lockedFields.type}
               >
-                💸 Despesa
+                ðŸ’¸ Despesa
               </button>
             </div>
             <LockButton field="type" />
@@ -857,7 +901,7 @@ export default function UnifiedTransactionModal({
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label className="block text-sm font-semibold text-[#F5F7FB]">
-                  {transactionType === 'recurring' ? 'Data Início *' : transactionType === 'installment' ? 'Primeira Parcela *' : 'Data *'}
+                  {transactionType === 'recurring' ? 'Data InÃ­cio *' : transactionType === 'installment' ? 'Primeira Parcela *' : 'Data *'}
                 </label>
                 <LockButton field="transactionDate" />
               </div>
@@ -874,19 +918,19 @@ export default function UnifiedTransactionModal({
                   }`}
                   style={{ colorScheme: 'dark' }}
                   required
-                  title="Data da transação"
-                  aria-label="Data da transação"
+                  title="Data da transaÃ§Ã£o"
+                  aria-label="Data da transaÃ§Ã£o"
                   disabled={lockedFields.transactionDate}
                 />
               </div>
             </div>
           </div>
 
-          {/* Descrição */}
+          {/* DescriÃ§Ã£o */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="block text-sm font-semibold text-[#F5F7FB]">
-                Descrição
+                DescriÃ§Ã£o
               </label>
               {aiAvailable && (
                 <button
@@ -910,12 +954,12 @@ export default function UnifiedTransactionModal({
               value={formData.description}
               onChange={(e) => {
                 setFormData({ ...formData, description: e.target.value });
-                setAiSuggestion(null); // Limpar sugestão ao mudar descrição
+                setAiSuggestion(null); // Limpar sugestÃ£o ao mudar descriÃ§Ã£o
               }}
               className="w-full px-4 py-3 min-h-[44px] border-2 border-[#2A3F5F]/50 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] transition-all bg-[#1A2332] text-[#F5F7FB] placeholder:text-[#475569]"
-              placeholder="Ex: Salário, Aluguel, Compras... (opcional)"
+              placeholder="Ex: SalÃ¡rio, Aluguel, Compras... (opcional)"
             />
-            {/* Mostrar sugestão da IA */}
+            {/* Mostrar sugestÃ£o da IA */}
             {aiSuggestion && (
               <div className="mt-2 p-3 bg-blue-900/30 border border-blue-700/50 rounded-lg">
                 <div className="flex items-start gap-2">
@@ -932,7 +976,7 @@ export default function UnifiedTransactionModal({
                             ? 'bg-yellow-900/50 text-yellow-300'
                             : 'bg-red-900/50 text-red-300'
                       }`}>
-                        {Math.round(aiSuggestion.confidence * 100)}% confiança
+                        {Math.round(aiSuggestion.confidence * 100)}% confianÃ§a
                       </span>
                     </div>
                     <p className="text-xs text-blue-400 mt-1">{aiSuggestion.reasoning}</p>
@@ -955,24 +999,24 @@ export default function UnifiedTransactionModal({
             )}
           </div>
 
-          {/* === CAMPOS ESPECÍFICOS RECORRENTE === */}
+          {/* === CAMPOS ESPECÃFICOS RECORRENTE === */}
           {transactionType === 'recurring' && (
             <div className="bg-blue-900/20 border border-blue-700/50 rounded-xl p-4 space-y-4">
               <h3 className="font-semibold text-blue-400 flex items-center gap-2">
                 <Repeat className="w-5 h-5" />
-                Configurações de Recorrência
+                ConfiguraÃ§Ãµes de RecorrÃªncia
               </h3>
               
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-[#F5F7FB] mb-1">
-                    Frequência *
+                    FrequÃªncia *
                   </label>
                   <select
                     value={recurringData.frequency}
                     onChange={(e) => setRecurringData({ ...recurringData, frequency: e.target.value as Frequency })}
                     className="w-full px-3 py-2.5 min-h-[44px] border-2 border-[#2A3F5F]/50 rounded-lg focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] bg-[#1A2332] text-[#F5F7FB]"
-                    title="Frequência da recorrência"
+                    title="FrequÃªncia da recorrÃªncia"
                   >
                     {FREQUENCY_OPTIONS.map(opt => (
                       <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -992,10 +1036,10 @@ export default function UnifiedTransactionModal({
                       value={recurringData.frequencyInterval}
                       onChange={(e) => setRecurringData({ ...recurringData, frequencyInterval: parseInt(e.target.value) || 1 })}
                       className="w-20 px-3 py-2.5 border-2 border-[#2A3F5F]/50 rounded-lg focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] bg-[#1A2332] text-[#F5F7FB]"
-                      title="Intervalo de frequência"
-                      aria-label="Intervalo de frequência"
+                      title="Intervalo de frequÃªncia"
+                      aria-label="Intervalo de frequÃªncia"
                     />
-                    <span className="text-[#94A3B8]">período(s)</span>
+                    <span className="text-[#94A3B8]">perÃ­odo(s)</span>
                   </div>
                 </div>
               </div>
@@ -1009,14 +1053,14 @@ export default function UnifiedTransactionModal({
                   className="w-5 h-5 text-[#1F4FD8] rounded focus:ring-[#1F4FD8] bg-[#1A2332] border-[#2A3F5F]/50"
                 />
                 <label htmlFor="hasEndDate" className="text-sm font-medium text-[#F5F7FB]">
-                  Definir data de término
+                  Definir data de tÃ©rmino
                 </label>
               </div>
 
               {recurringData.hasEndDate && (
                 <div>
                   <label className="block text-sm font-medium text-[#F5F7FB] mb-1">
-                    Número de ocorrências
+                    NÃºmero de ocorrÃªncias
                   </label>
                   <input
                     type="number"
@@ -1032,23 +1076,23 @@ export default function UnifiedTransactionModal({
             </div>
           )}
 
-          {/* === CAMPOS ESPECÍFICOS PARCELADO === */}
+          {/* === CAMPOS ESPECÃFICOS PARCELADO === */}
           {transactionType === 'installment' && (
             <div className="bg-blue-900/20 border border-blue-700/50 rounded-xl p-4 space-y-4">
               <h3 className="font-semibold text-blue-400 flex items-center gap-2">
                 <CardIcon className="w-5 h-5" />
-                Configurações de Parcelamento
+                ConfiguraÃ§Ãµes de Parcelamento
               </h3>
               
               <div>
                 <label className="block text-sm font-medium text-[#F5F7FB] mb-1">
-                  Número de Parcelas *
+                  NÃºmero de Parcelas *
                 </label>
                 <select
                   value={installmentData.totalInstallments}
                   onChange={(e) => setInstallmentData({ ...installmentData, totalInstallments: parseInt(e.target.value) })}
                   className="w-full px-3 py-2.5 border-2 border-[#2A3F5F]/50 rounded-lg focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] bg-[#1A2332] text-[#F5F7FB]"
-                  title="Número de parcelas"
+                  title="NÃºmero de parcelas"
                 >
                   {Array.from({ length: 71 }, (_, i) => i + 2).map(num => (
                     <option key={num} value={num}>{num}x</option>
@@ -1109,7 +1153,7 @@ export default function UnifiedTransactionModal({
                       </span>
                     </div>
                     <div className="font-bold text-blue-300 text-base">
-                      💰 Total: R$ {calculateInstallmentTotal().toFixed(2)}
+                      ðŸ’° Total: R$ {calculateInstallmentTotal().toFixed(2)}
                     </div>
                   </div>
                 </div>
@@ -1158,7 +1202,7 @@ export default function UnifiedTransactionModal({
                       style={{ paddingLeft: `${16 + (indent * 24)}px`, paddingRight: '16px' }}
                     >
                       {indent > 0 && (
-                        <span className="text-[#475569] text-sm mr-1">└</span>
+                        <span className="text-[#475569] text-sm mr-1">â””</span>
                       )}
                       <span className="text-xl">{category.icon}</span>
                       <div className="flex-1">
@@ -1177,13 +1221,91 @@ export default function UnifiedTransactionModal({
             </div>
           </div>
 
+          {transactionType !== 'installment' && (
+            <div className="border border-[#2A3F5F]/50 rounded-xl bg-[#151B2E]/60 p-4 space-y-3">
+              <label className="flex items-center gap-3 text-sm font-semibold text-[#F5F7FB] cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={splitEnabled}
+                  onChange={(e) => setSplitEnabled(e.target.checked)}
+                  className="w-4 h-4 text-[#1F4FD8] focus:ring-[#1F4FD8] rounded"
+                />
+                Dividir lançamento
+              </label>
+
+              {splitEnabled && (
+                <div className="space-y-3">
+                  {categorySplits.map((split, index) => (
+                    <div key={index} className="grid grid-cols-1 md:grid-cols-[1fr_140px_44px] gap-2 items-center">
+                      <select
+                        value={split.categoryId}
+                        onChange={(e) => updateCategorySplit(index, 'categoryId', e.target.value)}
+                        className="w-full px-3 py-2.5 min-h-[44px] border-2 border-[#2A3F5F]/50 rounded-lg bg-[#1A2332] text-[#F5F7FB]"
+                        aria-label="Categoria do rateio"
+                      >
+                        <option value="">Categoria</option>
+                        {filteredCategories.map(({ category, indent }) => (
+                          <option key={category.id} value={category.id}>
+                            {indent > 0 ? `${'  '.repeat(indent)}-> ` : ''}{category.icon} {category.name}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0.01"
+                        value={split.amount}
+                        onChange={(e) => updateCategorySplit(index, 'amount', e.target.value)}
+                        className="w-full px-3 py-2.5 min-h-[44px] border-2 border-[#2A3F5F]/50 rounded-lg bg-[#1A2332] text-[#F5F7FB] placeholder:text-[#475569]"
+                        placeholder="0,00"
+                        aria-label="Valor do rateio"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeCategorySplit(index)}
+                        disabled={categorySplits.length === 1}
+                        className="h-11 rounded-lg border border-[#2A3F5F]/60 text-red-300 hover:bg-red-950/30 disabled:opacity-40"
+                        title="Remover categoria"
+                      >
+                        <Trash2 className="w-4 h-4 mx-auto" />
+                      </button>
+                    </div>
+                  ))}
+
+                  <button
+                    type="button"
+                    onClick={addCategorySplit}
+                    className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-[#1A2332] text-[#93C5FD] hover:bg-[#22304A] text-sm font-medium"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Adicionar categoria
+                  </button>
+
+                  <div className="rounded-lg bg-[#0B1020] border border-[#2A3F5F]/50 p-3 text-sm space-y-1">
+                    <div className="flex justify-between text-[#94A3B8]"><span>Valor total</span><span>R$ {transactionAmount.toFixed(2)}</span></div>
+                    <div className="flex justify-between text-[#94A3B8]"><span>Dividido</span><span>R$ {splitTotal.toFixed(2)}</span></div>
+                    <div className={`flex justify-between font-semibold ${splitDifferenceCents === 0 ? 'text-[#2ECC9A]' : 'text-[#F59E0B]'}`}>
+                      <span>{splitDifferenceCents === 0 ? 'Diferença' : splitDifferenceCents > 0 ? 'Falta dividir' : 'Passou do total'}</span>
+                      <span>R$ {Math.abs(splitDifference).toFixed(2)}</span>
+                    </div>
+                    {!splitRowsValid && (
+                      <p className="text-xs text-red-300 pt-1">A soma das categorias precisa ser igual ao valor total do lançamento.</p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {/* Conta Bancária */}
+            {/* Conta BancÃ¡ria */}
             <div>
               <div className="flex items-center justify-between mb-2">
+
+
                 <div className="flex items-center gap-2">
                   <label className="text-sm font-semibold text-[#F5F7FB]">
-                    Conta Bancária *
+                    Conta BancÃ¡ria *
                   </label>
                   <LockButton field="bankAccountId" />
                 </div>
@@ -1212,13 +1334,13 @@ export default function UnifiedTransactionModal({
                       className="px-3 py-2 text-sm border border-[#2A3F5F]/50 rounded-lg bg-[#1A2332] text-[#F5F7FB]"
                       title="Tipo de conta"
                     >
-                      <option value="bank">Conta Bancária</option>
+                      <option value="bank">Conta BancÃ¡ria</option>
                       <option value="wallet">Carteira Digital</option>
                       <option value="investment">Investimento</option>
                     </select>
                     <input
                       type="text"
-                      placeholder="Instituição"
+                      placeholder="InstituiÃ§Ã£o"
                       value={quickBankAccount.institution}
                       onChange={(e) => setQuickBankAccount({ ...quickBankAccount, institution: e.target.value })}
                       className="px-3 py-2 text-sm border border-[#2A3F5F]/50 rounded-lg bg-[#1A2332] text-[#F5F7FB] placeholder:text-[#475569]"
@@ -1254,7 +1376,7 @@ export default function UnifiedTransactionModal({
                     lockedFields.bankAccountId ? 'bg-[#2A3F5F]/20 border-[#2A3F5F]/70 cursor-not-allowed' : ''
                   }`}
                   required
-                  title="Selecione a conta bancária"
+                  title="Selecione a conta bancÃ¡ria"
                   disabled={lockedFields.bankAccountId}
                 >
                   <option value="">Selecione uma conta</option>
@@ -1281,7 +1403,7 @@ export default function UnifiedTransactionModal({
                   onClick={() => setShowQuickPaymentMethod(!showQuickPaymentMethod)}
                   className="text-xs text-[#1F4FD8] hover:underline flex items-center gap-1"
                 >
-                  <Plus size={12} /> Novo Método
+                  <Plus size={12} /> Novo MÃ©todo
                 </button>
               </div>
               
@@ -1289,7 +1411,7 @@ export default function UnifiedTransactionModal({
                 <div className="mb-3 p-3 bg-blue-900/20 border border-blue-700/50 rounded-lg space-y-2">
                   <input
                     type="text"
-                    placeholder="Ex: PIX Nubank, Cartão Inter, Dinheiro..."
+                    placeholder="Ex: PIX Nubank, CartÃ£o Inter, Dinheiro..."
                     value={quickPaymentMethod.name}
                     onChange={(e) => setQuickPaymentMethod({ ...quickPaymentMethod, name: e.target.value })}
                     className="w-full px-3 py-2 text-sm border border-[#2A3F5F]/50 rounded-lg bg-[#1A2332] text-[#F5F7FB] placeholder:text-[#475569]"
@@ -1318,7 +1440,7 @@ export default function UnifiedTransactionModal({
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none z-10">
                   <CreditCard className="w-5 h-5 text-[#1F4FD8]" />
                 </div>
-                {/* Botão para abrir dropdown customizado */}
+                {/* BotÃ£o para abrir dropdown customizado */}
                 <button
                   type="button"
                   onClick={() => !lockedFields.paymentMethodId && setShowPaymentMethodDropdown(!showPaymentMethodDropdown)}
@@ -1340,7 +1462,7 @@ export default function UnifiedTransactionModal({
                 {/* Dropdown customizado */}
                 {showPaymentMethodDropdown && (
                   <div className="absolute z-50 w-full mt-1 bg-[#151B2E] border-2 border-[#2A3F5F]/50 rounded-xl shadow-lg max-h-60 overflow-auto">
-                    {/* Opção para limpar seleção */}
+                    {/* OpÃ§Ã£o para limpar seleÃ§Ã£o */}
                     <div
                       onClick={() => handleSelectPaymentMethod('')}
                       className="px-4 py-3 cursor-pointer hover:bg-[#1A2332] transition-colors border-b border-[#2A3F5F]/30"
@@ -1363,7 +1485,7 @@ export default function UnifiedTransactionModal({
                           {method.name}
                         </span>
                         
-                        {/* Ícones de editar/excluir - sempre visíveis */}
+                        {/* Ãcones de editar/excluir - sempre visÃ­veis */}
                         <div className="flex items-center gap-2 ml-3 flex-shrink-0">
                           <button
                             type="button"
@@ -1396,7 +1518,7 @@ export default function UnifiedTransactionModal({
             </div>
           </div>
 
-          {/* Status - apenas para transação única */}
+          {/* Status - apenas para transaÃ§Ã£o Ãºnica */}
           {transactionType === 'single' && (
             <div>
               <div className="flex items-center justify-between mb-2">
@@ -1440,22 +1562,22 @@ export default function UnifiedTransactionModal({
             </div>
           )}
 
-          {/* Observações */}
+          {/* ObservaÃ§Ãµes */}
           <div>
             <label className="block text-sm font-semibold text-[#F5F7FB] mb-2">
-              Observações <span className="text-[#94A3B8] font-normal">(opcional)</span>
+              ObservaÃ§Ãµes <span className="text-[#94A3B8] font-normal">(opcional)</span>
             </label>
             <Textarea
               value={formData.notes}
               onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
               className="min-h-[44px] border-2 border-[#2A3F5F]/50 bg-[var(--v2-bg-surface-2)] text-[var(--v2-text-primary)] placeholder:text-[#475569] resize-none"
               rows={2}
-              placeholder="Adicione notas ou observações..."
+              placeholder="Adicione notas ou observaÃ§Ãµes..."
             />
           </div>
         </form>
 
-        {/* Footer com Botões */}
+        {/* Footer com BotÃµes */}
         <div className="border-t-2 border-[#2A3F5F]/30 px-6 py-4 bg-[#0B1020] text-[#F5F7FB]">
           <div className="flex gap-3">
             <Button
@@ -1474,7 +1596,7 @@ export default function UnifiedTransactionModal({
               variant={formData.type === 'income' ? 'success' : 'danger'}
               size="lg"
               className="flex-1"
-              disabled={loading}
+              disabled={loading || (canUseSplits && !splitRowsValid)}
             >
               {loading ? (
                 <>
@@ -1486,7 +1608,7 @@ export default function UnifiedTransactionModal({
                   {transactionType === 'recurring' && <Repeat className="w-5 h-5" />}
                   {transactionType === 'installment' && <CardIcon className="w-5 h-5" />}
                   {transactionType === 'single' && <DollarSign className="w-5 h-5" />}
-                  Criar {transactionType === 'recurring' ? 'Recorrente' : transactionType === 'installment' ? 'Parcelada' : 'Transação'}
+                  Criar {transactionType === 'recurring' ? 'Recorrente' : transactionType === 'installment' ? 'Parcelada' : 'TransaÃ§Ã£o'}
                 </>
               )}
             </Button>
@@ -1494,7 +1616,7 @@ export default function UnifiedTransactionModal({
         </div>
       </div>
 
-      {/* Modal de Edição de Meio de Pagamento */}
+      {/* Modal de EdiÃ§Ã£o de Meio de Pagamento */}
       {showEditPaymentMethodModal && editingPaymentMethod && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60]">
           <div className="bg-[#151B2E] rounded-2xl shadow-2xl w-full max-w-md p-6 border border-[#2A3F5F]/30">
@@ -1546,7 +1668,7 @@ export default function UnifiedTransactionModal({
         </div>
       )}
 
-      {/* Modal de Exclusão de Meio de Pagamento */}
+      {/* Modal de ExclusÃ£o de Meio de Pagamento */}
       {showDeletePaymentMethodModal && deletingPaymentMethod && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60]">
           <div className="bg-[#151B2E] rounded-2xl shadow-2xl w-full max-w-md p-6 border border-[#2A3F5F]/30">
@@ -1567,7 +1689,7 @@ export default function UnifiedTransactionModal({
               Tem certeza que deseja excluir o meio de pagamento <strong className="text-[#F5F7FB]">{deletingPaymentMethod.name}</strong>?
             </p>
             <p className="text-sm text-amber-400 bg-amber-900/20 p-3 rounded-lg mb-4 border border-amber-700/30">
-              ⚠️ Se houver transações vinculadas, a exclusão será bloqueada. Nesse caso, você pode inativar o meio de pagamento.
+              âš ï¸ Se houver transaÃ§Ãµes vinculadas, a exclusÃ£o serÃ¡ bloqueada. Nesse caso, vocÃª pode inativar o meio de pagamento.
             </p>
             <div className="flex gap-3">
               <Button
@@ -1596,4 +1718,8 @@ export default function UnifiedTransactionModal({
     </div>
   );
 }
+
+
+
+
 

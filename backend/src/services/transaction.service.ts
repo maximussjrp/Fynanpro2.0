@@ -118,6 +118,125 @@ async function applyBalanceDelta(tx: any, bankAccountId: string | null | undefin
   });
 }
 
+function toCents(rawAmount: string | number | { toString(): string }): number {
+  return Math.round(normalizeNumericAmount(rawAmount) * 100);
+}
+
+type CategorySplitInput = {
+  categoryId: string;
+  amount: number;
+  note?: string;
+};
+
+function normalizeCategorySplits(categorySplits?: CategorySplitInput[] | null): CategorySplitInput[] {
+  if (!categorySplits || categorySplits.length === 0) {
+    return [];
+  }
+
+  return categorySplits.map(split => ({
+    categoryId: split.categoryId,
+    amount: split.amount,
+    note: split.note,
+  }));
+}
+
+async function validateCategorySplits(
+  tenantId: string,
+  transactionType: string,
+  totalAmount: string | number | { toString(): string },
+  categorySplits?: CategorySplitInput[] | null
+): Promise<CategorySplitInput[]> {
+  const splits = normalizeCategorySplits(categorySplits);
+  if (splits.length === 0) {
+    return [];
+  }
+
+  if (transactionType === 'transfer') {
+    throw new Error('TransferÃªncias nÃ£o podem ter rateio por categoria');
+  }
+
+  for (const split of splits) {
+    if (!split.categoryId) {
+      throw new Error('Todas as linhas do rateio precisam de categoria');
+    }
+    if (toCents(split.amount) <= 0) {
+      throw new Error('Rateio por categoria nao permite valor zero ou negativo');
+    }
+  }
+
+  const splitTotalCents = splits.reduce((sum, split) => sum + toCents(split.amount), 0);
+  const totalCents = toCents(totalAmount);
+  if (splitTotalCents !== totalCents) {
+    throw new Error('A soma das categorias precisa ser igual ao valor total do lancamento');
+  }
+
+  const categoryIds = [...new Set(splits.map(split => split.categoryId))];
+  const categories = await prisma.category.findMany({
+    where: {
+      id: { in: categoryIds },
+      tenantId,
+      deletedAt: null,
+    },
+    select: { id: true, type: true },
+  });
+
+  if (categories.length !== categoryIds.length) {
+    throw new Error('Uma ou mais categorias do rateio nÃ£o foram encontradas');
+  }
+
+  const categoryById = new Map(categories.map(category => [category.id, category]));
+  for (const split of splits) {
+    const category = categoryById.get(split.categoryId);
+    if (transactionType === 'income' && category?.type !== 'income') {
+      throw new Error('Todas as categorias do rateio precisam ser de receita');
+    }
+    if (transactionType === 'expense' && category?.type !== 'expense') {
+      throw new Error('Todas as categorias do rateio precisam ser de despesa');
+    }
+  }
+
+  return splits;
+}
+
+async function replaceCategorySplits(
+  tx: any,
+  tenantId: string,
+  transactionId: string,
+  categorySplits: CategorySplitInput[]
+): Promise<void> {
+  await tx.transactionCategorySplit.deleteMany({
+    where: { tenantId, transactionId },
+  });
+
+  if (categorySplits.length === 0) {
+    return;
+  }
+
+  await tx.transactionCategorySplit.createMany({
+    data: categorySplits.map(split => ({
+      tenantId,
+      transactionId,
+      categoryId: split.categoryId,
+      amount: split.amount,
+      note: split.note || null,
+    })),
+  });
+}
+
+const transactionInclude = {
+  category: true,
+  bankAccount: true,
+  paymentMethod: true,
+  categorySplits: {
+    include: {
+      category: true,
+    },
+    orderBy: {
+      createdAt: 'asc' as const,
+    },
+  },
+};
+
 // Interfaces
 interface TransactionSummary {
   totalIncome: number;
@@ -165,7 +284,10 @@ export class TransactionService {
       }
 
       if (filters.categoryId) {
-        where.categoryId = filters.categoryId;
+        where.OR = [
+          { categoryId: filters.categoryId },
+          { categorySplits: { some: { categoryId: filters.categoryId, tenantId } } },
+        ];
       }
 
       if (filters.bankAccountId) {
@@ -223,6 +345,20 @@ export class TransactionService {
                 name: true,
                 type: true,
               },
+            },
+            categorySplits: {
+              include: {
+                category: {
+                  select: {
+                    id: true,
+                    name: true,
+                    type: true,
+                    icon: true,
+                    color: true,
+                  },
+                },
+              },
+              orderBy: { createdAt: 'asc' },
             },
             user: {
               select: {
@@ -291,6 +427,10 @@ export class TransactionService {
           category: true,
           bankAccount: true,
           paymentMethod: true,
+          categorySplits: {
+            include: { category: true },
+            orderBy: { createdAt: 'asc' },
+          },
           user: {
             select: {
               id: true,
@@ -338,11 +478,21 @@ export class TransactionService {
     try {
       log.info('TransactionService.create', { data, userId, tenantId });
 
+      const validatedCategorySplits = await validateCategorySplits(
+        tenantId,
+        data.type,
+        data.amount,
+        data.categorySplits
+      );
+      const mainCategoryId = validatedCategorySplits.length > 0
+        ? (data.categoryId || validatedCategorySplits[0].categoryId)
+        : data.categoryId;
+
       // Validate category exists and belongs to tenant (apenas para income/expense)
-      if (data.categoryId) {
+      if (mainCategoryId) {
         const category = await prisma.category.findFirst({
           where: {
-            id: data.categoryId,
+            id: mainCategoryId,
             tenantId,
             deletedAt: null,
           },
@@ -409,7 +559,7 @@ export class TransactionService {
           userId,
           deletedAt: null,
           type: data.type,
-          categoryId: data.categoryId || null,
+          categoryId: mainCategoryId || null,
           bankAccountId: data.bankAccountId || null,
           paymentMethodId: data.paymentMethodId || null,
           amount: data.amount,
@@ -422,11 +572,7 @@ export class TransactionService {
             gte: recentDuplicateWindowStart,
           },
         },
-        include: {
-          category: true,
-          bankAccount: true,
-          paymentMethod: true,
-        },
+        include: transactionInclude,
       });
 
       if (recentDuplicate) {
@@ -446,7 +592,7 @@ export class TransactionService {
             tenantId,
             userId,
             type: data.type,
-            categoryId: data.categoryId || null,
+            categoryId: mainCategoryId || null,
             bankAccountId: data.bankAccountId || null,
             paymentMethodId: data.paymentMethodId || null,
             amount: data.amount,
@@ -461,12 +607,12 @@ export class TransactionService {
             ...(options?.isFixed !== undefined ? { isFixed: options.isFixed } : {}),
             ...(options?.attribution || {}),
           },
-          include: {
-            category: true,
-            bankAccount: true,
-            paymentMethod: true,
-          },
+          include: transactionInclude,
         });
+
+        if (validatedCategorySplits.length > 0) {
+          await replaceCategorySplits(tx, tenantId, newTransaction.id, validatedCategorySplits);
+        }
 
         // Update bank account balance if completed
         if (finalStatus === 'completed' && data.bankAccountId) {
@@ -477,7 +623,10 @@ export class TransactionService {
           );
         }
 
-        return newTransaction;
+        return {
+          ...newTransaction,
+          categorySplits: validatedCategorySplits,
+        };
       });
 
       log.info('TransactionService.create success', { 
@@ -531,6 +680,17 @@ export class TransactionService {
         throw new Error('Transação não encontrada');
       }
 
+      const finalTypeForSplits = data.type || existingTransaction.type;
+      const finalAmountForSplits = data.amount !== undefined ? data.amount : existingTransaction.amount;
+      const shouldReplaceSplits = data.categorySplits !== undefined;
+      const validatedCategorySplits = shouldReplaceSplits
+        ? await validateCategorySplits(tenantId, finalTypeForSplits, finalAmountForSplits, data.categorySplits)
+        : [];
+      const finalCategoryIdForUpdate = validatedCategorySplits.length > 0
+        ? (data.categoryId || validatedCategorySplits[0].categoryId)
+        : data.categoryId;
+
+
       // Sprint 2 / Transferências ligadas: editar UMA perna isoladamente
       // criaria divergência permanente (valor / data / descrição diferentes
       // entre as 2 pernas e os 2 saldos de conta). Política conservadora:
@@ -557,10 +717,10 @@ export class TransactionService {
       }
 
       // Validate category if provided
-      if (data.categoryId !== undefined && data.categoryId !== null) {
+      if (finalCategoryIdForUpdate !== undefined && finalCategoryIdForUpdate !== null) {
         const category = await prisma.category.findFirst({
           where: {
-            id: data.categoryId,
+            id: finalCategoryIdForUpdate,
             tenantId,
             deletedAt: null,
           },
@@ -633,7 +793,7 @@ export class TransactionService {
           where: { id },
           data: {
             type: data.type !== undefined ? data.type : existingTransaction.type,
-            categoryId: data.categoryId !== undefined ? data.categoryId : existingTransaction.categoryId,
+            categoryId: finalCategoryIdForUpdate !== undefined ? finalCategoryIdForUpdate : existingTransaction.categoryId,
             bankAccountId: data.bankAccountId !== undefined ? data.bankAccountId : existingTransaction.bankAccountId,
             paymentMethodId: data.paymentMethodId !== undefined ? data.paymentMethodId : existingTransaction.paymentMethodId,
             amount: data.amount !== undefined ? data.amount : existingTransaction.amount,
@@ -644,12 +804,12 @@ export class TransactionService {
             notes: data.notes !== undefined ? data.notes : existingTransaction.notes,
             tags: data.tags !== undefined ? data.tags : existingTransaction.tags,
           },
-          include: {
-            category: true,
-            bankAccount: true,
-            paymentMethod: true,
-          },
+          include: transactionInclude,
         });
+
+        if (shouldReplaceSplits) {
+          await replaceCategorySplits(tx, tenantId, id, validatedCategorySplits);
+        }
 
         // Apply new balance change if completed
         const finalStatus = data.status !== undefined ? data.status : existingTransaction.status;
@@ -665,7 +825,10 @@ export class TransactionService {
           );
         }
 
-        return updated;
+        return {
+          ...updated,
+          categorySplits: shouldReplaceSplits ? validatedCategorySplits : (updated as any).categorySplits,
+        };
       });
 
       // Se editou o template de recorrência, propaga campos editáveis para as
@@ -1348,6 +1511,15 @@ export class TransactionService {
       
       const frequency = data.frequency || 'monthly';
       const nextDueDate = this.calculateNextDueDate(startDate, frequency, data.frequencyInterval || 1);
+      const validatedCategorySplits = await validateCategorySplits(
+        tenantId,
+        data.type,
+        data.amount,
+        data.categorySplits
+      );
+      const mainCategoryId = validatedCategorySplits.length > 0
+        ? (data.categoryId || validatedCategorySplits[0].categoryId)
+        : data.categoryId;
 
       // Criar transação pai (template)
       const result = await prisma.$transaction(async (tx) => {
@@ -1358,7 +1530,7 @@ export class TransactionService {
             userId,
             type: data.type,
             transactionType: 'recurring',
-            categoryId: data.categoryId || null,
+            categoryId: mainCategoryId || null,
             bankAccountId: data.bankAccountId || null,
             paymentMethodId: data.paymentMethodId || null,
             amount: data.amount,
@@ -1392,7 +1564,7 @@ export class TransactionService {
             type: data.type,
             transactionType: 'recurring',
             parentId: parentTransaction.id,
-            categoryId: data.categoryId || null,
+            categoryId: mainCategoryId || null,
             bankAccountId: data.bankAccountId || null,
             paymentMethodId: data.paymentMethodId || null,
             amount: data.amount,
@@ -1408,11 +1580,11 @@ export class TransactionService {
             tags: data.tags || null,
           },
           include: {
-            category: true,
-            bankAccount: true,
-            paymentMethod: true,
+            ...transactionInclude,
           },
         });
+
+        await replaceCategorySplits(tx, tenantId, firstOccurrence.id, validatedCategorySplits);
 
         // Se totalOccurrences foi definido, gerar todas as ocorrências de uma vez
         const allOccurrences: any[] = [firstOccurrence];
@@ -1430,7 +1602,7 @@ export class TransactionService {
                 type: data.type,
                 transactionType: 'recurring',
                 parentId: parentTransaction.id,
-                categoryId: data.categoryId || null,
+                categoryId: mainCategoryId || null,
                 bankAccountId: data.bankAccountId || null,
                 paymentMethodId: data.paymentMethodId || null,
                 amount: data.amount,
@@ -1445,12 +1617,10 @@ export class TransactionService {
                 notes: data.notes || null,
                 tags: data.tags || null,
               },
-              include: {
-                category: true,
-                bankAccount: true,
-                paymentMethod: true,
-              },
+              include: transactionInclude,
             });
+
+            await replaceCategorySplits(tx, tenantId, occurrence.id, validatedCategorySplits);
             
             allOccurrences.push(occurrence);
           }
@@ -1504,6 +1674,10 @@ export class TransactionService {
 
       if (data.totalInstallments > 72) {
         throw new Error('Número máximo de parcelas é 72');
+      }
+
+      if (data.categorySplits && data.categorySplits.length > 0) {
+        throw new Error('Rateio por categoria nao esta disponivel para transacoes parceladas');
       }
 
       const startDate = parseLocalDate(data.transactionDate);
@@ -2150,4 +2324,5 @@ export class TransactionService {
 
 // Export singleton
 export const transactionService = new TransactionService();
+
 

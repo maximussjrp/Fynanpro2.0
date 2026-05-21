@@ -78,6 +78,44 @@ describe('Reports reliability — hierarchical case fix', () => {
     expect(data.income.categories.length).toBeGreaterThan(0);
     expect(data.expense.categories.length).toBeGreaterThan(0);
   });
+
+  it('usa rateios por categoria no hierarquico sem duplicar o valor principal', async () => {
+    transactionFindMany.mockResolvedValue([
+      {
+        id: 't-split',
+        categoryId: 'cat-main',
+        type: 'expense',
+        amount: 230,
+        transactionDate: new Date('2026-01-20'),
+        categorySplits: [
+          { categoryId: 'cat-food', amount: 160 },
+          { categoryId: 'cat-hygiene', amount: 45 },
+          { categoryId: 'cat-pet', amount: 25 },
+        ],
+      },
+    ]);
+    categoryFindMany.mockResolvedValue([
+      { id: 'cat-main', name: 'Mercado', type: 'expense', parentId: null, level: 1, icon: null, color: null },
+      { id: 'cat-food', name: 'Alimentacao', type: 'expense', parentId: null, level: 1, icon: null, color: null },
+      { id: 'cat-hygiene', name: 'Higiene', type: 'expense', parentId: null, level: 1, icon: null, color: null },
+      { id: 'cat-pet', name: 'Pet', type: 'expense', parentId: null, level: 1, icon: null, color: null },
+    ]);
+
+    const res = await request(app)
+      .get('/reports/hierarchical-categories?startDate=2026-01-01&endDate=2026-01-31')
+      .set('Authorization', `Bearer ${bearer}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.summary.totalExpense).toBe(230);
+    expect(res.body.data.expense.total).toBe(230);
+
+    const categories = res.body.data.expense.categories;
+    expect(categories.find((c: any) => c.id === 'cat-main')?.expense || 0).toBe(0);
+    expect(categories.find((c: any) => c.id === 'cat-food')?.expense).toBe(160);
+    expect(categories.find((c: any) => c.id === 'cat-hygiene')?.expense).toBe(45);
+    expect(categories.find((c: any) => c.id === 'cat-pet')?.expense).toBe(25);
+  });
+
   it('agrupa o mapa financeiro nas faixas 50/30/20', async () => {
     categoryFindMany.mockResolvedValue([
       { id: 'cat-income', name: 'Salário', type: 'income', parentId: null, level: 1, icon: '💵', semantics: null },

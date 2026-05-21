@@ -66,14 +66,19 @@ router.get('/', async (req: AuthRequest, res: Response) => {
             isActive: true,
           },
           include: {
+            semantics: true,
             children: {
               where: {
                 deletedAt: null,
                 isActive: true,
               },
+              include: {
+                semantics: true,
+              },
             },
           },
         },
+        semantics: true,
         _count: {
           select: {
             transactions: true,

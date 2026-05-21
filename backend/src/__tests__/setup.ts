@@ -34,6 +34,11 @@ export const mockPrisma = {
       count: jest.fn(),
       aggregate: jest.fn(),
     },
+    transactionCategorySplit: {
+      createMany: jest.fn(),
+      deleteMany: jest.fn(),
+      findMany: jest.fn(),
+    },
     recurringBillOccurrence: {
       findFirst: jest.fn(),
       findMany: jest.fn(),
@@ -141,6 +146,10 @@ export const mockPrisma = {
         update: jest.fn(),
         findFirst: jest.fn(),
         delete: jest.fn(),
+      },
+      transactionCategorySplit: {
+        createMany: jest.fn(),
+        deleteMany: jest.fn(),
       },
       recurringBillOccurrence: {
         updateMany: jest.fn(),

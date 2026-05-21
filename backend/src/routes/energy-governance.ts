@@ -15,6 +15,7 @@ import { PrismaClient, Prisma } from '@prisma/client';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { validateEnergyWithFlags } from '../contracts/energy.contract';
 import { z } from 'zod';
+import { cacheService, CacheNamespace } from '../services/cache.service';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -268,7 +269,8 @@ router.put('/categories/:categoryId', authMiddleware, async (req: AuthRequest, r
         )
       `;
     }
-    
+    await cacheService.invalidateNamespace(CacheNamespace.CATEGORIES);
+
     res.json({
       success: true,
       message: 'Classificação energética atualizada',

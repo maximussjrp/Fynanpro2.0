@@ -5,6 +5,12 @@
 
 import { z } from 'zod';
 
+const TransactionCategorySplitSchema = z.object({
+  categoryId: z.string().uuid('ID de categoria do rateio invÃ¡lido'),
+  amount: z.number().positive('Valor do rateio deve ser maior que zero'),
+  note: z.string().max(500, 'Nota do rateio muito longa').optional(),
+});
+
 // ==================== CREATE TRANSACTION DTO ====================
 export const CreateTransactionSchema = z.object({
   type: z.enum(['income', 'expense', 'transfer']),
@@ -20,6 +26,7 @@ export const CreateTransactionSchema = z.object({
   status: z.enum(['completed', 'pending', 'overdue']).optional(),
   notes: z.string().max(1000, 'Notas muito longas').optional(),
   tags: z.string().optional(),
+  categorySplits: z.array(TransactionCategorySplitSchema).optional(),
   dueDate: z.string().or(z.date()).optional(),
   isFixed: z.boolean().optional(),
   
@@ -48,7 +55,8 @@ export const CreateTransactionSchema = z.object({
 ).refine(
   (data) => {
     // Income e Expense devem ter categoria
-    if ((data.type === 'income' || data.type === 'expense') && !data.categoryId) {
+    const hasSplits = Array.isArray(data.categorySplits) && data.categorySplits.length > 0;
+    if ((data.type === 'income' || data.type === 'expense') && !data.categoryId && !hasSplits) {
       return false;
     }
     return true;
@@ -86,6 +94,7 @@ export const UpdateTransactionSchema = z.object({
   status: z.enum(['completed', 'pending', 'overdue']).optional(),
   notes: z.string().max(1000).nullable().optional(),
   tags: z.string().nullable().optional(),
+  categorySplits: z.array(TransactionCategorySplitSchema).nullable().optional(),
   
   // Campos para transações parceladas
   totalInstallments: z.number().int().positive().optional(),

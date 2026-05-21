@@ -16,11 +16,23 @@ interface Category {
   level: number;
   parentId: string | null;
   isActive: boolean;
+  semantics?: CategorySemantics | null;
   children?: Category[];
   _count?: {
     transactions: number;
     children?: number;
   };
+}
+
+type FinancialGroup = 'needs' | 'wants' | 'priorities';
+
+interface CategorySemantics {
+  survivalWeight: number | string;
+  choiceWeight: number | string;
+  futureWeight: number | string;
+  lossWeight: number | string;
+  isEssential?: boolean;
+  isInvestment?: boolean;
 }
 
 interface CategoryForm {
@@ -29,6 +41,7 @@ interface CategoryForm {
   icon: string;
   color: string;
   parentId: string | null;
+  financialGroup: FinancialGroup;
 }
 
 interface CoverageData {
@@ -62,6 +75,7 @@ export default function CategoriesPage() {
     icon: '📝',
     color: '#3B82F6',
     parentId: null,
+    financialGroup: 'needs',
   });
 
   // Verificar parâmetro wizard na URL
@@ -120,6 +134,72 @@ export default function CategoriesPage() {
     }
   };
 
+  const resetCategoryForm = () => {
+    setCategoryForm({
+      name: '',
+      type: 'expense',
+      icon: '📝',
+      color: '#3B82F6',
+      parentId: null,
+      financialGroup: 'needs',
+    });
+  };
+
+  const getFinancialGroupFromSemantics = (semantics?: CategorySemantics | null): FinancialGroup => {
+    if (!semantics) return 'needs';
+    const survival = Number(semantics.survivalWeight || 0);
+    const choice = Number(semantics.choiceWeight || 0);
+    const future = Number(semantics.futureWeight || 0);
+
+    if (semantics.isInvestment || future >= Math.max(survival, choice)) return 'priorities';
+    if (semantics.isEssential || survival >= Math.max(choice, future)) return 'needs';
+    return 'wants';
+  };
+
+  const getSemanticsPayload = (financialGroup: FinancialGroup) => {
+    if (financialGroup === 'priorities') {
+      return {
+        survivalWeight: 0,
+        choiceWeight: 0,
+        futureWeight: 1,
+        lossWeight: 0,
+        isFixed: false,
+        isEssential: false,
+        isInvestment: true,
+        justification: 'Classificado na tela de categorias',
+      };
+    }
+
+    if (financialGroup === 'wants') {
+      return {
+        survivalWeight: 0,
+        choiceWeight: 1,
+        futureWeight: 0,
+        lossWeight: 0,
+        isFixed: false,
+        isEssential: false,
+        isInvestment: false,
+        justification: 'Classificado na tela de categorias',
+      };
+    }
+
+    return {
+      survivalWeight: 1,
+      choiceWeight: 0,
+      futureWeight: 0,
+      lossWeight: 0,
+      isFixed: false,
+      isEssential: true,
+      isInvestment: false,
+      justification: 'Classificado na tela de categorias',
+    };
+  };
+
+  const saveFinancialGroup = async (categoryId: string, type: string, financialGroup: FinancialGroup) => {
+    if (type !== 'expense') return;
+    await api.put(`/energy-governance/categories/${categoryId}`, getSemanticsPayload(financialGroup));
+  };
+
   const handleWizardComplete = () => {
     loadCoverage();
     setShowWizard(false);
@@ -130,10 +210,17 @@ export default function CategoriesPage() {
     setSubmitting(true);
 
     try {
-      await api.post('/categories', categoryForm);
+      const response = await api.post('/categories', {
+        name: categoryForm.name,
+        type: categoryForm.type,
+        icon: categoryForm.icon,
+        color: categoryForm.color,
+        parentId: categoryForm.parentId,
+      });
+      await saveFinancialGroup(response.data.data.id, categoryForm.type, categoryForm.financialGroup);
       
       setShowCreateModal(false);
-      setCategoryForm({ name: '', type: 'expense', icon: '📝', color: '#3B82F6', parentId: null });
+      resetCategoryForm();
       loadCategories();
     } catch (error: any) {
       console.error('Erro ao criar categoria:', error.response?.data || error.message);
@@ -149,11 +236,18 @@ export default function CategoriesPage() {
     setSubmitting(true);
 
     try {
-      await api.put(`/categories/${editingCategory.id}`, categoryForm);
+      await api.put(`/categories/${editingCategory.id}`, {
+        name: categoryForm.name,
+        type: categoryForm.type,
+        icon: categoryForm.icon,
+        color: categoryForm.color,
+        parentId: categoryForm.parentId,
+      });
+      await saveFinancialGroup(editingCategory.id, categoryForm.type, categoryForm.financialGroup);
       
       setShowEditModal(false);
       setEditingCategory(null);
-      setCategoryForm({ name: '', type: 'expense', icon: '📝', color: '#3B82F6', parentId: null });
+      resetCategoryForm();
       loadCategories();
     } catch (error: any) {
       console.error('Erro ao editar categoria:', error.response?.data || error.message);
@@ -193,6 +287,7 @@ export default function CategoriesPage() {
       icon: category.icon,
       color: category.color,
       parentId: category.parentId,
+      financialGroup: getFinancialGroupFromSemantics(category.semantics),
     });
     setShowEditModal(true);
   };
@@ -229,7 +324,7 @@ export default function CategoriesPage() {
         {/* Linha de conexão vertical para subcategorias */}
         {level > 0 && (
           <div 
-            className="absolute left-0 top-0 bottom-0 border-l-2 border-gray-200"
+            className="absolute left-0 top-0 bottom-0 border-l-2 border-slate-700"
             style={{ left: `${(level - 1) * 24 + 28}px` }}
           />
         )}
@@ -237,9 +332,9 @@ export default function CategoriesPage() {
         <div
           className={`
             flex items-center justify-between p-3 sm:p-4
-            hover:bg-gray-50 border-b border-gray-200
+            hover:bg-slate-800 border-b border-slate-800
             transition-colors duration-150
-            ${level > 0 ? 'bg-gray-50/50' : 'bg-white'}
+            ${level > 0 ? 'bg-slate-900' : 'bg-slate-950'}
           `}
           style={{ paddingLeft: `${level * 24 + 16}px` }}
         >
@@ -249,8 +344,8 @@ export default function CategoriesPage() {
               <button 
                 onClick={() => toggleExpanded(category.id)} 
                 className="flex-shrink-0 w-10 h-10 sm:w-8 sm:h-8 flex items-center justify-center 
-                           rounded-lg hover:bg-gray-200 active:bg-gray-300 transition-colors
-                           text-gray-500 touch-manipulation"
+                           rounded-lg hover:bg-slate-800 active:bg-slate-700 transition-colors
+                           text-slate-300 touch-manipulation"
                 aria-label={isExpanded ? 'Recolher subcategorias' : 'Expandir subcategorias'}
               >
                 {isExpanded ? (
@@ -273,14 +368,14 @@ export default function CategoriesPage() {
             {/* Nome e detalhes */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <p className="font-medium text-gray-800 truncate">{category.name}</p>
+                <p className="font-medium text-slate-100 truncate">{category.name}</p>
                 {hasChildren && (
                   <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full flex-shrink-0">
                     {childCount} sub
                   </span>
                 )}
               </div>
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-slate-400">
                 Nível {category.level} • {category._count?.transactions || 0} transações
               </p>
             </div>
@@ -292,6 +387,15 @@ export default function CategoriesPage() {
             `}>
               {category.type === 'income' ? 'Receita' : 'Despesa'}
             </span>
+            {category.type === 'expense' && (
+              <span className="hidden sm:inline-block px-2 py-1 rounded text-xs flex-shrink-0 bg-slate-800 text-slate-100">
+                {getFinancialGroupFromSemantics(category.semantics) === 'needs'
+                  ? 'Necessidade'
+                  : getFinancialGroupFromSemantics(category.semantics) === 'wants'
+                    ? 'Desejo'
+                    : 'Prioridade'}
+              </span>
+            )}
           </div>
 
           {/* Botões de ação - sempre visíveis no mobile */}
@@ -334,7 +438,7 @@ export default function CategoriesPage() {
               <div key={child.id} className="relative">
                 {/* Linha horizontal de conexão */}
                 <div 
-                  className="absolute border-t-2 border-gray-200"
+                  className="absolute border-t-2 border-slate-700"
                   style={{ 
                     left: `${level * 24 + 28}px`,
                     width: '16px',
@@ -529,10 +633,10 @@ export default function CategoriesPage() {
         </div>
 
         {/* Lista de Categorias */}
-        <div className="bg-white rounded-lg shadow-md overflow-hidden">
+        <div className="bg-slate-950 border border-slate-800 rounded-lg shadow-md overflow-hidden">
           {/* Legenda da hierarquia */}
           {filteredCategories.some(c => c.children && c.children.length > 0) && (
-            <div className="p-3 bg-blue-50 border-b border-blue-100 text-sm text-blue-700 flex items-center gap-2">
+            <div className="p-3 bg-slate-900 border-b border-slate-800 text-sm text-sky-300 flex items-center gap-2">
               <FolderTree className="w-4 h-4" />
               <span>Toque no <ChevronRight className="w-4 h-4 inline" /> para expandir subcategorias</span>
             </div>
@@ -617,6 +721,24 @@ export default function CategoriesPage() {
                 </p>
               </div>
 
+
+              {categoryForm.type === 'expense' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Grupo financeiro *</label>
+                  <select
+                    required
+                    value={categoryForm.financialGroup}
+                    onChange={(e) => setCategoryForm({ ...categoryForm, financialGroup: e.target.value as FinancialGroup })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500
+                               text-gray-900 bg-white min-h-[44px] cursor-pointer"
+                  >
+                    <option value="needs">Necessidades essenciais</option>
+                    <option value="wants">Desejos e estilo de vida</option>
+                    <option value="priorities">Prioridades financeiras</option>
+                  </select>
+                </div>
+              )}
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Ícone *</label>
                 <input
@@ -692,6 +814,24 @@ export default function CategoriesPage() {
                              text-gray-900 placeholder:text-gray-400 min-h-[44px]"
                 />
               </div>
+
+
+              {categoryForm.type === 'expense' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Grupo financeiro *</label>
+                  <select
+                    required
+                    value={categoryForm.financialGroup}
+                    onChange={(e) => setCategoryForm({ ...categoryForm, financialGroup: e.target.value as FinancialGroup })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500
+                               text-gray-900 bg-white min-h-[44px] cursor-pointer"
+                  >
+                    <option value="needs">Necessidades essenciais</option>
+                    <option value="wants">Desejos e estilo de vida</option>
+                    <option value="priorities">Prioridades financeiras</option>
+                  </select>
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Ícone *</label>

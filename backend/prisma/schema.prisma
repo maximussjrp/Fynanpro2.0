@@ -73,6 +73,7 @@ model Tenant {
   recurringBills         RecurringBill[]
   recurringOccurrences   RecurringBillOccurrence[]
   savedFilters           SavedFilter[]
+  transactionCategorySplits TransactionCategorySplit[]
   owner                  User                      @relation("TenantOwner", fields: [ownerId], references: [id])
   tenantUsers            TenantUser[]
   transactions           Transaction[]
@@ -127,6 +128,7 @@ model Category {
   semantics            CategorySemantics?
   installmentPurchases InstallmentPurchase[]
   recurringBills       RecurringBill[]
+  transactionCategorySplits TransactionCategorySplit[]
   transactions         Transaction[]
   triggerCategories    TriggerCategory[]
 
@@ -294,6 +296,7 @@ model Transaction {
   assistantRunId        String?
   bankAccount           BankAccount?   @relation(fields: [bankAccountId], references: [id])
   category              Category?      @relation(fields: [categoryId], references: [id])
+  categorySplits        TransactionCategorySplit[]
   parent                Transaction?   @relation("TransactionHierarchy", fields: [parentId], references: [id], onUpdate: NoAction)
   children              Transaction[]  @relation("TransactionHierarchy")
   paymentMethod         PaymentMethod? @relation(fields: [paymentMethodId], references: [id])
@@ -326,6 +329,24 @@ model Transaction {
   @@index([tenantId, createdByAssistant])
   @@index([sourceSessionId])
   @@index([assistantRunId])
+}
+
+model TransactionCategorySplit {
+  id            String      @id @default(uuid())
+  tenantId      String
+  transactionId String
+  categoryId    String
+  amount        Decimal     @db.Decimal(15, 2)
+  note          String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  category      Category    @relation(fields: [categoryId], references: [id])
+  tenant        Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, categoryId])
+  @@index([tenantId, transactionId])
+  @@index([transactionId])
 }
 
 model RecurringBill {
