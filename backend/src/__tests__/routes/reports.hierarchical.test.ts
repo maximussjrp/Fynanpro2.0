@@ -152,4 +152,31 @@ describe('Reports reliability — hierarchical case fix', () => {
     expect(priorities.targetPercent).toBe(20);
     expect(priorities.actualPercent).toBe(20);
   });
+
+  it('usa alocacao 60/40 em trends quando filtra por categoria de split', async () => {
+    transactionFindMany.mockResolvedValue([
+      {
+        id: 't-split-6040',
+        type: 'expense',
+        amount: 100,
+        categoryId: 'cat-main',
+        transactionDate: new Date('2026-01-10'),
+        categorySplits: [
+          { categoryId: 'cat-food', amount: 60 },
+          { categoryId: 'cat-fun', amount: 40 },
+        ],
+      },
+    ]);
+
+    const res = await request(app)
+      .get('/reports/trends?startDate=2026-01-01&endDate=2026-01-31&categoryId=cat-food')
+      .set('Authorization', `Bearer ${bearer}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.monthlyData).toHaveLength(1);
+    expect(res.body.data.monthlyData[0].month).toBe('2026-01');
+    expect(res.body.data.monthlyData[0].expense).toBe(60);
+    expect(res.body.data.monthlyData[0].income).toBe(0);
+  });
 });

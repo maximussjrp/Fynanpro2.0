@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { log } from '../utils/logger';
 import { transactionService } from './transaction.service';
+import { expandCategoryAllocations } from '../utils/category-allocations';
 import {
   buildAssistantAttribution,
   logAssistantAction,
@@ -3650,35 +3651,43 @@ export class ChatbotService {
   private async queryExpenses(session: ChatSession) {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    
-    const result = await prisma.transaction.aggregate({
+
+    const transactions = await prisma.transaction.findMany({
       where: {
         tenantId: session.tenantId,
         type: 'expense',
         transactionDate: { gte: startOfMonth },
         deletedAt: null,
       },
-      _sum: { amount: true },
-      _count: true,
-    });
-    
-    const total = Number(result._sum.amount) || 0;
-    const count = result._count || 0;
-    
-    // Top categorias
-    const byCategory = await prisma.transaction.groupBy({
-      by: ['categoryId'],
-      where: {
-        tenantId: session.tenantId,
-        type: 'expense',
-        transactionDate: { gte: startOfMonth },
-        deletedAt: null,
+      select: {
+        id: true,
+        type: true,
+        amount: true,
+        categoryId: true,
+        categorySplits: {
+          select: {
+            categoryId: true,
+            amount: true,
+          },
+        },
       },
-      _sum: { amount: true },
-      orderBy: { _sum: { amount: 'desc' } },
-      take: 5,
     });
-    
+
+    const total = transactions.reduce((sum, transaction) => sum + Number(transaction.amount), 0);
+    const count = transactions.length;
+
+    const allocations = expandCategoryAllocations(transactions);
+    const byCategoryMap = new Map<string, number>();
+    for (const allocation of allocations) {
+      const current = byCategoryMap.get(allocation.categoryId) || 0;
+      byCategoryMap.set(allocation.categoryId, current + allocation.amount);
+    }
+
+    const byCategory = Array.from(byCategoryMap.entries())
+      .map(([categoryId, amount]) => ({ categoryId, amount }))
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 5);
+
     const categoryIds = byCategory.map(c => c.categoryId).filter(Boolean) as string[];
     const categories = await prisma.category.findMany({
       where: { id: { in: categoryIds } },
@@ -3693,7 +3702,7 @@ export class ChatbotService {
       for (const item of byCategory) {
         const cat = categories.find(c => c.id === item.categoryId);
         if (cat) {
-          response += `• ${cat.name}: R$ ${formatMoney(Number(item._sum.amount))}\n`;
+          response += `• ${cat.name}: R$ ${formatMoney(item.amount)}\n`;
         }
       }
     }

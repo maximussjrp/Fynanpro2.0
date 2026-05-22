@@ -1108,6 +1108,28 @@ describe('TransactionService', () => {
       );
     });
 
+    it('deve filtrar por categoria principal ou por categoria dentro do rateio', async () => {
+      (prisma.transaction.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.transaction.count as jest.Mock).mockResolvedValue(0);
+
+      await transactionService.getAll('tenant-123', {
+        categoryId: 'cat-split',
+        page: 1,
+        limit: 10,
+      });
+
+      expect(prisma.transaction.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            OR: [
+              { categoryId: 'cat-split' },
+              { categorySplits: { some: { categoryId: 'cat-split', tenantId: 'tenant-123' } } },
+            ],
+          }),
+        })
+      );
+    });
+
     it('deve filtrar por range de data', async () => {
       (prisma.transaction.findMany as jest.Mock).mockResolvedValue([]);
       (prisma.transaction.count as jest.Mock).mockResolvedValue(0);

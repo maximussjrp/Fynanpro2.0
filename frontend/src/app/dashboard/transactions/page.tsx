@@ -7,6 +7,7 @@ import api from '@/lib/api';
 import { toast } from 'sonner';
 import EditTransactionModal from '@/components/NewTransactionModal';
 import CreateTransactionModal from '@/components/UnifiedTransactionModal';
+import TransactionCategoryDisplay from '@/components/TransactionCategoryDisplay';
 import { Receipt, Filter, Edit2, Trash2, Calendar, CheckCircle, XCircle, Clock, Plus, ArrowLeft, ChevronUp, ChevronDown, Check, User, ArrowRightLeft, Search, X, Tag, Eye, EyeOff , Loader2 } from 'lucide-react';
 
 interface UserProfile {
@@ -34,6 +35,19 @@ interface Transaction {
   categoryId: string;
   bankAccountId: string;
   paymentMethodId?: string;
+  categorySplits?: Array<{
+    id?: string;
+    categoryId: string;
+    amount: string;
+    note?: string;
+    category?: {
+      id: string;
+      name: string;
+      type?: string;
+      icon?: string;
+      color?: string;
+    };
+  }>;
   userProfileId?: string;
   isRecurringOccurrence?: boolean; // Flag para identificar ocorrências
   recurringBillId?: string;
@@ -844,7 +858,16 @@ export default function TransactionsPage() {
   };
 
   // Obter valores únicos para filtros
-  const uniqueCategories = [...new Map(transactions.map(t => [t.category?.id, t.category])).values()].filter(Boolean);
+  const uniqueCategories = [...new Map([
+    ...transactions
+      .filter(t => t.category?.id)
+      .map(t => [t.category!.id, t.category] as const),
+    ...transactions.flatMap(t =>
+      (t.categorySplits || [])
+        .filter(split => split.category?.id)
+        .map(split => [split.category!.id, split.category] as const)
+    ),
+  ]).values()].filter(Boolean);
   const uniqueAccounts = [...new Map(transactions.map(t => [t.bankAccount?.id, t.bankAccount])).values()].filter(Boolean);
   const uniquePaymentMethods = [...new Map(transactions.map(t => [t.paymentMethod?.id, t.paymentMethod])).values()].filter(Boolean);
   const uniqueStatuses = [
@@ -869,7 +892,11 @@ export default function TransactionsPage() {
 
     // Aplicar filtros de checkbox
     if (columnFilters.categories.length > 0) {
-      result = result.filter(t => columnFilters.categories.includes(t.category?.id || ''));
+      result = result.filter(t => {
+        const mainCategoryMatch = t.category?.id ? columnFilters.categories.includes(t.category.id) : false;
+        const splitMatch = (t.categorySplits || []).some(split => columnFilters.categories.includes(split.categoryId));
+        return mainCategoryMatch || splitMatch;
+      });
     }
     if (columnFilters.accounts.length > 0) {
       result = result.filter(t => columnFilters.accounts.includes(t.bankAccount?.id || ''));
@@ -902,8 +929,12 @@ export default function TransactionsPage() {
             bValue = b.description.toLowerCase();
             break;
           case 'category':
-            aValue = a.category?.name?.toLowerCase() || '';
-            bValue = b.category?.name?.toLowerCase() || '';
+            aValue = (a.categorySplits && a.categorySplits.length > 0)
+              ? a.categorySplits.map(split => split.category?.name || '').join(' ').toLowerCase()
+              : (a.category?.name?.toLowerCase() || '');
+            bValue = (b.categorySplits && b.categorySplits.length > 0)
+              ? b.categorySplits.map(split => split.category?.name || '').join(' ').toLowerCase()
+              : (b.category?.name?.toLowerCase() || '');
             break;
           case 'account':
             aValue = a.bankAccount?.name?.toLowerCase() || '';
@@ -1662,20 +1693,10 @@ export default function TransactionsPage() {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <div className="flex items-center gap-2">
-                          {transaction.category ? (
-                            <>
-                              <div
-                                className="w-2 h-2 rounded-full"
-                                style={{ backgroundColor: transaction.category.color }}
-                              />
-                              <span>{transaction.category.icon}</span>
-                              <span>{transaction.category.name}</span>
-                            </>
-                          ) : (
-                            <span className="text-gray-400 italic">Sem categoria</span>
-                          )}
-                        </div>
+                        <TransactionCategoryDisplay
+                          category={transaction.category}
+                          categorySplits={transaction.categorySplits}
+                        />
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                         {transaction.bankAccount?.name || 'Não informada'}

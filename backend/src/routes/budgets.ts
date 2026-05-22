@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { AuthRequest, authenticateToken } from '../middleware/auth';
 import { log } from '../utils/logger';
+import { expandCategoryAllocations } from '../utils/category-allocations';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -119,7 +120,10 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
         const transactions = await prisma.transaction.findMany({
           where: {
             tenantId,
-            categoryId: budget.categoryId,
+            OR: [
+              { categoryId: budget.categoryId },
+              { categorySplits: { some: { categoryId: budget.categoryId, tenantId } } },
+            ],
             transactionDate: {
               gte: startDate,
               lte: endDate
@@ -127,10 +131,24 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
             type: 'expense',
             status: 'completed',
             deletedAt: null
-          }
+          },
+          select: {
+            id: true,
+            type: true,
+            amount: true,
+            categoryId: true,
+            categorySplits: {
+              select: {
+                categoryId: true,
+                amount: true,
+              },
+            },
+          },
         });
 
-        const spent = transactions.reduce((sum, t) => sum + Number(t.amount), 0);
+        const spent = expandCategoryAllocations(transactions)
+          .filter(allocation => allocation.categoryId === budget.categoryId)
+          .reduce((sum, allocation) => sum + allocation.amount, 0);
         const percentage = (spent / Number(budget.amount)) * 100;
         const remaining = Number(budget.amount) - spent;
 
@@ -200,17 +218,34 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
     const transactions = await prisma.transaction.findMany({
       where: {
         tenantId,
-        categoryId: budget.categoryId,
+        OR: [
+          { categoryId: budget.categoryId },
+          { categorySplits: { some: { categoryId: budget.categoryId, tenantId } } },
+        ],
         transactionDate: {
           gte: budget.startDate,
           lte: budget.endDate
         },
         type: 'expense',
         status: 'completed'
-      }
+      },
+      select: {
+        id: true,
+        type: true,
+        amount: true,
+        categoryId: true,
+        categorySplits: {
+          select: {
+            categoryId: true,
+            amount: true,
+          },
+        },
+      },
     });
 
-    const spent = transactions.reduce((sum, t) => sum + Number(t.amount), 0);
+    const spent = expandCategoryAllocations(transactions)
+      .filter(allocation => allocation.categoryId === budget.categoryId)
+      .reduce((sum, allocation) => sum + allocation.amount, 0);
     const percentage = (spent / Number(budget.amount)) * 100;
     const remaining = Number(budget.amount) - spent;
 
@@ -533,7 +568,10 @@ router.get('/summary/overview', authenticateToken, async (req: AuthRequest, res:
         const transactions = await prisma.transaction.findMany({
           where: {
             tenantId,
-            categoryId: budget.categoryId,
+            OR: [
+              { categoryId: budget.categoryId },
+              { categorySplits: { some: { categoryId: budget.categoryId, tenantId } } },
+            ],
             transactionDate: {
               gte: budget.startDate,
               lte: budget.endDate
@@ -541,10 +579,24 @@ router.get('/summary/overview', authenticateToken, async (req: AuthRequest, res:
             type: 'expense',
             status: 'completed',
             deletedAt: null
-          }
+          },
+          select: {
+            id: true,
+            type: true,
+            amount: true,
+            categoryId: true,
+            categorySplits: {
+              select: {
+                categoryId: true,
+                amount: true,
+              },
+            },
+          },
         });
 
-        const spent = transactions.reduce((sum, t) => sum + Number(t.amount), 0);
+        const spent = expandCategoryAllocations(transactions)
+          .filter(allocation => allocation.categoryId === budget.categoryId)
+          .reduce((sum, allocation) => sum + allocation.amount, 0);
         const percentage = (spent / Number(budget.amount)) * 100;
 
         totalBudgeted += Number(budget.amount);
@@ -618,17 +670,35 @@ router.get('/alerts/active', authenticateToken, async (req: AuthRequest, res: Re
       const transactions = await prisma.transaction.findMany({
         where: {
           tenantId,
-          categoryId: budget.categoryId,
+          OR: [
+            { categoryId: budget.categoryId },
+            { categorySplits: { some: { categoryId: budget.categoryId, tenantId } } },
+          ],
           transactionDate: {
             gte: budget.startDate,
             lte: budget.endDate
           },
           type: 'expense',
-          status: 'completed'
-        }
+          status: 'completed',
+          deletedAt: null,
+        },
+        select: {
+          id: true,
+          type: true,
+          amount: true,
+          categoryId: true,
+          categorySplits: {
+            select: {
+              categoryId: true,
+              amount: true,
+            },
+          },
+        },
       });
 
-      const spent = transactions.reduce((sum, t) => sum + Number(t.amount), 0);
+      const spent = expandCategoryAllocations(transactions)
+        .filter(allocation => allocation.categoryId === budget.categoryId)
+        .reduce((sum, allocation) => sum + allocation.amount, 0);
       const percentage = (spent / Number(budget.amount)) * 100;
 
       if ((percentage >= 80 && budget.alertAt80) || 

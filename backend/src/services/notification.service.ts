@@ -1,5 +1,6 @@
 import { prisma } from '../main';
 import { log } from '../utils/logger';
+import { expandCategoryAllocations } from '../utils/category-allocations';
 
 interface NotificationData {
   tenantId: string;
@@ -203,17 +204,35 @@ export class NotificationService {
         const expenses = await prisma.transaction.findMany({
           where: {
             tenantId: budget.tenantId,
-            categoryId: budget.categoryId,
+            OR: [
+              { categoryId: budget.categoryId },
+              { categorySplits: { some: { categoryId: budget.categoryId, tenantId: budget.tenantId } } },
+            ],
             type: 'expense',
             transactionDate: {
               gte: budget.startDate,
               lte: budget.endDate,
             },
             status: 'completed',
+            deletedAt: null,
+          },
+          select: {
+            id: true,
+            type: true,
+            amount: true,
+            categoryId: true,
+            categorySplits: {
+              select: {
+                categoryId: true,
+                amount: true,
+              },
+            },
           },
         });
-        
-        const spent = expenses.reduce((sum, t) => sum + Number(t.amount), 0);
+
+        const spent = expandCategoryAllocations(expenses)
+          .filter(allocation => allocation.categoryId === budget.categoryId)
+          .reduce((sum, allocation) => sum + allocation.amount, 0);
         const percentage = (spent / Number(budget.amount)) * 100;
 
         // Alerta 80%

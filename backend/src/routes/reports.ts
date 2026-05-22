@@ -665,14 +665,25 @@ router.get('/trends', authenticateToken, async (req: AuthRequest, res: Response)
     };
 
     if (categoryId) {
-      where.categoryId = categoryId as string;
+      where.OR = [
+        { categoryId: categoryId as string },
+        { categorySplits: { some: { categoryId: categoryId as string, tenantId } } },
+      ];
     }
 
     const transactions = await prisma.transaction.findMany({
       where,
-      include: {
-        category: {
-          select: { id: true, name: true, icon: true }
+      select: {
+        id: true,
+        type: true,
+        amount: true,
+        transactionDate: true,
+        categoryId: true,
+        categorySplits: {
+          select: {
+            categoryId: true,
+            amount: true,
+          }
         }
       },
       orderBy: { transactionDate: 'asc' }
@@ -691,11 +702,18 @@ router.get('/trends', authenticateToken, async (req: AuthRequest, res: Response)
 
       const data = monthlyMap.get(key)!;
       data.transactions++;
-      if (t.type === 'income') {
-        data.income += Number(t.amount);
-      } else if (t.type === 'expense') {
-        data.expense += Number(t.amount);
-      }
+
+      const allocations = expandCategoryAllocations([t]).filter(allocation =>
+        categoryId ? allocation.categoryId === (categoryId as string) : true
+      );
+
+      allocations.forEach(allocation => {
+        if (allocation.type === 'income') {
+          data.income += allocation.amount;
+        } else if (allocation.type === 'expense') {
+          data.expense += allocation.amount;
+        }
+      });
     });
 
     const monthlyData = Array.from(monthlyMap.entries()).map(([month, data]) => ({
@@ -1431,15 +1449,32 @@ router.get('/budgets-summary', authenticateToken, async (req: AuthRequest, res: 
         const transactions = await prisma.transaction.findMany({
           where: {
             tenantId,
-            categoryId: budget.categoryId,
+            OR: [
+              { categoryId: budget.categoryId },
+              { categorySplits: { some: { categoryId: budget.categoryId, tenantId } } },
+            ],
             transactionDate: { gte: start, lte: end },
             type: 'expense',
             status: 'completed',
             deletedAt: null
-          }
+          },
+          select: {
+            id: true,
+            type: true,
+            amount: true,
+            categoryId: true,
+            categorySplits: {
+              select: {
+                categoryId: true,
+                amount: true,
+              },
+            },
+          },
         });
 
-        const spent = transactions.reduce((sum, t) => sum + Number(t.amount), 0);
+        const spent = expandCategoryAllocations(transactions)
+          .filter(allocation => allocation.categoryId === budget.categoryId)
+          .reduce((sum, allocation) => sum + allocation.amount, 0);
         const percentage = (spent / Number(budget.amount)) * 100;
 
         return {
@@ -1874,25 +1909,41 @@ router.get('/top-pending-categories', authenticateToken, async (req: AuthRequest
       });
     }
 
-    // Buscar transações pendentes agrupadas por categoria
-    const pendingByCategory = await prisma.transaction.groupBy({
-      by: ['categoryId'],
+    // Buscar pendências e distribuir por categoria (respeitando rateio)
+    const pendingTransactions = await prisma.transaction.findMany({
       where: {
         tenantId,
         status: { in: ['pending', 'overdue'] },
         deletedAt: null,
         type: 'expense', // Apenas despesas
       },
-      _sum: {
-        amount: true,
-      },
-      _count: {
+      select: {
         id: true,
+        amount: true,
+        type: true,
+        categoryId: true,
+        categorySplits: {
+          select: {
+            categoryId: true,
+            amount: true,
+          },
+        },
       },
     });
 
+    const pendingByCategoryMap = new Map<string, { totalAmount: number; count: number }>();
+    const allocations = expandCategoryAllocations(pendingTransactions);
+
+    allocations.forEach(allocation => {
+      if (!allocation.categoryId) return;
+      const current = pendingByCategoryMap.get(allocation.categoryId) || { totalAmount: 0, count: 0 };
+      current.totalAmount += allocation.amount;
+      current.count += 1;
+      pendingByCategoryMap.set(allocation.categoryId, current);
+    });
+
     // Buscar informações das categorias
-    const categoryIds = pendingByCategory.map(item => item.categoryId).filter(Boolean) as string[];
+    const categoryIds = Array.from(pendingByCategoryMap.keys());
     
     const categories = await prisma.category.findMany({
       where: {
@@ -1910,12 +1961,11 @@ router.get('/top-pending-categories', authenticateToken, async (req: AuthRequest
     const categoryMap = new Map(categories.map(c => [c.id, c]));
 
     // Combinar dados
-    const topCategories = pendingByCategory
-      .filter(item => item.categoryId)
-      .map(item => ({
-        category: categoryMap.get(item.categoryId!),
-        totalAmount: Number(item._sum.amount || 0),
-        count: item._count.id,
+    const topCategories = Array.from(pendingByCategoryMap.entries())
+      .map(([categoryId, data]) => ({
+        category: categoryMap.get(categoryId),
+        totalAmount: data.totalAmount,
+        count: data.count,
       }))
       .sort((a, b) => b.totalAmount - a.totalAmount)
       .slice(0, limit);

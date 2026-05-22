@@ -44,6 +44,19 @@ interface Transaction {
   categoryId: string;
   bankAccountId: string;
   paymentMethodId?: string;
+  categorySplits?: Array<{
+    id?: string;
+    categoryId: string;
+    amount: string | number;
+    note?: string;
+    category?: {
+      id: string;
+      name: string;
+      type?: string;
+      icon?: string;
+      color?: string;
+    };
+  }>;
   category?: Category; // Pode ser nulo em transações sem categoria
   bankAccount: BankAccount;
   paymentMethod?: PaymentMethod;
@@ -94,6 +107,10 @@ export default function TransactionModal({
     notes: '',
     totalInstallments: undefined as number | undefined,
   });
+  const [splitEnabled, setSplitEnabled] = useState(false);
+  const [categorySplits, setCategorySplits] = useState<Array<{ categoryId: string; amount: string; note: string }>>([
+    { categoryId: '', amount: '', note: '' },
+  ]);
 
   const [categorySearch, setCategorySearch] = useState('');
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
@@ -150,6 +167,20 @@ export default function TransactionModal({
           totalInstallments: undefined,
         });
         setCategorySearch(transaction.category?.name || '');
+
+        if (Array.isArray(transaction.categorySplits) && transaction.categorySplits.length > 0) {
+          setSplitEnabled(true);
+          setCategorySplits(
+            transaction.categorySplits.map(split => ({
+              categoryId: split.categoryId,
+              amount: Number(split.amount).toString(),
+              note: split.note || '',
+            }))
+          );
+        } else {
+          setSplitEnabled(false);
+          setCategorySplits([{ categoryId: '', amount: '', note: '' }]);
+        }
       } else {
         resetForm();
       }
@@ -170,7 +201,16 @@ export default function TransactionModal({
       totalInstallments: undefined,
     });
     setCategorySearch('');
+    setSplitEnabled(false);
+    setCategorySplits([{ categoryId: '', amount: '', note: '' }]);
   };
+
+  const parseMoneyInput = (value: string): number => {
+    if (!value) return 0;
+    return Number(value.replace(',', '.')) || 0;
+  };
+
+  const toCents = (value: number): number => Math.round(value * 100);
 
   const loadFormData = async () => {
     try {
@@ -353,24 +393,71 @@ export default function TransactionModal({
     return isInstallmentChild() || isRecurringChild();
   };
 
+  const splitTotal = categorySplits.reduce((sum, split) => sum + parseMoneyInput(split.amount), 0);
+  const splitDifference = parseMoneyInput(formData.amount) - splitTotal;
+
+  const updateSplit = (index: number, field: 'categoryId' | 'amount' | 'note', value: string) => {
+    setCategorySplits(prev => prev.map((split, i) => (i === index ? { ...split, [field]: value } : split)));
+  };
+
+  const addSplit = () => {
+    setCategorySplits(prev => [...prev, { categoryId: '', amount: '', note: '' }]);
+  };
+
+  const removeSplit = (index: number) => {
+    setCategorySplits(prev => (prev.length > 1 ? prev.filter((_, i) => i !== index) : prev));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.amount || !formData.description || !formData.categoryId || !formData.bankAccountId) {
+    if (!formData.amount || !formData.description || !formData.bankAccountId) {
       toast.error('Preencha todos os campos obrigatórios');
       return;
     }
 
+    if (!splitEnabled && !formData.categoryId) {
+      toast.error('Categoria é obrigatória');
+      return;
+    }
+
+    const parsedAmount = parseMoneyInput(formData.amount);
+    if (splitEnabled) {
+      if (categorySplits.length === 0) {
+        toast.error('Adicione ao menos uma categoria no rateio');
+        return;
+      }
+
+      const hasInvalidSplit = categorySplits.some(split => !split.categoryId || toCents(parseMoneyInput(split.amount)) <= 0);
+      if (hasInvalidSplit) {
+        toast.error('Preencha categoria e valor em todas as linhas do rateio');
+        return;
+      }
+
+      const splitTotalCents = categorySplits.reduce((sum, split) => sum + toCents(parseMoneyInput(split.amount)), 0);
+      if (splitTotalCents !== toCents(parsedAmount)) {
+        toast.error('A soma das categorias precisa ser igual ao valor total do lançamento');
+        return;
+      }
+    }
+
     const payload: any = {
       type: formData.type,
-      amount: parseFloat(formData.amount.replace(',', '.')),
+      amount: parsedAmount,
       description: formData.description,
       transactionDate: formData.transactionDate,
-      categoryId: formData.categoryId,
+      categoryId: splitEnabled ? (categorySplits[0]?.categoryId || undefined) : formData.categoryId,
       bankAccountId: formData.bankAccountId,
       paymentMethodId: formData.paymentMethodId || undefined,
       status: formData.status,
       notes: formData.notes || undefined,
+      categorySplits: splitEnabled
+        ? categorySplits.map(split => ({
+            categoryId: split.categoryId,
+            amount: parseMoneyInput(split.amount),
+            note: split.note || undefined,
+          }))
+        : undefined,
     };
 
     // Se alterou o total de parcelas, incluir no payload
@@ -633,68 +720,165 @@ export default function TransactionModal({
             />
           </div>
 
-          {/* Categoria com busca */}
-          <div>
-            <label className="block text-sm font-semibold text-gray-900 mb-2">
-              Categoria *
-            </label>
-            <div className="relative" ref={categoryDropdownRef}>
-              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                <Tag className="w-5 h-5 text-[#1F4FD8]" />
-              </div>
+          {/* Categoria / Rateio */}
+          <div className="space-y-3">
+            <label className="flex items-center gap-2 text-sm font-semibold text-gray-900">
               <input
-                type="text"
-                value={categorySearch}
+                type="checkbox"
+                checked={splitEnabled}
                 onChange={(e) => {
-                  setCategorySearch(e.target.value);
-                  setShowCategoryDropdown(true);
+                  const enabled = e.target.checked;
+                  setSplitEnabled(enabled);
+                  if (enabled) {
+                    setShowCategoryDropdown(false);
+                    setCategorySearch('');
+                    if (categorySplits.length === 0) {
+                      setCategorySplits([{ categoryId: '', amount: '', note: '' }]);
+                    }
+                  }
                 }}
-                onFocus={() => setShowCategoryDropdown(true)}
-                className="w-full pl-12 pr-4 py-3 min-h-[44px] border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] transition-all bg-gray-50 text-gray-900 placeholder:text-gray-400"
-                placeholder="Buscar categoria..."
-                required
+                className="w-4 h-4 text-[#1F4FD8] rounded border-gray-300"
               />
-              
-              {showCategoryDropdown && filteredCategories.length > 0 && (
-                <div className="absolute z-10 w-full mt-2 bg-white border-2 border-gray-200 rounded-xl shadow-xl max-h-60 overflow-y-auto">
-                  {filteredCategories.map(({ category, level, indent, hasChildren }) => (
-                    <div
-                      key={category.id}
-                      onClick={() => !hasChildren && handleCategorySelect(category)}
-                      className={`w-full py-3 text-left flex items-center gap-3 border-b border-gray-100 last:border-0 ${
-                        hasChildren 
-                          ? 'bg-gray-50 cursor-default' 
-                          : 'hover:bg-[#F4F7FB] transition-colors cursor-pointer'
-                      }`}
-                      style={{ paddingLeft: `${16 + (indent * 24)}px`, paddingRight: '16px' }}
-                    >
-                      {indent > 0 && (
-                        <span className="text-gray-400 text-sm mr-1">
-                          {indent === 1 ? '└' : '  └'}
-                        </span>
-                      )}
-                      <span className="text-xl">{category.icon}</span>
-                      <div className="flex-1">
-                        <p className={`${level === 1 ? 'font-bold' : level === 2 ? 'font-semibold' : 'font-medium'} ${
-                          hasChildren ? 'text-gray-500' : 'text-gray-900'
-                        }`}>
-                          {category.name}
-                        </p>
-                        {hasChildren && (
-                          <p className="text-xs text-gray-400 mt-0.5">📂 {category.children?.length} subcategorias (selecione uma abaixo)</p>
-                        )}
-                      </div>
-                      {!hasChildren && (
+              Dividir lançamento por categoria
+            </label>
+
+            {!splitEnabled && (
+              <div>
+                <label className="block text-sm font-semibold text-gray-900 mb-2">
+                  Categoria *
+                </label>
+                <div className="relative" ref={categoryDropdownRef}>
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                    <Tag className="w-5 h-5 text-[#1F4FD8]" />
+                  </div>
+                  <input
+                    type="text"
+                    value={categorySearch}
+                    onChange={(e) => {
+                      setCategorySearch(e.target.value);
+                      setShowCategoryDropdown(true);
+                    }}
+                    onFocus={() => setShowCategoryDropdown(true)}
+                    className="w-full pl-12 pr-4 py-3 min-h-[44px] border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] transition-all bg-gray-50 text-gray-900 placeholder:text-gray-400"
+                    placeholder="Buscar categoria..."
+                    required={!splitEnabled}
+                  />
+
+                  {showCategoryDropdown && filteredCategories.length > 0 && (
+                    <div className="absolute z-10 w-full mt-2 bg-white border-2 border-gray-200 rounded-xl shadow-xl max-h-60 overflow-y-auto">
+                      {filteredCategories.map(({ category, level, indent, hasChildren }) => (
                         <div
-                          className="w-3 h-3 rounded-full shadow-sm"
-                          style={{ backgroundColor: category.color }}
-                        />
-                      )}
+                          key={category.id}
+                          onClick={() => !hasChildren && handleCategorySelect(category)}
+                          className={`w-full py-3 text-left flex items-center gap-3 border-b border-gray-100 last:border-0 ${
+                            hasChildren
+                              ? 'bg-gray-50 cursor-default'
+                              : 'hover:bg-[#F4F7FB] transition-colors cursor-pointer'
+                          }`}
+                          style={{ paddingLeft: `${16 + (indent * 24)}px`, paddingRight: '16px' }}
+                        >
+                          {indent > 0 && (
+                            <span className="text-gray-400 text-sm mr-1">
+                              {indent === 1 ? '└' : '  └'}
+                            </span>
+                          )}
+                          <span className="text-xl">{category.icon}</span>
+                          <div className="flex-1">
+                            <p className={`${level === 1 ? 'font-bold' : level === 2 ? 'font-semibold' : 'font-medium'} ${
+                              hasChildren ? 'text-gray-500' : 'text-gray-900'
+                            }`}>
+                              {category.name}
+                            </p>
+                            {hasChildren && (
+                              <p className="text-xs text-gray-400 mt-0.5">📂 {category.children?.length} subcategorias (selecione uma abaixo)</p>
+                            )}
+                          </div>
+                          {!hasChildren && (
+                            <div
+                              className="w-3 h-3 rounded-full shadow-sm"
+                              style={{ backgroundColor: category.color }}
+                            />
+                          )}
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
+
+            {splitEnabled && (
+              <div className="space-y-3 border border-blue-200 bg-blue-50 rounded-xl p-3">
+                <p className="text-xs text-blue-800">
+                  Dividido em {categorySplits.length} {categorySplits.length === 1 ? 'categoria' : 'categorias'}.
+                  A categoria principal será substituída pelo rateio.
+                </p>
+                {categorySplits.map((split, index) => (
+                  <div key={`split-${index}`} className="grid grid-cols-1 md:grid-cols-12 gap-2 items-start">
+                    <div className="md:col-span-5">
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Categoria do rateio</label>
+                      <select
+                        value={split.categoryId}
+                        onChange={(e) => updateSplit(index, 'categoryId', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-sm"
+                        aria-label="Categoria do rateio"
+                      >
+                        <option value="">Selecione</option>
+                        {categoriesByType.filter(cat => !cat.children || cat.children.length === 0).map(cat => (
+                          <option key={cat.id} value={cat.id}>{cat.icon} {cat.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="md:col-span-3">
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Valor do rateio</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={split.amount}
+                        onChange={(e) => updateSplit(index, 'amount', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-sm"
+                        aria-label="Valor do rateio"
+                      />
+                    </div>
+                    <div className="md:col-span-3">
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Observação</label>
+                      <input
+                        type="text"
+                        value={split.note}
+                        onChange={(e) => updateSplit(index, 'note', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-sm"
+                        placeholder="Opcional"
+                      />
+                    </div>
+                    <div className="md:col-span-1 flex items-end">
+                      <button
+                        type="button"
+                        onClick={() => removeSplit(index)}
+                        className="w-full px-2 py-2 text-xs bg-red-100 text-red-700 rounded-lg hover:bg-red-200 disabled:opacity-40"
+                        disabled={categorySplits.length === 1}
+                      >
+                        Rem.
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                <div className="flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={addSplit}
+                    className="px-3 py-2 text-xs bg-white text-blue-700 border border-blue-300 rounded-lg hover:bg-blue-100"
+                  >
+                    + Adicionar categoria
+                  </button>
+                  <div className="text-right">
+                    <p className="text-xs text-gray-700">Dividido: R$ {splitTotal.toFixed(2)}</p>
+                    <p className={`text-xs font-semibold ${Math.abs(splitDifference) < 0.005 ? 'text-green-700' : 'text-red-700'}`}>
+                      {Math.abs(splitDifference) < 0.005 ? 'Rateio completo' : `Falta dividir: R$ ${Math.abs(splitDifference).toFixed(2)}`}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">

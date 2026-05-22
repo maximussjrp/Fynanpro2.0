@@ -6,6 +6,7 @@ import { prisma } from '../utils/prisma-client';
 import { log } from '../utils/logger';
 import { CreateTransactionDTO, UpdateTransactionDTO, TransactionFiltersDTO } from '../dtos/transaction.dto';
 import { cacheService, CacheNamespace } from './cache.service';
+import { expandCategoryAllocations } from '../utils/category-allocations';
 import type { AssistantAttribution } from './assistant-audit.service';
 
 /**
@@ -1277,12 +1278,62 @@ export class TransactionService {
         where.transactionDate = createDateRangeFilter(filters.startDate, filters.endDate);
       }
 
-      if (filters.categoryId) {
-        where.categoryId = filters.categoryId;
-      }
-
       if (filters.bankAccountId) {
         where.bankAccountId = filters.bankAccountId;
+      }
+
+      if (filters.categoryId) {
+        where.OR = [
+          { categoryId: filters.categoryId },
+          { categorySplits: { some: { categoryId: filters.categoryId, tenantId } } },
+        ];
+
+        const transactions = await prisma.transaction.findMany({
+          where,
+          select: {
+            id: true,
+            type: true,
+            amount: true,
+            categoryId: true,
+            categorySplits: {
+              select: {
+                categoryId: true,
+                amount: true,
+              },
+            },
+          },
+        });
+
+        const allocations = expandCategoryAllocations(transactions).filter(
+          allocation => allocation.categoryId === filters.categoryId
+        );
+
+        const matchedTransactionIds = new Set(allocations.map(allocation => allocation.transactionId).filter(Boolean));
+
+        const totalIncome = allocations
+          .filter(allocation => allocation.type === 'income')
+          .reduce((sum, allocation) => sum + allocation.amount, 0);
+        const totalExpense = allocations
+          .filter(allocation => allocation.type === 'expense')
+          .reduce((sum, allocation) => sum + allocation.amount, 0);
+        const totalTransfers = 0;
+        const transactionCount = matchedTransactionIds.size;
+        const balance = totalIncome - totalExpense;
+        const avgTransactionValue = transactionCount > 0
+          ? (totalIncome + totalExpense + totalTransfers) / transactionCount
+          : 0;
+
+        const summary = {
+          totalIncome,
+          totalExpense,
+          totalTransfers,
+          balance,
+          transactionCount,
+          avgTransactionValue,
+        };
+
+        log.info('TransactionService.getSummary success', { tenantId, summary, mode: 'split-aware-filter' });
+        return summary;
       }
 
       // Get aggregated data

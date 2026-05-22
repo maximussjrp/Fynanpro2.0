@@ -1361,34 +1361,71 @@ export async function getTopPendingCategories(
   const defaultStart = startDate || new Date(now.getFullYear(), now.getMonth(), 1);
   const defaultEnd = endDate || new Date(now.getFullYear(), now.getMonth() + 1, 0);
 
-  // Buscar despesas do período agrupadas por categoria
-  const expensesByCategory = await prisma.$queryRaw<Array<{
-    categoryId: string;
-    categoryName: string;
-    categoryIcon: string | null;
-    totalAmount: Prisma.Decimal;
-    transactionCount: bigint;
-  }>>`
-    SELECT 
-      c.id as "categoryId",
-      c.name as "categoryName",
-      c.icon as "categoryIcon",
-      COALESCE(SUM(t.amount), 0) as "totalAmount",
-      COUNT(t.id) as "transactionCount"
-    FROM "Category" c
-    LEFT JOIN "Transaction" t ON c.id = t."categoryId" 
-      AND t.type = 'expense'
-      AND t."tenantId" = ${tenantId}
-      AND t."deletedAt" IS NULL
-      AND t.date >= ${defaultStart}
-      AND t.date <= ${defaultEnd}
-    WHERE c."tenantId" = ${tenantId}
-      AND c."deletedAt" IS NULL
-      AND c.type = 'expense'
-    GROUP BY c.id, c.name, c.icon
-    HAVING COALESCE(SUM(t.amount), 0) > 0
-    ORDER BY "totalAmount" DESC
-  `;
+  const transactions = await prisma.transaction.findMany({
+    where: {
+      tenantId,
+      type: 'expense',
+      deletedAt: null,
+      transactionDate: {
+        gte: defaultStart,
+        lte: defaultEnd,
+      },
+    },
+    select: {
+      id: true,
+      type: true,
+      amount: true,
+      categoryId: true,
+      categorySplits: {
+        select: {
+          categoryId: true,
+          amount: true,
+        },
+      },
+    },
+  });
+
+  const categories = await prisma.category.findMany({
+    where: {
+      tenantId,
+      deletedAt: null,
+      type: 'expense',
+    },
+    select: {
+      id: true,
+      name: true,
+      icon: true,
+    },
+  });
+
+  const categoryMetaById = new Map(categories.map(category => [category.id, category]));
+  const allocations = expandCategoryAllocations(transactions);
+  const expenseAllocations = allocations.filter(allocation => allocation.type === 'expense');
+
+  const expensesByCategoryMap = new Map<string, { totalAmount: number; transactionIds: Set<string> }>();
+  for (const allocation of expenseAllocations) {
+    if (!allocation.categoryId) {
+      continue;
+    }
+
+    const current = expensesByCategoryMap.get(allocation.categoryId) || { totalAmount: 0, transactionIds: new Set<string>() };
+    current.totalAmount += allocation.amount;
+    if (allocation.transactionId) {
+      current.transactionIds.add(allocation.transactionId);
+    }
+    expensesByCategoryMap.set(allocation.categoryId, current);
+  }
+
+  const expensesByCategory = Array.from(expensesByCategoryMap.entries())
+    .map(([categoryId, totals]) => ({
+      categoryId,
+      categoryName: categoryMetaById.get(categoryId)?.name || 'Sem categoria',
+      categoryIcon: categoryMetaById.get(categoryId)?.icon || null,
+      totalAmount: totals.totalAmount,
+      transactionCount: totals.transactionIds.size,
+    }))
+    .filter(category => category.totalAmount > 0)
+    .sort((a, b) => b.totalAmount - a.totalAmount);
 
   // Buscar status de validação das categorias
   const semantics = await prisma.$queryRaw<Array<{
