@@ -5,7 +5,92 @@ import { toast } from 'sonner';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/api';
-import { Wallet, Plus, Edit2, Trash2, ArrowLeftRight, Building2, X, DollarSign, AlertTriangle, User } from 'lucide-react';
+import { Wallet, Plus, Edit2, Trash2, ArrowLeftRight, X, DollarSign, AlertTriangle, User } from 'lucide-react';
+
+const BANK_LOGO_REPO_BASE = 'https://cdn.jsdelivr.net/gh/Tgentil/Bancos-em-SVG@main';
+
+const BANK_LOGOS = [
+  { aliases: ['bradesco'], path: 'Bradesco S.A/bradesco com nome.svg' },
+  { aliases: ['itau', 'itau unibanco'], path: 'Itaú Unibanco S.A/itau-2-laranja.svg' },
+  { aliases: ['santander'], path: 'Banco Santander Brasil S.A/banco-santander-logo.svg' },
+  { aliases: ['inter'], path: 'Banco Inter S.A/inter.svg' },
+  { aliases: ['nubank', 'nu pagamentos'], path: 'Nu Pagamentos S.A/nubank-branco.svg' },
+  { aliases: ['c6'], path: 'Banco C6 S.A/c6 bank- branco.svg' },
+  { aliases: ['btg', 'btg pactual'], path: 'Banco BTG Pacutal/btg-pactual-nome .svg' },
+  { aliases: ['banco do brasil', 'bb'], path: 'Banco do Brasil S.A/banco-do-brasil-com-fundo.svg' },
+  { aliases: ['caixa'], path: 'Caixa Econômica Federal/caixa-economica-federal-1.svg' },
+  { aliases: ['mercado pago'], path: 'Mercado Pago/mercado-pago-nome.svg' },
+  { aliases: ['picpay'], path: 'PicPay/Logo-PicPay -nome .svg' },
+  { aliases: ['pagbank', 'pagseguro'], path: 'PagSeguro Internet S.A/logo-pagbank.svg' },
+  { aliases: ['sicredi'], path: 'Sicredi/logo-sicred-preto.svg' },
+  { aliases: ['sicoob'], path: 'Sicoob/sicoob-minimalista-com.svg' },
+  { aliases: ['asaas'], path: 'Asaas IP S.A/header-logo-azul.svg' },
+  { aliases: ['stone'], path: 'Stone Pagamentos S.A/stone-branco.svg' },
+  { aliases: ['neon'], path: 'Neon/header-logo-neon.svg' },
+  { aliases: ['original'], path: 'Banco Original S.A/banco-original-logo-branco-nome.svg' },
+  { aliases: ['sofisa'], path: 'Banco Sofisa/logo-banco-sofisa-verde.svg' },
+  { aliases: ['brb'], path: 'BRB - Banco de Brasilia/brb-logo-abreviado.svg' },
+  { aliases: ['banrisul'], path: 'Banrisul/banrisul-logo-2023.svg' },
+  { aliases: ['safra'], path: 'Banco Safra S.A/logo-safra-nome.svg' },
+];
+
+function normalizeInstitution(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function buildBankLogoUrl(path: string): string {
+  const encodedPath = path
+    .split('/')
+    .map((segment) => encodeURIComponent(segment))
+    .join('/');
+
+  return `${BANK_LOGO_REPO_BASE}/${encodedPath}`;
+}
+
+function getBankLogoUrl(institution: string): string | null {
+  const normalizedInstitution = normalizeInstitution(institution);
+  const match = BANK_LOGOS.find((entry) =>
+    entry.aliases.some((alias) => normalizedInstitution.includes(alias))
+  );
+  return match ? buildBankLogoUrl(match.path) : null;
+}
+
+function getInstitutionInitials(value: string): string {
+  const words = value.split(/\s+/).filter(Boolean);
+  return words.slice(0, 2).map((word) => word[0]?.toUpperCase()).join('') || 'BK';
+}
+
+function BankLogo({ institution }: { institution: string }) {
+  const [hasError, setHasError] = useState(false);
+  const logoUrl = getBankLogoUrl(institution || '');
+
+  if (!logoUrl || hasError) {
+    return (
+      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-[#BFDBFE] bg-[#DBEAFE] text-xs font-semibold text-[#1F4FD8]">
+        {getInstitutionInitials(institution || 'Banco')}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-[#BFDBFE] bg-[#DBEAFE] p-1">
+      <img
+        src={logoUrl}
+        alt={`Logo de ${institution}`}
+        className="h-8 w-full object-contain"
+        loading="lazy"
+        referrerPolicy="no-referrer"
+        onError={() => setHasError(true)}
+      />
+    </div>
+  );
+}
 
 // Interface para perfis de usuário (CPF/CNPJ)
 interface UserProfile {
@@ -380,9 +465,7 @@ export default function BankAccountsPage() {
             >
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center gap-3">
-                  <div className="p-3 bg-[#DBEAFE] rounded-lg">
-                    <Building2 className="w-6 h-6 text-[#1F4FD8]" />
-                  </div>
+                  <BankLogo institution={account.institution} />
                   <div>
                     <h3 className="font-semibold text-lg text-gray-800">{account.name}</h3>
                     <p className="text-sm text-gray-500">{account.institution}</p>
