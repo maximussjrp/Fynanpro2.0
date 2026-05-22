@@ -72,14 +72,14 @@ function BankLogo({ institution }: { institution: string }) {
 
   if (!logoUrl || hasError) {
     return (
-      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-[#BFDBFE] bg-[#DBEAFE] text-xs font-semibold text-[#1F4FD8]">
+      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-slate-600 bg-slate-800 text-xs font-semibold text-slate-100">
         {getInstitutionInitials(institution || 'Banco')}
       </div>
     );
   }
 
   return (
-    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-[#BFDBFE] bg-[#DBEAFE] p-1">
+    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-slate-600 bg-slate-800 p-1.5 shadow-inner">
       <img
         src={logoUrl}
         alt={`Logo de ${institution}`}
