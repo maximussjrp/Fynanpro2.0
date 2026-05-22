@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import EditTransactionModal from '@/components/NewTransactionModal';
 import CreateTransactionModal from '@/components/UnifiedTransactionModal';
 import TransactionCategoryDisplay from '@/components/TransactionCategoryDisplay';
+import { applyTransactionTableFiltersAndSort, getEffectiveStatus } from '@/lib/transaction-table-filters';
 import { Receipt, Filter, Edit2, Trash2, Calendar, CheckCircle, XCircle, Clock, Plus, ArrowLeft, ChevronUp, ChevronDown, Check, User, ArrowRightLeft, Search, X, Tag, Eye, EyeOff , Loader2 } from 'lucide-react';
 
 interface UserProfile {
@@ -154,6 +155,8 @@ export default function TransactionsPage() {
   const [dateColumnFilter, setDateColumnFilter] = useState<{ startDate: string; endDate: string } | null>(null);
   // Draft para filtro de data da coluna (evita filtrar ao navegar no calendário)
   const [draftDateColumnFilter, setDraftDateColumnFilter] = useState<{ startDate: string; endDate: string } | null>(null);
+  const [descriptionColumnFilter, setDescriptionColumnFilter] = useState('');
+  const [amountColumnFilter, setAmountColumnFilter] = useState('');
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [columnFilterSearch, setColumnFilterSearch] = useState('');
   const [showTransferModal, setShowTransferModal] = useState(false);
@@ -190,6 +193,19 @@ export default function TransactionsPage() {
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpenDropdown(null);
+        setColumnFilterSearch('');
+        setDraftDateColumnFilter(null);
+      }
+    };
+
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
   }, []);
   
   // Helper para obter datas do mês atual
@@ -876,96 +892,64 @@ export default function TransactionsPage() {
     { id: 'overdue', name: 'Atrasado' },
   ];
 
-  // Aplicar filtros e ordenação
-  const getFilteredAndSortedTransactions = () => {
-    let result = [...transactions];
+  const hasGeneralFiltersActive = useMemo(() => {
+    return (
+      filters.categoryId !== '' ||
+      filters.bankAccountId !== '' ||
+      filters.paymentMethodId !== '' ||
+      filters.type !== 'all' ||
+      filters.status !== 'all' ||
+      filters.startDate !== defaultRange.startDate ||
+      filters.endDate !== defaultRange.endDate
+    );
+  }, [filters, defaultRange.startDate, defaultRange.endDate]);
 
-    // Aplicar filtro de data da coluna
-    if (dateColumnFilter) {
-      const startDate = new Date(dateColumnFilter.startDate + 'T00:00:00');
-      const endDate = new Date(dateColumnFilter.endDate + 'T23:59:59');
-      result = result.filter(t => {
-        const txDate = new Date(t.transactionDate);
-        return txDate >= startDate && txDate <= endDate;
-      });
-    }
+  const activeGeneralFilterCount = useMemo(() => {
+    let count = 0;
+    if (filters.categoryId) count++;
+    if (filters.bankAccountId) count++;
+    if (filters.paymentMethodId) count++;
+    if (filters.type !== 'all') count++;
+    if (filters.status !== 'all') count++;
+    if (filters.startDate !== defaultRange.startDate || filters.endDate !== defaultRange.endDate) count++;
+    return count;
+  }, [filters, defaultRange.startDate, defaultRange.endDate]);
 
-    // Aplicar filtros de checkbox
-    if (columnFilters.categories.length > 0) {
-      result = result.filter(t => {
-        const mainCategoryMatch = t.category?.id ? columnFilters.categories.includes(t.category.id) : false;
-        const splitMatch = (t.categorySplits || []).some(split => columnFilters.categories.includes(split.categoryId));
-        return mainCategoryMatch || splitMatch;
-      });
-    }
-    if (columnFilters.accounts.length > 0) {
-      result = result.filter(t => columnFilters.accounts.includes(t.bankAccount?.id || ''));
-    }
-    if (columnFilters.paymentMethods.length > 0) {
-      result = result.filter(t => columnFilters.paymentMethods.includes(t.paymentMethod?.id || ''));
-    }
-    if (columnFilters.statuses.length > 0) {
-      result = result.filter(t => {
-        const isOverdue = t.status !== 'completed' && 
-          new Date(t.dueDate || t.transactionDate) < new Date(new Date().setHours(0, 0, 0, 0));
-        const statusId = t.status === 'completed' ? 'completed' : (isOverdue ? 'overdue' : 'pending');
-        return columnFilters.statuses.includes(statusId);
-      });
-    }
+  const hasColumnFiltersActive = useMemo(() => {
+    return (
+      !!dateColumnFilter ||
+      columnFilters.categories.length > 0 ||
+      columnFilters.accounts.length > 0 ||
+      columnFilters.paymentMethods.length > 0 ||
+      columnFilters.statuses.length > 0 ||
+      !!descriptionColumnFilter.trim() ||
+      !!amountColumnFilter.trim()
+    );
+  }, [dateColumnFilter, columnFilters, descriptionColumnFilter, amountColumnFilter]);
 
-    // Aplicar ordenação
-    if (sortConfig) {
-      result.sort((a, b) => {
-        let aValue: any;
-        let bValue: any;
-
-        switch (sortConfig.key) {
-          case 'date':
-            aValue = new Date(a.dueDate || a.transactionDate).getTime();
-            bValue = new Date(b.dueDate || b.transactionDate).getTime();
-            break;
-          case 'description':
-            aValue = a.description.toLowerCase();
-            bValue = b.description.toLowerCase();
-            break;
-          case 'category':
-            aValue = (a.categorySplits && a.categorySplits.length > 0)
-              ? a.categorySplits.map(split => split.category?.name || '').join(' ').toLowerCase()
-              : (a.category?.name?.toLowerCase() || '');
-            bValue = (b.categorySplits && b.categorySplits.length > 0)
-              ? b.categorySplits.map(split => split.category?.name || '').join(' ').toLowerCase()
-              : (b.category?.name?.toLowerCase() || '');
-            break;
-          case 'account':
-            aValue = a.bankAccount?.name?.toLowerCase() || '';
-            bValue = b.bankAccount?.name?.toLowerCase() || '';
-            break;
-          case 'paymentMethod':
-            aValue = a.paymentMethod?.name?.toLowerCase() || '';
-            bValue = b.paymentMethod?.name?.toLowerCase() || '';
-            break;
-          case 'amount':
-            aValue = Number(a.amount);
-            bValue = Number(b.amount);
-            break;
-          case 'status':
-            aValue = a.status;
-            bValue = b.status;
-            break;
-          default:
-            return 0;
-        }
-
-        if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
-        if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
-        return 0;
-      });
-    }
-
-    return result;
+  const clearColumnAndSortState = () => {
+    setDateColumnFilter(null);
+    setDraftDateColumnFilter(null);
+    setDescriptionColumnFilter('');
+    setAmountColumnFilter('');
+    setColumnFilters({
+      categories: [],
+      accounts: [],
+      paymentMethods: [],
+      statuses: [],
+    });
+    setSortConfig(null);
+    setOpenDropdown(null);
+    setColumnFilterSearch('');
   };
 
-  const filteredTransactions = getFilteredAndSortedTransactions();
+  const filteredTransactions = useMemo(
+    () => applyTransactionTableFiltersAndSort(transactions, columnFilters, dateColumnFilter, sortConfig, {
+      descriptionQuery: descriptionColumnFilter,
+      amountQuery: amountColumnFilter,
+    }),
+    [transactions, columnFilters, dateColumnFilter, sortConfig, descriptionColumnFilter, amountColumnFilter],
+  );
   const payableFilteredTransactions = filteredTransactions.filter(isPayableTransaction);
   const selectedTransactions = transactions.filter(transaction => selectedTransactionIds.includes(transaction.id));
   const selectedPayableTransactions = selectedTransactions.filter(isPayableTransaction);
@@ -1011,16 +995,36 @@ export default function TransactionsPage() {
     filterOptions,
     selectedFilters,
     isDateFilter,
+    textFilterValue,
+    onTextFilterChange,
+    onTextFilterClear,
+    textFilterPlaceholder,
+    textFilterInputLabel,
   }: { 
     label: string; 
     sortKey?: string;
-    filterType?: 'categories' | 'accounts' | 'paymentMethods' | 'statuses' | 'date';
+    filterType?: 'categories' | 'accounts' | 'paymentMethods' | 'statuses' | 'description' | 'amount' | 'date';
     filterOptions?: { id: string; name: string; icon?: string; color?: string }[];
     selectedFilters?: string[];
     isDateFilter?: boolean;
+    textFilterValue?: string;
+    onTextFilterChange?: (value: string) => void;
+    onTextFilterClear?: () => void;
+    textFilterPlaceholder?: string;
+    textFilterInputLabel?: string;
   }) => {
     const isOpen = openDropdown === (filterType || sortKey);
-    const hasActiveFilter = isDateFilter ? !!dateColumnFilter : (selectedFilters && selectedFilters.length > 0);
+    const isTextFilter = filterType === 'description' || filterType === 'amount';
+    const isCheckboxFilterType =
+      filterType === 'categories' ||
+      filterType === 'accounts' ||
+      filterType === 'paymentMethods' ||
+      filterType === 'statuses';
+    const hasActiveFilter = isDateFilter
+      ? !!dateColumnFilter
+      : isTextFilter
+        ? !!textFilterValue?.trim()
+        : !!(selectedFilters && selectedFilters.length > 0);
 
     return (
       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider relative">
@@ -1033,6 +1037,7 @@ export default function TransactionsPage() {
               onClick={() => handleSort(sortKey)}
               className="p-1 hover:bg-gray-200 rounded transition-colors"
               title={`Ordenar por ${label}`}
+              aria-label={`Ordenar por ${label}`}
             >
               <div className="flex flex-col">
                 <ChevronUp className={`w-3 h-3 -mb-1 ${sortConfig?.key === sortKey && sortConfig.direction === 'asc' ? 'text-blue-600' : 'text-gray-400'}`} />
@@ -1047,17 +1052,19 @@ export default function TransactionsPage() {
               onClick={() => setOpenDropdown(isOpen ? null : 'date')}
               className={`p-1 hover:bg-gray-200 rounded transition-colors ${hasActiveFilter ? 'text-blue-600' : 'text-gray-400'}`}
               title="Filtrar por data"
+              aria-label={`Filtrar coluna ${label}`}
             >
               <Filter className="w-3 h-3" />
             </button>
           )}
           
           {/* Botão de filtro */}
-          {filterType && filterOptions && !isDateFilter && (
+          {filterType && !isDateFilter && (
             <button
               onClick={() => setOpenDropdown(isOpen ? null : filterType)}
               className={`p-1 hover:bg-gray-200 rounded transition-colors ${hasActiveFilter ? 'text-blue-600' : 'text-gray-400'}`}
               title={`Filtrar por ${label}`}
+              aria-label={`Filtrar coluna ${label}`}
             >
               <Filter className="w-3 h-3" />
             </button>
@@ -1087,6 +1094,7 @@ export default function TransactionsPage() {
                   <button
                     onClick={() => setColumnFilterSearch('')}
                     className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    aria-label="Limpar busca do filtro"
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -1095,7 +1103,15 @@ export default function TransactionsPage() {
             </div>
             <div className="p-2 border-b border-gray-100">
               <button
-                onClick={() => filterType !== 'date' && toggleAllColumnFilter(filterType, filterOptions.filter(o => o.name.toLowerCase().includes(columnFilterSearch.toLowerCase())).map(o => o.id))}
+                onClick={() => {
+                  if (!isCheckboxFilterType) return;
+                  toggleAllColumnFilter(
+                    filterType,
+                    filterOptions
+                      .filter(o => o.name.toLowerCase().includes(columnFilterSearch.toLowerCase()))
+                      .map(o => o.id),
+                  );
+                }}
                 className="flex items-center gap-2 w-full px-2 py-1 text-sm hover:bg-gray-100 rounded"
               >
                 <div className={`w-4 h-4 border rounded flex items-center justify-center ${selectedFilters?.length === filterOptions.length ? 'bg-blue-600 border-blue-600' : 'border-gray-300'}`}>
@@ -1110,7 +1126,10 @@ export default function TransactionsPage() {
                 .map(option => (
                 <button
                   key={option.id}
-                  onClick={() => filterType !== 'date' && toggleColumnFilter(filterType, option.id)}
+                  onClick={() => {
+                    if (!isCheckboxFilterType) return;
+                    toggleColumnFilter(filterType, option.id);
+                  }}
                   className="flex items-center gap-2 w-full px-2 py-1 text-sm hover:bg-gray-100 rounded"
                 >
                   <div className={`w-4 h-4 border rounded flex items-center justify-center ${selectedFilters?.includes(option.id) ? 'bg-blue-600 border-blue-600' : 'border-gray-300'}`}>
@@ -1134,6 +1153,46 @@ export default function TransactionsPage() {
                 </button>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Dropdown de filtro de texto/valor */}
+        {isOpen && filterType && !isDateFilter && !filterOptions && isTextFilter && (
+          <div
+            ref={dropdownRef}
+            className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[260px] p-3"
+            onKeyDown={(e) => e.stopPropagation()}
+          >
+            <div className="space-y-2">
+              <div className="relative">
+                <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  aria-label={textFilterInputLabel || `Filtro de ${label}`}
+                  placeholder={textFilterPlaceholder || 'Buscar...'}
+                  value={textFilterValue || ''}
+                  onChange={(e) => onTextFilterChange?.(e.target.value)}
+                  className="w-full pl-8 pr-8 py-1.5 text-sm border border-gray-200 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  autoFocus
+                />
+                {!!textFilterValue?.trim() && (
+                  <button
+                    onClick={() => onTextFilterClear?.()}
+                    className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    aria-label={`Limpar filtro de ${label}`}
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+              <button
+                onClick={() => onTextFilterClear?.()}
+                disabled={!textFilterValue?.trim()}
+                className="w-full px-3 py-1 text-sm text-red-600 hover:bg-red-50 rounded disabled:text-gray-400 disabled:hover:bg-transparent"
+              >
+                Limpar Filtro
+              </button>
+            </div>
           </div>
         )}
 
@@ -1313,7 +1372,7 @@ export default function TransactionsPage() {
               </h1>
               <p className="text-gray-600 mt-1">
                 {filteredTransactions.length} de {transactions.length} transações
-                {(columnFilters.categories.length > 0 || columnFilters.accounts.length > 0 || columnFilters.paymentMethods.length > 0 || columnFilters.statuses.length > 0) && (
+                {hasColumnFiltersActive && (
                   <span className="text-blue-600 ml-2">(filtradas)</span>
                 )}
                 <span className="mx-2">•</span>
@@ -1332,11 +1391,19 @@ export default function TransactionsPage() {
               className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${
                 showFilters 
                   ? 'bg-blue-600 text-white' 
-                  : 'bg-white border-2 border-blue-600 text-blue-600 hover:bg-blue-50'
+                  : hasGeneralFiltersActive
+                    ? 'bg-blue-50 border-2 border-blue-600 text-blue-700 hover:bg-blue-100'
+                    : 'bg-white border-2 border-blue-600 text-blue-600 hover:bg-blue-50'
               }`}
+              aria-label="Abrir filtros gerais"
             >
               <Filter className="w-5 h-5" />
               Filtros
+              {activeGeneralFilterCount > 0 && (
+                <span className="ml-1 min-w-[20px] h-5 px-1 rounded-full bg-blue-600 text-white text-xs font-semibold flex items-center justify-center">
+                  {activeGeneralFilterCount}
+                </span>
+              )}
             </button>
             <button
               onClick={() => setShowTransferModal(true)}
@@ -1503,7 +1570,7 @@ export default function TransactionsPage() {
             <div className="flex gap-2 mt-2">
               <button
                 onClick={() => {
-                  // Ver Tudo: Limpa o filtro de data para ver todas as transações
+                  // Ver Tudo: amplia período e limpa filtros para exibir todo o histórico
                   const twoYearsAgo = new Date();
                   twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
                   const twoYearsLater = new Date();
@@ -1511,8 +1578,16 @@ export default function TransactionsPage() {
                   const startDate = twoYearsAgo.toISOString().split('T')[0];
                   const endDate = twoYearsLater.toISOString().split('T')[0];
                   setDraftDateRange({ startDate, endDate });
-                  setAppliedFilters(prev => ({ ...prev, startDate, endDate }));
-                  setFilters(prev => ({ ...prev, startDate, endDate }));
+                  setAppliedFilters({
+                    startDate,
+                    endDate,
+                    categoryId: '',
+                    bankAccountId: '',
+                    paymentMethodId: '',
+                    type: 'all',
+                    status: 'all',
+                  });
+                  clearColumnAndSortState();
                 }}
                 className="px-3 py-1.5 text-xs bg-blue-600 text-white hover:bg-blue-700 rounded transition-colors flex items-center gap-1"
               >
@@ -1524,7 +1599,7 @@ export default function TransactionsPage() {
               </button>
               <button
                 onClick={() => {
-                  // Limpar Filtros: Reseta todos os filtros para o padrão (mês atual)
+                  // Limpar Filtros: reseta filtros para padrão (mês atual)
                   const today = new Date();
                   const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
                   const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().split('T')[0];
@@ -1538,23 +1613,7 @@ export default function TransactionsPage() {
                     type: 'all',
                     status: 'all'
                   });
-                  setFilters({
-                    startDate: startOfMonth,
-                    endDate: endOfMonth,
-                    categoryId: '',
-                    bankAccountId: '',
-                    paymentMethodId: '',
-                    type: 'all',
-                    status: 'all'
-                  });
-                  setDateColumnFilter(null);
-                  setDraftDateColumnFilter(null);
-                  setColumnFilters({
-                    categories: [],
-                    accounts: [],
-                    paymentMethods: [],
-                    statuses: []
-                  });
+                  clearColumnAndSortState();
                 }}
                 className="px-3 py-1.5 text-xs bg-gray-100 text-gray-700 hover:bg-gray-200 rounded transition-colors flex items-center gap-1"
               >
@@ -1608,7 +1667,16 @@ export default function TransactionsPage() {
                     />
                   </th>
                   <ColumnHeader label="Data" sortKey="date" isDateFilter />
-                  <ColumnHeader label="Descrição" sortKey="description" />
+                  <ColumnHeader
+                    label="Descrição"
+                    sortKey="description"
+                    filterType="description"
+                    textFilterValue={descriptionColumnFilter}
+                    onTextFilterChange={setDescriptionColumnFilter}
+                    onTextFilterClear={() => setDescriptionColumnFilter('')}
+                    textFilterPlaceholder="Buscar descrição..."
+                    textFilterInputLabel="Filtro de descrição"
+                  />
                   <ColumnHeader 
                     label="Categoria" 
                     sortKey="category" 
@@ -1633,7 +1701,16 @@ export default function TransactionsPage() {
                     filterOptions={uniquePaymentMethods.map(p => ({ id: p?.id || '', name: p?.name || '' }))}
                     selectedFilters={columnFilters.paymentMethods}
                   />
-                  <ColumnHeader label="Valor" sortKey="amount" />
+                  <ColumnHeader
+                    label="Valor"
+                    sortKey="amount"
+                    filterType="amount"
+                    textFilterValue={amountColumnFilter}
+                    onTextFilterChange={setAmountColumnFilter}
+                    onTextFilterClear={() => setAmountColumnFilter('')}
+                    textFilterPlaceholder="Buscar valor..."
+                    textFilterInputLabel="Filtro de valor"
+                  />
                   <ColumnHeader 
                     label="Status" 
                     sortKey="status" 
@@ -1740,8 +1817,7 @@ export default function TransactionsPage() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
                         {(() => {
-                          const isOverdue = transaction.status !== 'completed' && 
-                            new Date(transaction.dueDate || transaction.transactionDate) < new Date(new Date().setHours(0, 0, 0, 0));
+                          const effectiveStatus = getEffectiveStatus(transaction as any);
                           
                           const isLoading = loadingTransactionId === transaction.id;
                           return (
@@ -1753,9 +1829,9 @@ export default function TransactionsPage() {
                                   ? 'opacity-50 cursor-not-allowed'
                                   : 'hover:opacity-80'
                               } ${
-                                transaction.status === 'completed'
+                                effectiveStatus === 'completed'
                                   ? 'bg-green-100 text-green-800'
-                                  : isOverdue
+                                  : effectiveStatus === 'overdue'
                                     ? 'bg-red-100 text-red-800'
                                     : 'bg-yellow-100 text-yellow-800'
                               }`}
@@ -1766,12 +1842,12 @@ export default function TransactionsPage() {
                                   <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
                                   Atualizando...
                                 </>
-                              ) : transaction.status === 'completed' ? (
+                              ) : effectiveStatus === 'completed' ? (
                                 <>
                                   <CheckCircle className="w-3 h-3" />
                                   Paga
                                 </>
-                              ) : isOverdue ? (
+                              ) : effectiveStatus === 'overdue' ? (
                                 <>
                                   <XCircle className="w-3 h-3" />
                                   Atrasado
