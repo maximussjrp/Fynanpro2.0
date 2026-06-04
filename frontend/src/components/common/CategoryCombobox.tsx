@@ -32,6 +32,20 @@ interface Props {
   accentColor?: string;
 }
 
+function getCategoryTypeLabel(type: string): string {
+  if (type === 'income') return 'Receita';
+  if (type === 'expense') return 'Despesa';
+  if (type === 'patrimonial') return 'Patrimonial';
+  return type;
+}
+
+function getCategoryTypeBadgeClass(type: string): string {
+  if (type === 'income') return 'bg-green-100 text-green-700';
+  if (type === 'expense') return 'bg-red-100 text-red-700';
+  if (type === 'patrimonial') return 'bg-sky-100 text-sky-700';
+  return 'bg-gray-100 text-gray-700';
+}
+
 /**
  * Combobox de categorias com busca, agrupamento por categoria-pai
  * (level 1) e filtro por tipo (income/expense). Substitui o <select>
@@ -234,12 +248,8 @@ export default function CategoryCombobox({
                     <span className="font-semibold text-gray-800 flex-1 truncate">
                       {g.header.name}
                     </span>
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
-                      g.header.type === 'income'
-                        ? 'bg-green-100 text-green-700'
-                        : 'bg-red-100 text-red-700'
-                    }`}>
-                      {g.header.type === 'income' ? 'Receita' : 'Despesa'}
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${getCategoryTypeBadgeClass(g.header.type)}`}>
+                      {getCategoryTypeLabel(g.header.type)}
                     </span>
                   </button>
                   {g.items.map((c) => (

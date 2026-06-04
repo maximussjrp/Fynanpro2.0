@@ -5,7 +5,7 @@ import { successResponse, errorResponse } from '../utils/response';
 import { log } from '../utils/logger';
 import { cacheService, CacheTTL, CacheNamespace } from '../services/cache.service';
 import { parsePeriod } from '../utils/date-helpers';
-import { expandCategoryAllocations } from '../utils/category-allocations';
+import { expandCategoryAllocations, isResultAllocation } from '../utils/category-allocations';
 import { overdueWhere } from '../utils/overdue';
 
 const router = Router();
@@ -50,13 +50,35 @@ router.get('/balance-summary', async (req: AuthRequest, res) => {
         ],
       },
       select: {
+        id: true,
         type: true,
         amount: true,
         status: true,
         transactionDate: true,
         recurringBillId: true, // Sprint 2: usado para evitar dupla contagem com pendingOccurrences
+        categoryId: true,
+        category: {
+          select: {
+            id: true,
+            type: true,
+          },
+        },
+        categorySplits: {
+          select: {
+            categoryId: true,
+            amount: true,
+            category: {
+              select: {
+                id: true,
+                type: true,
+              },
+            },
+          },
+        },
       },
     });
+
+    const resultTransactions = expandCategoryAllocations(transactions).filter(isResultAllocation);
 
     // Buscar ocorrências pendentes/atrasadas de recorrências no período
     // (Sprint 2 / atrasado único: status IN [pending, overdue])
@@ -80,15 +102,15 @@ router.get('/balance-summary', async (req: AuthRequest, res) => {
     });
 
     // RECEITAS
-    const receivedIncome = transactions
+    const receivedIncome = resultTransactions
       .filter(t => t.type === 'income' && t.status === 'completed')
-      .reduce((sum, t) => sum + Number(t.amount), 0);
+      .reduce((sum, t) => sum + t.amount, 0);
 
     // Sprint 2: pending transactions de origem recorrente são IGNORADAS aqui —
     // sua projeção já vem de pendingOccurrences (fonte única de verdade).
-    const pendingIncomeTransactions = transactions
+    const pendingIncomeTransactions = resultTransactions
       .filter(t => t.type === 'income' && t.status === 'pending' && !t.recurringBillId)
-      .reduce((sum, t) => sum + Number(t.amount), 0);
+      .reduce((sum, t) => sum + t.amount, 0);
 
     const pendingIncomeOccurrences = pendingOccurrences
       .filter(occ => occ.recurringBill?.type === 'income')
@@ -98,14 +120,14 @@ router.get('/balance-summary', async (req: AuthRequest, res) => {
     const totalIncome = receivedIncome + pendingIncome;
 
     // DESPESAS
-    const paidExpense = transactions
+    const paidExpense = resultTransactions
       .filter(t => t.type === 'expense' && t.status === 'completed')
-      .reduce((sum, t) => sum + Number(t.amount), 0);
+      .reduce((sum, t) => sum + t.amount, 0);
 
     // Sprint 2: idem para despesas — não somar pendentes recorrentes 2x.
-    const pendingExpenseTransactions = transactions
+    const pendingExpenseTransactions = resultTransactions
       .filter(t => t.type === 'expense' && t.status === 'pending' && !t.recurringBillId)
-      .reduce((sum, t) => sum + Number(t.amount), 0);
+      .reduce((sum, t) => sum + t.amount, 0);
 
     const pendingExpenseOccurrences = pendingOccurrences
       .filter(occ => occ.recurringBill?.type === 'expense')
@@ -120,15 +142,16 @@ router.get('/balance-summary', async (req: AuthRequest, res) => {
 
     // Calcular saldo por mês
     const monthlyBalances: any = {};
-    transactions.forEach(t => {
-      const month = t.transactionDate.toISOString().substring(0, 7); // YYYY-MM
+    resultTransactions.forEach(t => {
+      if (!t.transactionDate) return;
+      const month = new Date(t.transactionDate).toISOString().substring(0, 7); // YYYY-MM
       if (!monthlyBalances[month]) {
         monthlyBalances[month] = { income: 0, expense: 0 };
       }
       if (t.type === 'income') {
-        monthlyBalances[month].income += Number(t.amount);
+        monthlyBalances[month].income += t.amount;
       } else if (t.type === 'expense') {
-        monthlyBalances[month].expense += Number(t.amount);
+        monthlyBalances[month].expense += t.amount;
       }
     });
 
@@ -211,17 +234,29 @@ router.get('/expense-ranking', async (req: AuthRequest, res) => {
         amount: true,
         categoryId: true,
         type: true,
+        category: {
+          select: {
+            id: true,
+            type: true,
+          },
+        },
         categorySplits: {
           select: {
             categoryId: true,
             amount: true,
+            category: {
+              select: {
+                id: true,
+                type: true,
+              },
+            },
           },
         },
       },
     });
 
     // Buscar categorias únicas apenas das transações encontradas
-    const expenseAllocations = expandCategoryAllocations(expenses);
+    const expenseAllocations = expandCategoryAllocations(expenses).filter(isResultAllocation);
     const categoryIds = [...new Set(expenseAllocations.map(e => e.categoryId).filter(Boolean))];
     const categories = await prisma.category.findMany({
       where: { tenantId, deletedAt: null },
@@ -351,17 +386,29 @@ router.get('/income-ranking', async (req: AuthRequest, res) => {
         amount: true,
         categoryId: true,
         type: true,
+        category: {
+          select: {
+            id: true,
+            type: true,
+          },
+        },
         categorySplits: {
           select: {
             categoryId: true,
             amount: true,
+            category: {
+              select: {
+                id: true,
+                type: true,
+              },
+            },
           },
         },
       },
     });
 
     // Buscar categorias únicas
-    const incomeAllocations = expandCategoryAllocations(incomes);
+    const incomeAllocations = expandCategoryAllocations(incomes).filter(isResultAllocation);
     const categoryIds = [...new Set(incomeAllocations.map(e => e.categoryId).filter(Boolean))];
     const categories = await prisma.category.findMany({
       where: { tenantId, deletedAt: null },
@@ -456,7 +503,26 @@ router.get('/income-vs-expenses', async (req: AuthRequest, res) => {
         type: { in: ['income', 'expense'] },
         deletedAt: null,
       },
+      include: {
+        category: {
+          select: {
+            id: true,
+            type: true,
+          },
+        },
+        categorySplits: {
+          include: {
+            category: {
+              select: {
+                id: true,
+                type: true,
+              },
+            },
+          },
+        },
+      },
     });
+    const resultTransactions = expandCategoryAllocations(transactions).filter(isResultAllocation);
 
     // Sprint 2 / Projected values: usar OCORRÊNCIAS (RecurringBillOccurrence)
     // como única fonte de verdade — não somar masters separadamente.
@@ -509,8 +575,9 @@ router.get('/income-vs-expenses', async (req: AuthRequest, res) => {
     }
     
     // Adicionar transações realizadas
-    transactions.forEach(t => {
-      const month = t.transactionDate.toISOString().substring(0, 7);
+    resultTransactions.forEach(t => {
+      if (!t.transactionDate) return;
+      const month = new Date(t.transactionDate).toISOString().substring(0, 7);
       if (!monthlyData[month]) {
         monthlyData[month] = {
           month,
@@ -520,7 +587,7 @@ router.get('/income-vs-expenses', async (req: AuthRequest, res) => {
           projectedExpense: 0,
         };
       }
-      const amount = Number(t.amount);
+      const amount = t.amount;
       if (t.type === 'income') {
         monthlyData[month].realizedIncome += amount;
       } else if (t.type === 'expense') {
@@ -621,15 +688,34 @@ router.get('/summary', async (req: AuthRequest, res) => {
         status: 'completed',
         deletedAt: null,
       },
+      include: {
+        category: {
+          select: {
+            id: true,
+            type: true,
+          },
+        },
+        categorySplits: {
+          include: {
+            category: {
+              select: {
+                id: true,
+                type: true,
+              },
+            },
+          },
+        },
+      },
     });
+    const resultAllocations = expandCategoryAllocations(transactions).filter(isResultAllocation);
 
-    const income = transactions
+    const income = resultAllocations
       .filter(t => t.type === 'income')
-      .reduce((sum, t) => sum + Number(t.amount), 0);
+      .reduce((sum, t) => sum + t.amount, 0);
 
-    const expense = transactions
+    const expense = resultAllocations
       .filter(t => t.type === 'expense')
-      .reduce((sum, t) => sum + Number(t.amount), 0);
+      .reduce((sum, t) => sum + t.amount, 0);
 
     // Contas bancárias
     const bankAccounts = await prisma.bankAccount.findMany({
@@ -680,6 +766,24 @@ router.get('/insights', async (req: AuthRequest, res) => {
           type: { in: ['income', 'expense'] },
           deletedAt: null,
         },
+        include: {
+          category: {
+            select: {
+              id: true,
+              type: true,
+            },
+          },
+          categorySplits: {
+            include: {
+              category: {
+                select: {
+                  id: true,
+                  type: true,
+                },
+              },
+            },
+          },
+        },
       }),
       prisma.transaction.findMany({
         where: {
@@ -688,25 +792,45 @@ router.get('/insights', async (req: AuthRequest, res) => {
           type: { in: ['income', 'expense'] },
           deletedAt: null,
         },
+        include: {
+          category: {
+            select: {
+              id: true,
+              type: true,
+            },
+          },
+          categorySplits: {
+            include: {
+              category: {
+                select: {
+                  id: true,
+                  type: true,
+                },
+              },
+            },
+          },
+        },
       }),
     ]);
+    const currentMonthAllocations = expandCategoryAllocations(currentMonthTransactions).filter(isResultAllocation);
+    const lastMonthAllocations = expandCategoryAllocations(lastMonthTransactions).filter(isResultAllocation);
 
     // Calcular totais
-    const currentIncome = currentMonthTransactions
+    const currentIncome = currentMonthAllocations
       .filter(t => t.type === 'income')
-      .reduce((sum, t) => sum + Number(t.amount), 0);
+      .reduce((sum, t) => sum + t.amount, 0);
     
-    const currentExpense = currentMonthTransactions
+    const currentExpense = currentMonthAllocations
       .filter(t => t.type === 'expense')
-      .reduce((sum, t) => sum + Number(t.amount), 0);
+      .reduce((sum, t) => sum + t.amount, 0);
 
-    const lastIncome = lastMonthTransactions
+    const lastIncome = lastMonthAllocations
       .filter(t => t.type === 'income')
-      .reduce((sum, t) => sum + Number(t.amount), 0);
+      .reduce((sum, t) => sum + t.amount, 0);
     
-    const lastExpense = lastMonthTransactions
+    const lastExpense = lastMonthAllocations
       .filter(t => t.type === 'expense')
-      .reduce((sum, t) => sum + Number(t.amount), 0);
+      .reduce((sum, t) => sum + t.amount, 0);
 
     // Calcular variações percentuais
     const incomeVariation = lastIncome > 0 ? ((currentIncome - lastIncome) / lastIncome) * 100 : 0;
@@ -714,11 +838,12 @@ router.get('/insights', async (req: AuthRequest, res) => {
 
     // Insight: Gastos por dia da semana
     const expensesByDayOfWeek = [0, 0, 0, 0, 0, 0, 0]; // Dom a Sáb
-    currentMonthTransactions
+    currentMonthAllocations
       .filter(t => t.type === 'expense')
       .forEach(t => {
+        if (!t.transactionDate) return;
         const day = new Date(t.transactionDate).getDay();
-        expensesByDayOfWeek[day] += Number(t.amount);
+        expensesByDayOfWeek[day] += t.amount;
       });
 
     const dayNames = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
@@ -910,8 +1035,18 @@ router.get('/today-summary', async (req: AuthRequest, res) => {
         amount: true,
         description: true,
         transactionDate: true,
+        categoryId: true,
         category: {
-          select: { name: true, icon: true }
+          select: { id: true, name: true, icon: true, type: true }
+        },
+        categorySplits: {
+          select: {
+            categoryId: true,
+            amount: true,
+            category: {
+              select: { id: true, type: true },
+            },
+          },
         },
       },
     });
@@ -947,12 +1082,23 @@ router.get('/today-summary', async (req: AuthRequest, res) => {
       },
       select: {
         id: true,
+        type: true,
         amount: true,
         description: true,
         transactionDate: true,
         dueDate: true,
+        categoryId: true,
         category: {
-          select: { name: true, icon: true }
+          select: { id: true, name: true, icon: true, type: true }
+        },
+        categorySplits: {
+          select: {
+            categoryId: true,
+            amount: true,
+            category: {
+              select: { id: true, type: true },
+            },
+          },
         },
       },
       orderBy: {
@@ -986,21 +1132,25 @@ router.get('/today-summary', async (req: AuthRequest, res) => {
     });
 
     // Calcular totais do dia
-    const todayIncomeTransactions = todayTransactions.filter(t => t.type === 'income');
-    const todayExpenseTransactions = todayTransactions.filter(t => t.type === 'expense');
+    const todayAllocations = expandCategoryAllocations(todayTransactions).filter(isResultAllocation);
+    const overdueAllocations = expandCategoryAllocations(overdueTransactions).filter(isResultAllocation);
+    const todayResultTransactionIds = new Set(todayAllocations.map(a => a.transactionId).filter(Boolean));
+    const overdueResultTransactionIds = new Set(overdueAllocations.map(a => a.transactionId).filter(Boolean));
+    const todayIncomeTransactions = todayTransactions.filter(t => t.type === 'income' && todayResultTransactionIds.has(t.id));
+    const todayExpenseTransactions = todayTransactions.filter(t => t.type === 'expense' && todayResultTransactionIds.has(t.id));
     const todayIncomeOccurrences = todayOccurrences.filter(o => o.recurringBill?.type === 'income');
     const todayExpenseOccurrences = todayOccurrences.filter(o => o.recurringBill?.type === 'expense');
 
     const incomeToReceiveToday = 
-      todayIncomeTransactions.reduce((sum, t) => sum + Number(t.amount), 0) +
+      todayAllocations.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0) +
       todayIncomeOccurrences.reduce((sum, o) => sum + Number(o.amount), 0);
 
     const expenseToPayToday = 
-      todayExpenseTransactions.reduce((sum, t) => sum + Number(t.amount), 0) +
+      todayAllocations.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0) +
       todayExpenseOccurrences.reduce((sum, o) => sum + Number(o.amount), 0);
 
     const overdueTotal = 
-      overdueTransactions.reduce((sum, t) => sum + Number(t.amount), 0) +
+      overdueAllocations.reduce((sum, t) => sum + t.amount, 0) +
       overdueOccurrences.reduce((sum, o) => sum + Number(o.amount), 0);
 
     // Montar lista de receitas do dia
@@ -1045,7 +1195,7 @@ router.get('/today-summary', async (req: AuthRequest, res) => {
 
     // Montar lista de atrasados
     const overdueItems = [
-      ...overdueTransactions.map(t => ({
+      ...overdueTransactions.filter(t => overdueResultTransactionIds.has(t.id)).map(t => ({
         id: t.id,
         type: 'transaction' as const,
         description: t.description,

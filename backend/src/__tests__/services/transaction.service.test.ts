@@ -1278,14 +1278,27 @@ describe('TransactionService', () => {
 
   describe('getSummary()', () => {
     it('deve calcular resumo de transações', async () => {
-      const mockIncomeData = { _sum: { amount: 5000 }, _count: 10 };
-      const mockExpenseData = { _sum: { amount: 3000 }, _count: 15 };
       const mockTransferData = { _sum: { amount: 1000 }, _count: 5 };
 
-      (prisma.transaction.aggregate as jest.Mock)
-        .mockResolvedValueOnce(mockIncomeData)
-        .mockResolvedValueOnce(mockExpenseData)
-        .mockResolvedValueOnce(mockTransferData);
+      (prisma.transaction.findMany as jest.Mock).mockResolvedValue([
+        {
+          id: 'income-1',
+          type: 'income',
+          amount: 5000,
+          categoryId: 'cat-income',
+          category: { id: 'cat-income', type: 'income' },
+          categorySplits: [],
+        },
+        {
+          id: 'expense-1',
+          type: 'expense',
+          amount: 3000,
+          categoryId: 'cat-expense',
+          category: { id: 'cat-expense', type: 'expense' },
+          categorySplits: [],
+        },
+      ]);
+      (prisma.transaction.aggregate as jest.Mock).mockResolvedValueOnce(mockTransferData);
       (prisma.transaction.count as jest.Mock).mockResolvedValue(30);
 
       const result = await transactionService.getSummary('tenant-123', {
@@ -1297,6 +1310,47 @@ describe('TransactionService', () => {
       expect(result.totalExpense).toBe(3000);
       expect(result.balance).toBe(2000); // 5000 - 3000
       expect(result.transactionCount).toBe(30); // 10 + 15 + 5
+    });
+
+    it('excludes patrimonial categories from result summary', async () => {
+      (prisma.transaction.findMany as jest.Mock).mockResolvedValue([
+        {
+          id: 'income-1',
+          type: 'income',
+          amount: 5000,
+          categoryId: 'cat-income',
+          category: { id: 'cat-income', type: 'income' },
+          categorySplits: [],
+        },
+        {
+          id: 'loan-out',
+          type: 'expense',
+          amount: 2000,
+          categoryId: 'cat-patrimonial',
+          category: { id: 'cat-patrimonial', type: 'patrimonial' },
+          categorySplits: [],
+        },
+        {
+          id: 'loan-back',
+          type: 'income',
+          amount: 2000,
+          categoryId: 'cat-patrimonial',
+          category: { id: 'cat-patrimonial', type: 'patrimonial' },
+          categorySplits: [],
+        },
+      ]);
+      (prisma.transaction.aggregate as jest.Mock).mockResolvedValueOnce({ _sum: { amount: 0 }, _count: 0 });
+      (prisma.transaction.count as jest.Mock).mockResolvedValue(3);
+
+      const result = await transactionService.getSummary('tenant-123', {
+        page: 1,
+        limit: 10,
+      });
+
+      expect(result.totalIncome).toBe(5000);
+      expect(result.totalExpense).toBe(0);
+      expect(result.balance).toBe(5000);
+      expect(result.transactionCount).toBe(3);
     });
 
     it('deve filtrar resumo por período', async () => {

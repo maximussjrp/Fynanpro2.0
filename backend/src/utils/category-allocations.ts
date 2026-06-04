@@ -11,6 +11,9 @@ type TransactionLike = {
   id?: string;
   amount: unknown;
   type: string;
+  status?: string | null;
+  transactionDate?: Date | string | null;
+  recurringBillId?: string | null;
   categoryId?: string | null;
   category?: AllocationCategory | null;
   categorySplits?: Array<{
@@ -25,8 +28,21 @@ export type CategoryAllocation = {
   categoryId: string | null;
   amount: number;
   type: string;
+  status?: string | null;
+  transactionDate?: Date | string | null;
+  recurringBillId?: string | null;
   category?: AllocationCategory | null;
 };
+
+export const PATRIMONIAL_CATEGORY_TYPE = 'patrimonial';
+
+export function isPatrimonialCategory(category?: AllocationCategory | null): boolean {
+  return category?.type === PATRIMONIAL_CATEGORY_TYPE;
+}
+
+export function isResultAllocation(allocation: CategoryAllocation): boolean {
+  return !isPatrimonialCategory(allocation.category);
+}
 
 function toNumber(value: unknown): number {
   if (typeof value === 'number') return value;
@@ -45,6 +61,9 @@ export function expandCategoryAllocations(transactions: TransactionLike[]): Cate
         categoryId: split.categoryId,
         amount: toNumber(split.amount),
         type: transaction.type,
+        status: transaction.status,
+        transactionDate: transaction.transactionDate,
+        recurringBillId: transaction.recurringBillId,
         category: split.category || null,
       }));
     }
@@ -54,6 +73,9 @@ export function expandCategoryAllocations(transactions: TransactionLike[]): Cate
       categoryId: transaction.categoryId || null,
       amount: toNumber(transaction.amount),
       type: transaction.type,
+      status: transaction.status,
+      transactionDate: transaction.transactionDate,
+      recurringBillId: transaction.recurringBillId,
       category: transaction.category || null,
     }];
   });

@@ -4,7 +4,7 @@ import { AuthRequest, authenticateToken } from '../middleware/auth';
 import { log } from '../utils/logger';
 import { parsePeriod } from '../utils/date-helpers';
 import { autoClassifyCategory } from '../contracts/energy-auto-classification';
-import { expandCategoryAllocations } from '../utils/category-allocations';
+import { expandCategoryAllocations, isResultAllocation } from '../utils/category-allocations';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -33,17 +33,36 @@ router.get('/cash-flow', authenticateToken, async (req: AuthRequest, res: Respon
         status: 'completed',
         deletedAt: null
       },
+      include: {
+        category: {
+          select: {
+            id: true,
+            type: true,
+          },
+        },
+        categorySplits: {
+          include: {
+            category: {
+              select: {
+                id: true,
+                type: true,
+              },
+            },
+          },
+        },
+      },
       orderBy: { transactionDate: 'asc' }
     });
+    const resultAllocations = expandCategoryAllocations(transactions).filter(isResultAllocation);
 
     // Calcular totais
-    const totalIncome = transactions
+    const totalIncome = resultAllocations
       .filter(t => t.type === 'income')
-      .reduce((sum, t) => sum + Number(t.amount), 0);
+      .reduce((sum, t) => sum + t.amount, 0);
     
-    const totalExpense = transactions
+    const totalExpense = resultAllocations
       .filter(t => t.type === 'expense')
-      .reduce((sum, t) => sum + Number(t.amount), 0);
+      .reduce((sum, t) => sum + t.amount, 0);
 
     const netCashFlow = totalIncome - totalExpense;
     const savingsRate = totalIncome > 0 ? (netCashFlow / totalIncome) * 100 : 0;
@@ -51,7 +70,8 @@ router.get('/cash-flow', authenticateToken, async (req: AuthRequest, res: Respon
     // Agrupar por período
     const timelineMap = new Map<string, { income: number; expense: number }>();
     
-    transactions.forEach(t => {
+    resultAllocations.forEach(t => {
+      if (!t.transactionDate) return;
       const date = new Date(t.transactionDate);
       let key: string;
       
@@ -70,9 +90,9 @@ router.get('/cash-flow', authenticateToken, async (req: AuthRequest, res: Respon
 
       const data = timelineMap.get(key)!;
       if (t.type === 'income') {
-        data.income += Number(t.amount);
+        data.income += t.amount;
       } else if (t.type === 'expense') {
-        data.expense += Number(t.amount);
+        data.expense += t.amount;
       }
     });
 
@@ -220,7 +240,7 @@ router.get('/category-analysis', authenticateToken, async (req: AuthRequest, res
       budget?: number;
     }>();
 
-    const allocations = expandCategoryAllocations(transactions);
+    const allocations = expandCategoryAllocations(transactions).filter(isResultAllocation);
 
     allocations.forEach(t => {
       if (!t.category || !t.categoryId) return;
@@ -325,10 +345,22 @@ router.get('/hierarchical-categories', authenticateToken, async (req: AuthReques
         categoryId: true,
         amount: true,
         type: true,
+        category: {
+          select: {
+            id: true,
+            type: true,
+          },
+        },
         categorySplits: {
           select: {
             categoryId: true,
-            amount: true
+            amount: true,
+            category: {
+              select: {
+                id: true,
+                type: true,
+              },
+            },
           }
         }
       }
@@ -337,7 +369,7 @@ router.get('/hierarchical-categories', authenticateToken, async (req: AuthReques
     // Mapear totais por categoria
     const categoryTotals = new Map<string, { income: number; expense: number; count: number }>();
     
-    const allocations = expandCategoryAllocations(transactions);
+    const allocations = expandCategoryAllocations(transactions).filter(isResultAllocation);
 
     allocations.forEach(t => {
       if (!t.categoryId) return;
@@ -575,13 +607,33 @@ router.get('/income-vs-expense', authenticateToken, async (req: AuthRequest, res
         status: 'completed',
         deletedAt: null
       },
+      include: {
+        category: {
+          select: {
+            id: true,
+            type: true,
+          },
+        },
+        categorySplits: {
+          include: {
+            category: {
+              select: {
+                id: true,
+                type: true,
+              },
+            },
+          },
+        },
+      },
       orderBy: { transactionDate: 'asc' }
     });
+    const resultAllocations = expandCategoryAllocations(transactions).filter(isResultAllocation);
 
     // Agrupar por período
     const periodMap = new Map<string, { income: number; expense: number }>();
 
-    transactions.forEach(t => {
+    resultAllocations.forEach(t => {
+      if (!t.transactionDate) return;
       const date = new Date(t.transactionDate);
       let key: string;
 
@@ -598,9 +650,9 @@ router.get('/income-vs-expense', authenticateToken, async (req: AuthRequest, res
 
       const data = periodMap.get(key)!;
       if (t.type === 'income') {
-        data.income += Number(t.amount);
+        data.income += t.amount;
       } else if (t.type === 'expense') {
-        data.expense += Number(t.amount);
+        data.expense += t.amount;
       }
     });
 
@@ -679,10 +731,22 @@ router.get('/trends', authenticateToken, async (req: AuthRequest, res: Response)
         amount: true,
         transactionDate: true,
         categoryId: true,
+        category: {
+          select: {
+            id: true,
+            type: true,
+          },
+        },
         categorySplits: {
           select: {
             categoryId: true,
             amount: true,
+            category: {
+              select: {
+                id: true,
+                type: true,
+              },
+            },
           }
         }
       },
@@ -703,9 +767,9 @@ router.get('/trends', authenticateToken, async (req: AuthRequest, res: Response)
       const data = monthlyMap.get(key)!;
       data.transactions++;
 
-      const allocations = expandCategoryAllocations([t]).filter(allocation =>
-        categoryId ? allocation.categoryId === (categoryId as string) : true
-      );
+      const allocations = expandCategoryAllocations([t])
+        .filter(isResultAllocation)
+        .filter(allocation => categoryId ? allocation.categoryId === (categoryId as string) : true);
 
       allocations.forEach(allocation => {
         if (allocation.type === 'income') {
@@ -837,10 +901,22 @@ router.get('/dre', authenticateToken, async (req: AuthRequest, res: Response) =>
         type: true,
         status: true,
         transactionDate: true,
+        category: {
+          select: {
+            id: true,
+            type: true,
+          },
+        },
         categorySplits: {
           select: {
             categoryId: true,
-            amount: true
+            amount: true,
+            category: {
+              select: {
+                id: true,
+                type: true,
+              },
+            },
           }
         }
       }
@@ -867,7 +943,7 @@ router.get('/dre', authenticateToken, async (req: AuthRequest, res: Response) =>
 
     // Preencher com transações
     transactions.forEach(t => {
-      const allocations = expandCategoryAllocations([t]);
+      const allocations = expandCategoryAllocations([t]).filter(isResultAllocation);
       
       const month = new Date(t.transactionDate).getMonth();
       allocations.forEach(allocation => {
@@ -1463,16 +1539,29 @@ router.get('/budgets-summary', authenticateToken, async (req: AuthRequest, res: 
             type: true,
             amount: true,
             categoryId: true,
+            category: {
+              select: {
+                id: true,
+                type: true,
+              },
+            },
             categorySplits: {
               select: {
                 categoryId: true,
                 amount: true,
+                category: {
+                  select: {
+                    id: true,
+                    type: true,
+                  },
+                },
               },
             },
           },
         });
 
         const spent = expandCategoryAllocations(transactions)
+          .filter(isResultAllocation)
           .filter(allocation => allocation.categoryId === budget.categoryId)
           .reduce((sum, allocation) => sum + allocation.amount, 0);
         const percentage = (spent / Number(budget.amount)) * 100;
@@ -1922,17 +2011,29 @@ router.get('/top-pending-categories', authenticateToken, async (req: AuthRequest
         amount: true,
         type: true,
         categoryId: true,
+        category: {
+          select: {
+            id: true,
+            type: true,
+          },
+        },
         categorySplits: {
           select: {
             categoryId: true,
             amount: true,
+            category: {
+              select: {
+                id: true,
+                type: true,
+              },
+            },
           },
         },
       },
     });
 
     const pendingByCategoryMap = new Map<string, { totalAmount: number; count: number }>();
-    const allocations = expandCategoryAllocations(pendingTransactions);
+    const allocations = expandCategoryAllocations(pendingTransactions).filter(isResultAllocation);
 
     allocations.forEach(allocation => {
       if (!allocation.categoryId) return;

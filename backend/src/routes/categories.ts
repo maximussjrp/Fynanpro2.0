@@ -4,8 +4,10 @@ import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { successResponse, errorResponse } from '../utils/response';
 import { log } from '../utils/logger';
 import { cacheService, CacheTTL, CacheNamespace } from '../services/cache.service';
+import { PATRIMONIAL_CATEGORY_TYPE } from '../utils/category-allocations';
 
 const router = Router();
+const VALID_CATEGORY_TYPES = ['income', 'expense', PATRIMONIAL_CATEGORY_TYPE] as const;
 
 router.use(authenticateToken);
 
@@ -99,6 +101,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
         byType: {
           income: categories.filter(c => c.type === 'income').length,
           expense: categories.filter(c => c.type === 'expense').length,
+          patrimonial: categories.filter(c => c.type === PATRIMONIAL_CATEGORY_TYPE).length,
         },
         byLevel: {
           level1: categories.filter(c => c.level === 1).length,
@@ -130,8 +133,8 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       return errorResponse(res, 'VALIDATION_ERROR', 'Nome e tipo são obrigatórios', 400);
     }
 
-    if (!['income', 'expense'].includes(type)) {
-      return errorResponse(res, 'VALIDATION_ERROR', 'Tipo deve ser "income" ou "expense"', 400);
+    if (!VALID_CATEGORY_TYPES.includes(type)) {
+      return errorResponse(res, 'VALIDATION_ERROR', 'Tipo deve ser "income", "expense" ou "patrimonial"', 400);
     }
 
     // Determinar nível
@@ -313,6 +316,10 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
     const tenantId = req.tenantId!;
     const { id } = req.params;
     const { name, type, icon, color, parentId, isActive } = req.body;
+
+    if (type && !VALID_CATEGORY_TYPES.includes(type)) {
+      return errorResponse(res, 'VALIDATION_ERROR', 'Tipo deve ser "income", "expense" ou "patrimonial"', 400);
+    }
 
     // Verificar se categoria existe e pertence ao tenant
     const category = await prisma.category.findFirst({

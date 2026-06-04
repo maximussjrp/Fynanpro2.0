@@ -2224,15 +2224,15 @@ export default function TransactionsPage() {
                           <div className="flex items-center gap-3">
                             <span
                               className="w-8 h-8 rounded-lg flex items-center justify-center text-lg"
-                              style={{ backgroundColor: category.color || (category.type === 'income' ? '#dcfce7' : '#fee2e2') }}
+                              style={{ backgroundColor: category.color || (category.type === 'income' ? '#dcfce7' : category.type === 'patrimonial' ? '#e0f2fe' : '#fee2e2') }}
                             >
-                              {category.icon || (category.type === 'income' ? '💰' : '💸')}
+                              {category.icon || (category.type === 'income' ? '💰' : category.type === 'patrimonial' ? '↔' : '💸')}
                             </span>
                             <div>
                               <span className="font-medium text-gray-800">{category.name}</span>
                               <div className="flex items-center gap-2 text-xs text-gray-500">
-                                <span className={`px-2 py-0.5 rounded-full ${category.type === 'income' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                                  {category.type === 'income' ? 'Receita' : 'Despesa'}
+                                <span className={`px-2 py-0.5 rounded-full ${category.type === 'income' ? 'bg-green-100 text-green-700' : category.type === 'patrimonial' ? 'bg-sky-100 text-sky-700' : 'bg-red-100 text-red-700'}`}>
+                                  {category.type === 'income' ? 'Receita' : category.type === 'patrimonial' ? 'Patrimonial' : 'Despesa'}
                                 </span>
                                 {category.level && category.level > 0 && (
                                   <span className="text-gray-400">Subcategoria</span>

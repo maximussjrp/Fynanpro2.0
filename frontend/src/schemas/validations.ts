@@ -58,7 +58,7 @@ export const categorySchema = z.object({
     .string({ required_error: 'Ícone é obrigatório' })
     .min(1, 'Ícone é obrigatório')
     .max(10, 'Ícone muito longo'),
-  type: z.enum(['income', 'expense'], {
+  type: z.enum(['income', 'expense', 'patrimonial'], {
     required_error: 'Tipo é obrigatório',
   }),
   parentId: z.string().uuid('Categoria pai inválida').optional().nullable(),

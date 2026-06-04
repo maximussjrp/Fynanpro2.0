@@ -6,7 +6,11 @@ import { prisma } from '../utils/prisma-client';
 import { log } from '../utils/logger';
 import { CreateTransactionDTO, UpdateTransactionDTO, TransactionFiltersDTO } from '../dtos/transaction.dto';
 import { cacheService, CacheNamespace } from './cache.service';
-import { expandCategoryAllocations } from '../utils/category-allocations';
+import {
+  PATRIMONIAL_CATEGORY_TYPE,
+  expandCategoryAllocations,
+  isResultAllocation,
+} from '../utils/category-allocations';
 import type { AssistantAttribution } from './assistant-audit.service';
 
 /**
@@ -90,6 +94,14 @@ function getBalanceDeltaForTransaction(type: string | undefined | null, rawAmoun
     default:
       return 0;
   }
+}
+
+function isCompatibleCategoryForTransaction(transactionType: string, categoryType?: string | null): boolean {
+  if (categoryType === PATRIMONIAL_CATEGORY_TYPE) {
+    return transactionType === 'income' || transactionType === 'expense';
+  }
+
+  return categoryType === transactionType;
 }
 
 function sameInstant(left?: Date | null, right?: Date | null): boolean {
@@ -186,12 +198,19 @@ async function validateCategorySplits(
   }
 
   const categoryById = new Map(categories.map(category => [category.id, category]));
+  const hasPatrimonialCategory = categories.some(category => category.type === PATRIMONIAL_CATEGORY_TYPE);
+  const hasResultCategory = categories.some(category => category.type !== PATRIMONIAL_CATEGORY_TYPE);
+
+  if (hasPatrimonialCategory && hasResultCategory) {
+    throw new Error('Rateio nao pode misturar categorias patrimoniais com receitas ou despesas');
+  }
+
   for (const split of splits) {
     const category = categoryById.get(split.categoryId);
-    if (transactionType === 'income' && category?.type !== 'income') {
+    if (transactionType === 'income' && !isCompatibleCategoryForTransaction('income', category?.type)) {
       throw new Error('Todas as categorias do rateio precisam ser de receita');
     }
-    if (transactionType === 'expense' && category?.type !== 'expense') {
+    if (transactionType === 'expense' && !isCompatibleCategoryForTransaction('expense', category?.type)) {
       throw new Error('Todas as categorias do rateio precisam ser de despesa');
     }
   }
@@ -504,11 +523,11 @@ export class TransactionService {
         }
 
         // Validate category type matches transaction type
-        if (data.type === 'income' && category.type !== 'income') {
+        if (data.type === 'income' && !isCompatibleCategoryForTransaction('income', category.type)) {
           throw new Error('Categoria não é de receita');
         }
 
-        if (data.type === 'expense' && category.type !== 'expense') {
+        if (data.type === 'expense' && !isCompatibleCategoryForTransaction('expense', category.type)) {
           throw new Error('Categoria não é de despesa');
         }
       }
@@ -732,11 +751,11 @@ export class TransactionService {
         }
 
         const finalType = data.type || existingTransaction.type;
-        if (finalType === 'income' && category.type !== 'income') {
+        if (finalType === 'income' && !isCompatibleCategoryForTransaction('income', category.type)) {
           throw new Error('Categoria não é de receita');
         }
 
-        if (finalType === 'expense' && category.type !== 'expense') {
+        if (finalType === 'expense' && !isCompatibleCategoryForTransaction('expense', category.type)) {
           throw new Error('Categoria não é de despesa');
         }
       }
@@ -1295,18 +1314,30 @@ export class TransactionService {
             type: true,
             amount: true,
             categoryId: true,
+            category: {
+              select: {
+                id: true,
+                type: true,
+              },
+            },
             categorySplits: {
               select: {
                 categoryId: true,
                 amount: true,
+                category: {
+                  select: {
+                    id: true,
+                    type: true,
+                  },
+                },
               },
             },
           },
         });
 
-        const allocations = expandCategoryAllocations(transactions).filter(
-          allocation => allocation.categoryId === filters.categoryId
-        );
+        const allocations = expandCategoryAllocations(transactions)
+          .filter(allocation => allocation.categoryId === filters.categoryId)
+          .filter(isResultAllocation);
 
         const matchedTransactionIds = new Set(allocations.map(allocation => allocation.transactionId).filter(Boolean));
 
@@ -1336,17 +1367,33 @@ export class TransactionService {
         return summary;
       }
 
-      // Get aggregated data
-      const [incomeData, expenseData, transferData, transactionCount] = await Promise.all([
-        prisma.transaction.aggregate({
-          where: { ...where, type: 'income' },
-          _sum: { amount: true },
-          _count: true,
-        }),
-        prisma.transaction.aggregate({
-          where: { ...where, type: 'expense' },
-          _sum: { amount: true },
-          _count: true,
+      const [transactions, transferData, transactionCount] = await Promise.all([
+        prisma.transaction.findMany({
+          where: { ...where, type: { in: ['income', 'expense'] } },
+          select: {
+            id: true,
+            type: true,
+            amount: true,
+            categoryId: true,
+            category: {
+              select: {
+                id: true,
+                type: true,
+              },
+            },
+            categorySplits: {
+              select: {
+                categoryId: true,
+                amount: true,
+                category: {
+                  select: {
+                    id: true,
+                    type: true,
+                  },
+                },
+              },
+            },
+          },
         }),
         prisma.transaction.aggregate({
           where: { ...where, type: 'transfer' },
@@ -1356,8 +1403,13 @@ export class TransactionService {
         prisma.transaction.count({ where }),
       ]);
 
-      const totalIncome = parseFloat(incomeData._sum.amount?.toString() || '0');
-      const totalExpense = parseFloat(expenseData._sum.amount?.toString() || '0');
+      const resultAllocations = expandCategoryAllocations(transactions).filter(isResultAllocation);
+      const totalIncome = resultAllocations
+        .filter(allocation => allocation.type === 'income')
+        .reduce((sum, allocation) => sum + allocation.amount, 0);
+      const totalExpense = resultAllocations
+        .filter(allocation => allocation.type === 'expense')
+        .reduce((sum, allocation) => sum + allocation.amount, 0);
       const totalTransfers = parseFloat(transferData._sum.amount?.toString() || '0');
       const balance = totalIncome - totalExpense;
       const avgTransactionValue = transactionCount > 0 

@@ -411,6 +411,13 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       return errorResponse(res, 'VALIDATION_ERROR', 'Dados inválidos', 400, error.errors);
     }
 
+    if (
+      error.message === 'Categoria incompativel com o tipo da transacao' ||
+      error.message?.includes('Rateio')
+    ) {
+      return errorResponse(res, 'VALIDATION_ERROR', error.message, 400);
+    }
+
     // Business logic errors
     if (
       error.message === 'Categoria não encontrada' ||
@@ -517,6 +524,13 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     log.error('Update transaction error', { error, id: req.params.id, body: req.body, tenantId: req.tenantId });
 
+    if (
+      error.message === 'Categoria incompativel com o tipo da transacao' ||
+      error.message?.includes('Rateio')
+    ) {
+      return errorResponse(res, 'VALIDATION_ERROR', error.message, 400);
+    }
+
     // Zod validation error
     if (error.name === 'ZodError') {
       return errorResponse(res, 'VALIDATION_ERROR', 'Dados inválidos', 400, error.errors);
@@ -568,6 +582,13 @@ router.put('/:id/batch', async (req: AuthRequest, res: Response) => {
     });
   } catch (error: any) {
     log.error('Update batch transaction error', { error, id: req.params.id, body: req.body, tenantId: req.tenantId });
+
+    if (
+      error.message === 'Categoria incompativel com o tipo da transacao' ||
+      error.message?.includes('Rateio')
+    ) {
+      return errorResponse(res, 'VALIDATION_ERROR', error.message, 400);
+    }
 
     // Zod validation error
     if (error.name === 'ZodError') {

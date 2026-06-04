@@ -62,7 +62,7 @@ export default function CategoriesPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [filterType, setFilterType] = useState<'all' | 'income' | 'expense'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'income' | 'expense' | 'patrimonial'>('all');
   const [allExpanded, setAllExpanded] = useState(false);
   
   // Wizard state
@@ -154,6 +154,20 @@ export default function CategoriesPage() {
     if (semantics.isInvestment || future >= Math.max(survival, choice)) return 'priorities';
     if (semantics.isEssential || survival >= Math.max(choice, future)) return 'needs';
     return 'wants';
+  };
+
+  const getCategoryTypeLabel = (type: string) => {
+    if (type === 'income') return 'Receita';
+    if (type === 'expense') return 'Despesa';
+    if (type === 'patrimonial') return 'Mov. patrimonial';
+    return type;
+  };
+
+  const getCategoryTypeBadgeClass = (type: string) => {
+    if (type === 'income') return 'bg-green-100 text-green-800';
+    if (type === 'expense') return 'bg-red-100 text-red-800';
+    if (type === 'patrimonial') return 'bg-sky-100 text-sky-800';
+    return 'bg-gray-100 text-gray-800';
   };
 
   const getSemanticsPayload = (financialGroup: FinancialGroup) => {
@@ -383,9 +397,9 @@ export default function CategoriesPage() {
             {/* Badge de tipo */}
             <span className={`
               hidden sm:inline-block px-2 py-1 rounded text-xs flex-shrink-0
-              ${category.type === 'income' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}
+              ${getCategoryTypeBadgeClass(category.type)}
             `}>
-              {category.type === 'income' ? 'Receita' : 'Despesa'}
+              {getCategoryTypeLabel(category.type)}
             </span>
             {category.type === 'expense' && (
               <span className="hidden sm:inline-block px-2 py-1 rounded text-xs flex-shrink-0 bg-slate-800 text-slate-100">
@@ -613,6 +627,13 @@ export default function CategoriesPage() {
               >
                 Despesas
               </button>
+              <button
+                onClick={() => setFilterType('patrimonial')}
+                className={`px-4 py-2 rounded-lg transition-colors min-h-[44px] whitespace-nowrap touch-manipulation
+                  ${filterType === 'patrimonial' ? 'bg-sky-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+              >
+                Patrimoniais
+              </button>
             </div>
             
             {/* Botão expandir/recolher tudo */}
@@ -698,6 +719,7 @@ export default function CategoriesPage() {
                 >
                   <option value="expense">Despesa</option>
                   <option value="income">Receita</option>
+                  <option value="patrimonial">Movimentação patrimonial</option>
                 </select>
               </div>
 

@@ -583,7 +583,7 @@ export default function TransactionModal({
   };
 
   // Filtrar por tipo e construir hierarquia com busca
-  const categoriesByType = categories.filter(c => c.type === formData.type);
+  const categoriesByType = categories.filter(c => c.type === formData.type || c.type === 'patrimonial');
   const filteredCategories = buildHierarchicalList(categoriesByType, categorySearch);
 
   const handleCategorySelect = (category: Category) => {
