@@ -33,10 +33,55 @@ export class PrismaCategoryLoader implements CategoryLoader {
 
     const rows = await this.db.category.findMany({
       where,
-      select: { id: true, name: true, type: true },
+      select: { id: true, name: true, type: true, parentId: true, level: true },
     });
-    return rows.map(r => ({ id: r.id, name: r.name, type: r.type }));
+    return buildCategoryMatchables(rows);
   }
+}
+
+type CategoryRow = {
+  id: string;
+  name: string;
+  type: string;
+  parentId?: string | null;
+  level?: number | null;
+};
+
+function buildCategoryPath(row: CategoryRow, byId: Map<string, CategoryRow>): string {
+  const names: string[] = [];
+  const seen = new Set<string>();
+  let current: CategoryRow | undefined = row;
+
+  while (current && !seen.has(current.id)) {
+    seen.add(current.id);
+    names.unshift(current.name);
+    current = current.parentId ? byId.get(current.parentId) : undefined;
+  }
+
+  return names.join(' > ');
+}
+
+export function buildCategoryMatchables(rows: CategoryRow[]): CategoryMatchable[] {
+  const byId = new Map(rows.map(r => [r.id, r]));
+
+  return rows.map(r => {
+    const path = buildCategoryPath(r, byId);
+    const aliases = new Set<string>([r.name]);
+    if (path && path !== r.name) {
+      aliases.add(path);
+      aliases.add(path.replace(/\s*>\s*/g, ' '));
+    }
+
+    return {
+      id: r.id,
+      name: path || r.name,
+      type: r.type,
+      parentId: r.parentId ?? null,
+      level: r.level ?? undefined,
+      path: path || r.name,
+      aliases: Array.from(aliases),
+    };
+  });
 }
 
 export interface CategoryResolverOptions {

@@ -16,6 +16,9 @@ export interface CategoryMatchable {
   id: string;
   name: string;
   type: 'income' | 'expense' | string;
+  parentId?: string | null;
+  level?: number;
+  path?: string;
   aliases?: string[];
 }
 

@@ -66,6 +66,24 @@ describe('read tools', () => {
       const call = (mp.category.findMany as jest.Mock).mock.calls[0][0];
       expect(call.where.parentId).toBeNull();
     });
+
+    it('retorna path completo e filtra por busca em categorias netas', async () => {
+      (mp.category.findMany as jest.Mock).mockResolvedValueOnce([
+        { id: 'c1', name: 'Moradia', type: 'expense', parentId: null, level: 1, icon: null, color: null },
+        { id: 'c2', name: 'Manutencao', type: 'expense', parentId: 'c1', level: 2, icon: null, color: null },
+        { id: 'c3', name: 'Pintura', type: 'expense', parentId: 'c2', level: 3, icon: null, color: null },
+      ]);
+
+      const r = await registry.invoke('list_categories', { type: 'expense', search: 'pintura' }, ctx);
+
+      expect(r.ok).toBe(true);
+      if (r.ok) {
+        const d = r.data as any;
+        expect(d.count).toBe(1);
+        expect(d.categories[0].path).toBe('Moradia > Manutencao > Pintura');
+        expect(d.categories[0].level).toBe(3);
+      }
+    });
   });
 
   describe('list_accounts', () => {

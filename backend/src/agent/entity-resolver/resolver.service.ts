@@ -211,9 +211,13 @@ function toClarificationIfNeeded(
 function topCandidates(cs: Candidate<any>[]): Array<{ id: string; name: string; score: number }> {
   return cs.slice(0, 3).map(c => ({
     id: c.entity.id,
-    name: c.entity.name,
+    name: displayEntityName(c.entity),
     score: Math.round(c.score * 100) / 100,
   }));
+}
+
+function displayEntityName(entity: any): string {
+  return entity?.path || entity?.name || '';
 }
 
 function buildAmbiguousMessage(
@@ -221,7 +225,7 @@ function buildAmbiguousMessage(
   query: string,
   cands: Candidate<any>[],
 ): string {
-  const names = cands.slice(0, 3).map(c => c.entity.name);
+  const names = cands.slice(0, 3).map(c => displayEntityName(c.entity));
   const label = kind === 'category' ? 'categoria' : 'conta';
   if (names.length >= 2) {
     const last = names[names.length - 1];

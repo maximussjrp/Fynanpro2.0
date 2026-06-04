@@ -152,6 +152,13 @@ export interface ChatSession {
   currentMessageId?: string | null;
 }
 
+interface ParsedTransactionIntent {
+  type: 'income' | 'expense';
+  amount: number;
+  description: string;
+  date?: string;
+}
+
 // ==================== APRENDIZADO ====================
 
 export interface LearnedPattern {
@@ -224,6 +231,132 @@ function getBrazilHour(): number {
   // Usar toLocaleString com timezone para obter a hora correta em Brasília
   const brazilTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
   return brazilTime.getHours();
+}
+
+function normalizeCategoryLookup(value: string | null | undefined): string {
+  return (value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/^[\W\s]+/, '')
+    .replace(/\s*>\s*/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function enrichCategoriesWithPath<T extends { id: string; name: string; parentId?: string | null }>(
+  categories: T[],
+): Array<T & { path: string }> {
+  const byId = new Map(categories.map(c => [c.id, c]));
+
+  return categories.map(c => {
+    const names: string[] = [];
+    const seen = new Set<string>();
+    let current: T | undefined = c;
+
+    while (current && !seen.has(current.id)) {
+      seen.add(current.id);
+      names.unshift(current.name);
+      current = current.parentId ? byId.get(current.parentId) : undefined;
+    }
+
+    return { ...c, path: names.join(' > ') };
+  });
+}
+
+function normalizeAssistantText(value: string | null | undefined): string {
+  return (value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\w\s>]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export function parseBrazilDateToken(input: string, base = new Date()): string | undefined {
+  const normalized = normalizeAssistantText(input);
+  const date = new Date(base);
+
+  if (/\bontem\b/.test(normalized)) {
+    date.setDate(date.getDate() - 1);
+    return date.toISOString().slice(0, 10);
+  }
+  if (/\bhoje\b/.test(normalized)) {
+    return date.toISOString().slice(0, 10);
+  }
+  if (/\banteontem\b|\bantes de ontem\b/.test(normalized)) {
+    date.setDate(date.getDate() - 2);
+    return date.toISOString().slice(0, 10);
+  }
+
+  const explicit = normalized.match(/\b(\d{1,2})[\/-](\d{1,2})(?:[\/-](\d{2,4}))?\b/);
+  if (!explicit) return undefined;
+
+  const day = Number(explicit[1]);
+  const month = Number(explicit[2]);
+  const yearRaw = explicit[3] ? Number(explicit[3]) : date.getFullYear();
+  const year = yearRaw < 100 ? 2000 + yearRaw : yearRaw;
+  const parsed = new Date(year, month - 1, day);
+
+  if (
+    parsed.getFullYear() !== year ||
+    parsed.getMonth() !== month - 1 ||
+    parsed.getDate() !== day
+  ) {
+    return undefined;
+  }
+
+  return parsed.toISOString().slice(0, 10);
+}
+
+export function parseTransactionIntentFromText(input: string): ParsedTransactionIntent | null {
+  const normalized = normalizeAssistantText(input);
+  const amountMatch = input.match(/(?:r\$\s*)?\d+(?:[\.,]\d{1,2})?/i);
+  if (!amountMatch) return null;
+
+  const amount = parseMoneyValue(amountMatch[0]);
+  if (!amount || amount <= 0) return null;
+
+  const incomeHints = /\b(recebi|ganhei|entrou|caiu|depositaram|vendi|salario|salario|freela|freelance|rendimento|dividendo|reembolso)\b/;
+  const expenseHints = /\b(gastei|paguei|comprei|despesa|gasto|pix|boleto|cartao|debito|credito)\b/;
+  if (!incomeHints.test(normalized) && !expenseHints.test(normalized)) return null;
+
+  const type: 'income' | 'expense' = incomeHints.test(normalized) && !expenseHints.test(normalized)
+    ? 'income'
+    : 'expense';
+
+  let description = input
+    .replace(amountMatch[0], ' ')
+    .replace(/\b(gastei|paguei|comprei|despesa|gasto|recebi|ganhei|entrou|caiu|depositaram|vendi)\b/gi, ' ')
+    .replace(/\b(hoje|ontem|anteontem|antes de ontem)\b/gi, ' ')
+    .replace(/\b(no|na|em|com|de|da|do|para|pra)\s+(pix|boleto|dinheiro|cart[aã]o(?: de)? cr[eé]dito|cart[aã]o(?: de)? d[eé]bito|cr[eé]dito|d[eé]bito)\b/gi, ' ')
+    .replace(/\b(pelo|pela|da conta|do banco)\s+[\w\s]{2,30}$/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  description = description.replace(/^(no|na|em|com|de|da|do|para|pra)\s+/i, '').trim();
+  if (description.length < 2) return null;
+
+  return {
+    type,
+    amount,
+    description,
+    date: parseBrazilDateToken(input),
+  };
+}
+
+export function inferPaymentFromText(input: string): { type: string; name: string } | null {
+  const normalized = normalizeAssistantText(input);
+  if (/\bpix\b/.test(normalized)) return { type: 'pix', name: 'PIX' };
+  if (/\bboleto\b/.test(normalized)) return { type: 'boleto', name: 'Boleto' };
+  if (/\bdinheiro\b|\bespecie\b|\bcash\b/.test(normalized)) return { type: 'cash', name: 'Dinheiro' };
+  if (/\bdebito\b|\bcartao de debito\b/.test(normalized)) return { type: 'debit_card', name: 'Cartao de Debito' };
+  if (/\bcredito\b|\bcartao\b/.test(normalized)) return { type: 'credit_card', name: 'Cartao de Credito' };
+  if (/\btransferencia\b|\btransferi\b|\bted\b|\bdoc\b/.test(normalized)) {
+    return { type: 'transfer', name: 'Transferencia' };
+  }
+  return null;
 }
 
 // ==================== MAPA DE SUGESTÕES DE CATEGORIAS ====================
@@ -954,7 +1087,6 @@ export class ChatbotService {
       const categories = await prisma.category.findMany({
         where: {
           tenantId,
-          level: 1,
           type,
           isActive: true,
           deletedAt: null,
@@ -1652,7 +1784,7 @@ export class ChatbotService {
           isActive: true,
           deletedAt: null,
         },
-        orderBy: { name: 'asc' },
+        orderBy: [{ level: 'asc' }, { name: 'asc' }],
       });
     }
     
@@ -2368,6 +2500,22 @@ export class ChatbotService {
       return this.queryPlanning(session);
     }
     
+    const parsedIntent = parseTransactionIntentFromText(input);
+    if (parsedIntent) {
+      session.context.tempTransaction = {
+        type: parsedIntent.type,
+        amount: parsedIntent.amount,
+        description: parsedIntent.description,
+        date: parsedIntent.date ? new Date(`${parsedIntent.date}T00:00:00`) : undefined,
+      };
+      session.state = parsedIntent.type === 'income'
+        ? ChatState.ADDING_INCOME
+        : ChatState.ADDING_EXPENSE;
+
+      await this.prefillTransactionContextFromText(session, input);
+      return this.suggestCategoryFromDescription(session);
+    }
+
     // Comando específico: planejamento anual
     if (normalized.includes('planejar ano') || normalized.includes('configurar ano') || normalized.includes('onboarding')) {
       return this.startAnnualPlanningFlow(session);
@@ -2539,6 +2687,72 @@ export class ChatbotService {
       response: `Não entendi. Escolha uma opção:\n\n1️⃣ Despesa fixa (conta mensal)\n2️⃣ Receita fixa (salário, renda)`,
       quickReplies: ['Despesa fixa', 'Receita fixa'],
     };
+  }
+
+  private async prefillTransactionContextFromText(session: ChatSession, input: string): Promise<void> {
+    const tx = session.context.tempTransaction;
+    if (!tx) return;
+    const normalized = normalizeAssistantText(input);
+
+    if (!session.context.bankAccounts) {
+      session.context.bankAccounts = await prisma.bankAccount.findMany({
+        where: {
+          tenantId: session.tenantId,
+          isActive: true,
+          deletedAt: null,
+        },
+        orderBy: { name: 'asc' },
+      });
+    }
+
+    const account = (session.context.bankAccounts || []).find((a: any) => {
+      const name = normalizeAssistantText(a.name);
+      const institution = normalizeAssistantText(a.institution);
+      return (name.length >= 3 && normalized.includes(name)) ||
+        (institution.length >= 3 && normalized.includes(institution));
+    });
+
+    if (account) {
+      tx.bankAccountId = account.id;
+      tx.bankAccountName = account.name;
+    }
+
+    const payment = inferPaymentFromText(input);
+    if (!payment) return;
+
+    if (!session.context.paymentMethods) {
+      session.context.paymentMethods = await prisma.paymentMethod.findMany({
+        where: {
+          tenantId: session.tenantId,
+          isActive: true,
+          deletedAt: null,
+        },
+        orderBy: { name: 'asc' },
+      });
+    }
+
+    let paymentMethod = (session.context.paymentMethods || []).find((p: any) => {
+      const name = normalizeAssistantText(p.name);
+      return p.type === payment.type || name === normalizeAssistantText(payment.name);
+    });
+
+    if (!paymentMethod) {
+      paymentMethod = await prisma.paymentMethod.create({
+        data: {
+          tenantId: session.tenantId,
+          name: payment.name,
+          type: payment.type,
+          isActive: true,
+        },
+      });
+      session.context.paymentMethods = [
+        ...(session.context.paymentMethods || []),
+        paymentMethod,
+      ];
+    }
+
+    tx.paymentMethodId = paymentMethod.id;
+    tx.paymentMethodName = paymentMethod.name;
   }
   
   private async handleAddingTransaction(session: ChatSession, input: string) {
@@ -2740,20 +2954,24 @@ export class ChatbotService {
     const accounts = session.context.bankAccounts;
     session.state = ChatState.ASKING_ACCOUNT;
     
-    // Se só tem uma conta, usar e confirmar
+
+    if (session.context.tempTransaction?.bankAccountId) {
+      const selectedAccount = accounts.find((a: any) => a.id === session.context.tempTransaction!.bankAccountId);
+      if (selectedAccount) {
+        session.context.tempTransaction.bankAccountName = selectedAccount.name;
+      }
+      if (session.context.tempTransaction.paymentMethodId) {
+        return this.askProfileOrConfirm(session);
+      }
+      return this.askPaymentMethodForTransaction(session);
+    }
     if (accounts.length === 1) {
       session.context.tempTransaction!.bankAccountId = accounts[0].id;
-      session.state = ChatState.CONFIRMING;
-      
-      return {
-        response: `🧠 Reconheci!\n\n` +
-          `📝 ${description}\n` +
-          `💰 R$ ${formatMoney(amount)}\n` +
-          `🏷️ ${categoryName}\n` +
-          `🏦 ${accounts[0].name}${avgInfo}\n\n` +
-          `Está correto?`,
-        quickReplies: ['Sim, confirmar', 'Mudar categoria', 'Cancelar'],
-      };
+      session.context.tempTransaction!.bankAccountName = accounts[0].name;
+      if (session.context.tempTransaction!.paymentMethodId) {
+        return this.askProfileOrConfirm(session);
+      }
+      return this.askPaymentMethodForTransaction(session);
     }
     
     // Se tem múltiplas contas, perguntar
@@ -2779,16 +2997,18 @@ export class ChatbotService {
       session.context.categories = await prisma.category.findMany({
         where: {
           tenantId: session.tenantId,
-          level: 1,
           type,
           isActive: true,
           deletedAt: null,
         },
-        orderBy: { name: 'asc' },
+        orderBy: [{ level: 'asc' }, { name: 'asc' }],
       });
     }
     
-    const categories = session.context.categories.filter(c => c.type === type);
+    const allCategories = enrichCategoriesWithPath(
+      session.context.categories.filter(c => c.type === type),
+    );
+    const categories = allCategories.filter(c => !c.parentId || c.level === 1);
     const options = categories.map((c, i) => `${i + 1}️⃣ ${c.name}`);
     const quickReplies = categories.slice(0, 4).map(c => c.name.replace(/^\W+\s*/, '')); // Remove emoji
     
@@ -2799,7 +3019,7 @@ export class ChatbotService {
     }
     
     return {
-      response: `Em qual categoria?${hint}`,
+      response: `Em qual categoria?${hint}\n\nVoce tambem pode digitar parte do caminho, como "Moradia > Manutencao".`,
       options: options.slice(0, 10),
       quickReplies,
     };
@@ -2813,17 +3033,19 @@ export class ChatbotService {
       session.context.categories = await prisma.category.findMany({
         where: {
           tenantId: session.tenantId,
-          level: 1,
           type,
           isActive: true,
           deletedAt: null,
         },
-        orderBy: { name: 'asc' },
+        orderBy: [{ level: 'asc' }, { name: 'asc' }],
       });
     }
     
-    const categories = session.context.categories.filter(c => c.type === type);
-    const normalized = input.toLowerCase().trim();
+    const allCategories = enrichCategoriesWithPath(
+      session.context.categories.filter(c => c.type === type),
+    );
+    const categories = allCategories.filter(c => !c.parentId || c.level === 1);
+    const normalized = normalizeCategoryLookup(input);
     
     let selectedCategory: any = null;
     
@@ -2832,16 +3054,21 @@ export class ChatbotService {
     if (!isNaN(num) && num >= 1 && num <= categories.length) {
       selectedCategory = categories[num - 1];
     } else {
-      // Tentar encontrar por nome
-      selectedCategory = categories.find(c => 
-        c.name.toLowerCase().includes(normalized) ||
-        normalized.includes(c.name.toLowerCase().replace(/^\W+\s*/, ''))
-      );
+      // Tentar encontrar por nome ou caminho completo, incluindo categorias netas.
+      selectedCategory = allCategories.find(c => {
+        const name = normalizeCategoryLookup(c.name);
+        const path = normalizeCategoryLookup(c.path);
+        return name === normalized || path === normalized;
+      }) || allCategories.find(c => {
+        const name = normalizeCategoryLookup(c.name);
+        const path = normalizeCategoryLookup(c.path);
+        return name.includes(normalized) || normalized.includes(name) || path.includes(normalized);
+      });
     }
     
     if (selectedCategory) {
       session.context.tempTransaction!.categoryId = selectedCategory.id;
-      session.context.tempTransaction!.categoryName = selectedCategory.name;
+      session.context.tempTransaction!.categoryName = selectedCategory.path || selectedCategory.name;
       
       // Verificar se tem subcategorias
       return this.askSubcategoryOrContinue(session, selectedCategory.id);
@@ -2896,28 +3123,34 @@ export class ChatbotService {
       selected = subcategories[num - 1];
     } else {
       // Tentar encontrar por nome
-      selected = subcategories.find((s: any) => 
-        s.name.toLowerCase().includes(normalized) ||
-        normalized.includes(s.name.toLowerCase())
-      );
+      selected = subcategories.find((s: any) => {
+        const name = normalizeCategoryLookup(s.name);
+        return name === normalized || name.includes(normalized) || normalized.includes(name);
+      });
     }
     
     if (selected) {
       // Usar a subcategoria ao invés da categoria pai
       session.context.tempTransaction!.categoryId = selected.id;
       session.context.tempTransaction!.categoryName = `${session.context.tempTransaction!.categoryName} > ${selected.name}`;
-      return this.askAccount(session);
+      return this.askSubcategoryOrContinue(session, selected.id);
     }
     
     // Se o usuário digitar "pular" ou "nenhuma", usar a categoria pai
-    if (normalized.includes('pular') || normalized.includes('nenhum') || normalized.includes('outr')) {
+    if (
+      normalized.includes('pular') ||
+      normalized.includes('nenhum') ||
+      normalized.includes('outr') ||
+      normalized.includes('usar esta') ||
+      normalized === 'usar'
+    ) {
       return this.askAccount(session);
     }
     
     return {
       response: `🤔 Não encontrei "${input}". Escolha pelo número ou digite "pular" para usar a categoria principal:`,
       options: subcategories.slice(0, 10).map((s: any, i: number) => `${i + 1}️⃣ ${s.icon || ''} ${s.name}`.trim()),
-      quickReplies: ['Pular'],
+      quickReplies: ['Usar esta'],
     };
   }
   
@@ -3230,6 +3463,10 @@ export class ChatbotService {
       confirmMessage += `\n💳 ${paymentMethod.name}`;
     }
     
+
+    if (tx.date) {
+      confirmMessage += `\nData: ${new Date(tx.date).toISOString().slice(0, 10)}`;
+    }
     if (profile) {
       const profileEmoji = profile.documentType === 'CNPJ' ? '🏢' : '👤';
       confirmMessage += `\n${profileEmoji} ${profile.name}`;
@@ -3282,6 +3519,7 @@ export class ChatbotService {
           paymentMethodId: tx.paymentMethodId,
           userProfileId: tx.userProfileId,
           status: 'completed',
+          date: tx.date ? new Date(tx.date).toISOString().slice(0, 10) : undefined,
           isFixed: false,
         },
         {
@@ -3679,6 +3917,7 @@ export class ChatbotService {
     const allocations = expandCategoryAllocations(transactions);
     const byCategoryMap = new Map<string, number>();
     for (const allocation of allocations) {
+      if (!allocation.categoryId) continue;
       const current = byCategoryMap.get(allocation.categoryId) || 0;
       byCategoryMap.set(allocation.categoryId, current + allocation.amount);
     }

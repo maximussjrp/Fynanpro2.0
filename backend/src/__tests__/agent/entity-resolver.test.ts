@@ -105,6 +105,28 @@ describe('resolveCategory', () => {
     expect(r.status).toBe('none');
   });
 
+  it('resolve categoria neta pelo caminho hierarquico', async () => {
+    const r = await resolveCategory('moradia manutencao pintura', { tenantId: 't1' }, {
+      loader: catLoader([
+        { id: 'c1', name: 'Moradia', type: 'expense' },
+        {
+          id: 'c2',
+          name: 'Moradia > Manutencao',
+          type: 'expense',
+          aliases: ['Manutencao', 'Moradia Manutencao'],
+        },
+        {
+          id: 'c3',
+          name: 'Moradia > Manutencao > Pintura',
+          type: 'expense',
+          aliases: ['Pintura', 'Moradia Manutencao Pintura'],
+        },
+      ] as any),
+    });
+    expect(r.status).toBe('unique');
+    if (r.status === 'unique') expect(r.entity.id).toBe('c3');
+  });
+
   it('erro de banco vira status=none', async () => {
     const loader: CategoryLoader = {
       load: async () => {
