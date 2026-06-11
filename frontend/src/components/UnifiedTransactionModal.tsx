@@ -148,18 +148,22 @@ export default function UnifiedTransactionModal({
   const [multipleModeEnabled, setMultipleModeEnabled] = useState(false);
   const [lockedFields, setLockedFields] = useState<{
     type: boolean;
+    description: boolean;
     transactionDate: boolean;
     categoryId: boolean;
     bankAccountId: boolean;
     paymentMethodId: boolean;
     status: boolean;
+    notes: boolean;
   }>({
     type: false,
+    description: false,
     transactionDate: false,
     categoryId: false,
     bankAccountId: false,
     paymentMethodId: false,
     status: false,
+    notes: false,
   });
   const [transactionCount, setTransactionCount] = useState(0);
   
@@ -198,11 +202,13 @@ export default function UnifiedTransactionModal({
       setMultipleModeEnabled(false);
       setLockedFields({
         type: false,
+        description: false,
         transactionDate: false,
         categoryId: false,
         bankAccountId: false,
         paymentMethodId: false,
         status: false,
+        notes: false,
       });
       // Atualizar tab quando initialTab mudar
       if (initialTab) {
@@ -244,23 +250,20 @@ export default function UnifiedTransactionModal({
     const isMultipleMode = multipleModeEnabledRef.current;
     const currentLockedFields = lockedFieldsRef.current;
     
-    console.log('resetForm chamado:', { preserveLocked, isMultipleMode, currentLockedFields });
-    
     if (preserveLocked && isMultipleMode) {
       // Preservar campos bloqueados - manter status atual se bloqueado
       setFormData(prev => {
         const newData = {
           type: currentLockedFields.type ? prev.type : defaultType,
           amount: '',
-          description: '',
+          description: currentLockedFields.description ? prev.description : '',
           transactionDate: currentLockedFields.transactionDate ? prev.transactionDate : new Date().toISOString().split('T')[0],
           categoryId: currentLockedFields.categoryId ? prev.categoryId : '',
           bankAccountId: currentLockedFields.bankAccountId ? prev.bankAccountId : '',
           paymentMethodId: currentLockedFields.paymentMethodId ? prev.paymentMethodId : '',
           status: currentLockedFields.status ? prev.status : (transactionType === 'single' ? 'completed' : 'pending'),
-          notes: '',
+          notes: currentLockedFields.notes ? prev.notes : '',
         };
-        console.log('Novo formData (preservando bloqueados):', newData);
         return newData;
       });
       // Preservar busca de categoria se bloqueada
@@ -425,10 +428,8 @@ export default function UnifiedTransactionModal({
       if (quickPaymentMethod.lastFourDigits && quickPaymentMethod.lastFourDigits.trim()) {
         payload.lastFourDigits = quickPaymentMethod.lastFourDigits.trim();
       }
-      
-      console.log('Criando meio de pagamento:', payload);
+
       const response = await api.post('/payment-methods', payload);
-      console.log('Resposta da API:', response.data);
       
       const newMethod = response.data?.data || response.data;
       if (!newMethod || !newMethod.id) {
@@ -436,8 +437,7 @@ export default function UnifiedTransactionModal({
         toast.error('Erro: resposta inválida da API');
         return;
       }
-      
-      console.log('Método criado:', newMethod);
+
       setPaymentMethods(prev => [...prev, newMethod]);
       setFormData(prev => ({ ...prev, paymentMethodId: newMethod.id }));
       setShowQuickPaymentMethod(false);
@@ -594,7 +594,6 @@ export default function UnifiedTransactionModal({
         };
       }
 
-      console.log('Enviando payload:', { endpoint, payload });
       const response = await api.post(endpoint, payload);
 
       // Incrementar contador de transações
@@ -745,11 +744,13 @@ export default function UnifiedTransactionModal({
                   // Ao desativar, limpar todos os bloqueios
                   setLockedFields({
                     type: false,
+                    description: false,
                     transactionDate: false,
                     categoryId: false,
                     bankAccountId: false,
                     paymentMethodId: false,
                     status: false,
+                    notes: false,
                   });
                 }
               }}
@@ -941,6 +942,7 @@ export default function UnifiedTransactionModal({
               <label className="block text-sm font-semibold text-[#F5F7FB]">
                 Descrição
               </label>
+              <LockButton field="description" />
               {aiAvailable && (
                 <button
                   type="button"
@@ -962,11 +964,16 @@ export default function UnifiedTransactionModal({
               type="text"
               value={formData.description}
               onChange={(e) => {
-                setFormData({ ...formData, description: e.target.value });
+                if (!lockedFields.description) {
+                  setFormData({ ...formData, description: e.target.value });
+                }
                 setAiSuggestion(null); // Limpar sugestão ao mudar descrição
               }}
-              className="w-full px-4 py-3 min-h-[44px] border-2 border-[#2A3F5F]/50 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] transition-all bg-[#1A2332] text-[#F5F7FB] placeholder:text-[#475569]"
+              className={`w-full px-4 py-3 min-h-[44px] border-2 border-[#2A3F5F]/50 rounded-xl focus:ring-2 focus:ring-[#1F4FD8] focus:border-[#1F4FD8] transition-all bg-[#1A2332] text-[#F5F7FB] placeholder:text-[#475569] ${
+                lockedFields.description ? 'bg-[#2A3F5F]/20 border-[#2A3F5F]/70 cursor-not-allowed' : ''
+              }`}
               placeholder="Ex: Salário, Aluguel, Compras... (opcional)"
+              disabled={lockedFields.description}
             />
             {/* Mostrar sugestão da IA */}
             {aiSuggestion && (
@@ -1573,15 +1580,21 @@ export default function UnifiedTransactionModal({
 
           {/* Observações */}
           <div>
-            <label className="block text-sm font-semibold text-[#F5F7FB] mb-2">
-              Observações <span className="text-[#94A3B8] font-normal">(opcional)</span>
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-semibold text-[#F5F7FB]">
+                Observações <span className="text-[#94A3B8] font-normal">(opcional)</span>
+              </label>
+              <LockButton field="notes" />
+            </div>
             <Textarea
               value={formData.notes}
-              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-              className="min-h-[44px] border-2 border-[#2A3F5F]/50 bg-[var(--v2-bg-surface-2)] text-[var(--v2-text-primary)] placeholder:text-[#475569] resize-none"
+              onChange={(e) => !lockedFields.notes && setFormData({ ...formData, notes: e.target.value })}
+              className={`min-h-[44px] border-2 border-[#2A3F5F]/50 bg-[var(--v2-bg-surface-2)] text-[var(--v2-text-primary)] placeholder:text-[#475569] resize-none ${
+                lockedFields.notes ? 'bg-[#2A3F5F]/20 border-[#2A3F5F]/70 cursor-not-allowed' : ''
+              }`}
               rows={2}
               placeholder="Adicione notas ou observações..."
+              disabled={lockedFields.notes}
             />
           </div>
         </form>

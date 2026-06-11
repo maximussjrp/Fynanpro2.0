@@ -1063,6 +1063,55 @@ describe('TransactionService', () => {
       expect(prisma.$transaction).not.toHaveBeenCalled();
       expect(generateNextSpy).not.toHaveBeenCalled();
     });
+
+    it('deve evitar aplicação duplicada de saldo quando a transição atômica falha por concorrência', async () => {
+      const pendingExpense = {
+        id: 'tx-race',
+        tenantId: 'tenant-123',
+        type: 'expense',
+        amount: 90,
+        status: 'pending',
+        bankAccountId: 'bank-123',
+        deletedAt: null,
+        dueDate: new Date('2026-05-10T00:00:00.000Z'),
+        paidDate: null,
+        transactionType: 'single',
+        parentId: null,
+      };
+
+      const completedExpense = {
+        ...pendingExpense,
+        status: 'completed',
+        paidDate: new Date('2026-05-10T12:00:00.000Z'),
+        category: null,
+        bankAccount: null,
+        paymentMethod: null,
+      };
+
+      const bankAccountUpdateMock = jest.fn();
+
+      (prisma.transaction.findFirst as jest.Mock).mockResolvedValue(pendingExpense);
+      (prisma.$transaction as jest.Mock).mockImplementation(async (fn) => {
+        const mockTx = {
+          transaction: {
+            findFirst: jest.fn()
+              .mockResolvedValueOnce(pendingExpense)
+              .mockResolvedValueOnce(completedExpense),
+            updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+            update: jest.fn(),
+          },
+          bankAccount: {
+            update: bankAccountUpdateMock,
+          },
+        };
+        return fn(mockTx);
+      });
+
+      const result = await transactionService.updateStatus('tx-race', 'completed', 'tenant-123');
+
+      expect(result.status).toBe('completed');
+      expect(bankAccountUpdateMock).not.toHaveBeenCalled();
+    });
   });
 
   describe('getAll()', () => {

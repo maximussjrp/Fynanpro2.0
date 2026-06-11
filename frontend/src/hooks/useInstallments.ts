@@ -464,7 +464,7 @@ export default function useInstallments() {
   // Pagar uma parcela individual
   const handlePayInstallment = async (purchaseId: string, installmentId: string) => {
     try {
-      await apiClient.put(`/installments/${purchaseId}/installments/${installmentId}/pay`);
+      await apiClient.post(`/installments/${purchaseId}/installments/${installmentId}/pay`);
 
       toast.success('Parcela marcada como paga!');
       

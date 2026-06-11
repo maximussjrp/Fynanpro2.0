@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import UnifiedTransactionModal from '@/components/UnifiedTransactionModal';
 import api from '@/lib/api';
 
@@ -102,5 +102,55 @@ describe('UnifiedTransactionModal category splits', () => {
       ],
     })));
     expect(onSuccess).toHaveBeenCalled();
+  });
+
+  it('preserva descricao e observacoes bloqueadas no modo multiplos entre envios sequenciais', async () => {
+    render(<UnifiedTransactionModal isOpen onClose={jest.fn()} onSuccess={jest.fn()} />);
+
+    await waitFor(() => expect(mockedApi.get).toHaveBeenCalledWith('/categories?isActive=true'));
+
+    fireEvent.click(screen.getByRole('button', { name: /Múltiplos/i }));
+
+    fireEvent.change(screen.getAllByPlaceholderText('0,00')[0], { target: { value: '100' } });
+    fireEvent.change(screen.getByDisplayValue('Selecione uma conta'), { target: { value: 'acc-1' } });
+    fireEvent.change(screen.getByPlaceholderText(/Ex: Salário, Aluguel, Compras/i), { target: { value: 'Descricao fixa' } });
+    fireEvent.change(screen.getByPlaceholderText(/Adicione notas ou observações/i), { target: { value: 'Nota fixa' } });
+
+    const descriptionHeader = screen.getByText('Descrição').parentElement as HTMLElement;
+    fireEvent.click(within(descriptionHeader).getByTitle('Bloquear campo (será mantido após salvar)'));
+
+    const notesHeader = screen.getByText('Observações', { exact: false }).parentElement as HTMLElement;
+    fireEvent.click(within(notesHeader).getByTitle('Bloquear campo (será mantido após salvar)'));
+
+    fireEvent.click(screen.getByRole('checkbox', { name: /Dividir/i }));
+    fireEvent.change(screen.getByLabelText('Categoria do rateio'), { target: { value: 'cat-food' } });
+    fireEvent.change(screen.getByLabelText('Valor do rateio'), { target: { value: '100' } });
+
+    fireEvent.click(screen.getByRole('button', { name: /Criar Transação/i }));
+
+    await waitFor(() => {
+      expect(mockedApi.post).toHaveBeenCalledWith('/transactions', expect.objectContaining({
+        description: 'Descricao fixa',
+        notes: 'Nota fixa',
+      }));
+    });
+
+    expect(screen.getByPlaceholderText(/Ex: Salário, Aluguel, Compras/i)).toHaveValue('Descricao fixa');
+    expect(screen.getByPlaceholderText(/Adicione notas ou observações/i)).toHaveValue('Nota fixa');
+
+    fireEvent.change(screen.getAllByPlaceholderText('0,00')[0], { target: { value: '80' } });
+    fireEvent.change(screen.getByDisplayValue('Selecione uma conta'), { target: { value: 'acc-1' } });
+    fireEvent.click(screen.getByRole('checkbox', { name: /Dividir/i }));
+    fireEvent.change(screen.getByLabelText('Categoria do rateio'), { target: { value: 'cat-food' } });
+    fireEvent.change(screen.getByLabelText('Valor do rateio'), { target: { value: '80' } });
+
+    fireEvent.click(screen.getByRole('button', { name: /Criar Transação/i }));
+
+    await waitFor(() => {
+      expect(mockedApi.post).toHaveBeenLastCalledWith('/transactions', expect.objectContaining({
+        description: 'Descricao fixa',
+        notes: 'Nota fixa',
+      }));
+    });
   });
 });

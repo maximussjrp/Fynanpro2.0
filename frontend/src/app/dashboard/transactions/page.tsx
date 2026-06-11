@@ -582,51 +582,18 @@ export default function TransactionsPage() {
 
   const handleDelete = async (transaction: Transaction) => {
     try {
-      // Verificar se é uma transação recorrente (tem frequency ou parentId com transactionType = recurring)
-      const isRecurring = transaction.frequency || (transaction.parentId && transaction.transactionType === 'recurring');
-      
-      // Verificar se é parcelamento (tem parentId com transactionType = installment ou installmentNumber)
-      const isInstallment = (transaction.parentId && transaction.transactionType === 'installment') || 
-                           (transaction.installmentNumber && transaction.totalInstallments);
-      
-      if (isRecurring || isInstallment) {
-        // Para recorrentes/parcelamentos, usar o parentId se existir, senão usar o próprio id (é o template)
-        const parentId = transaction.parentId || transaction.id;
-        const typeLabel = isInstallment ? 'parcelamento' : 'recorrência';
-        
-        // Verificar se há transações pagas
-        const checkResponse = await api.get(`/transactions/${parentId}/check-paid`);
-        const hasPaidTransactions = checkResponse.data.data?.hasPaidTransactions || false;
-        
-        if (hasPaidTransactions) {
-          // Mostrar modal perguntando o que fazer
-          const deleteAll = confirm(
-            `Este ${typeLabel} possui transações pagas. Deseja excluir:\n\n` +
-            'OK = Todas (incluindo pagas)\n' +
-            'Cancelar = Apenas as pendentes'
-          );
-          
-          const deleteMode = deleteAll ? 'all' : 'pending';
-          await api.delete(`/transactions/${parentId}?cascade=true&deleteMode=${deleteMode}`);
-          
-          if (deleteMode === 'all') {
-            toast.success(`Todas as transações do ${typeLabel} foram excluídas!`);
-          } else {
-            toast.success('Transações pendentes excluídas. As pagas foram mantidas.');
-          }
-        } else {
-          // Sem transações pagas, apenas confirmar exclusão
-          if (!confirm(`Tem certeza que deseja excluir todas as ${isInstallment ? 'parcelas deste parcelamento' : 'ocorrências desta recorrência'}?`)) return;
-          
-          await api.delete(`/transactions/${parentId}?cascade=true&deleteMode=all`);
-          toast.success(`${isInstallment ? 'Parcelamento' : 'Recorrência'} excluído(a) com sucesso!`);
-        }
-      } else {
-        // Transação normal
-        if (!confirm('Tem certeza que deseja excluir esta transação?')) return;
-        await api.delete(`/transactions/${transaction.id}`);
-        toast.success('Transação excluída com sucesso!');
+      const isLegacyRecurringOccurrence = !!transaction.isRecurringOccurrence && !transaction.parentId;
+      const isLegacyInstallment = !!transaction.isInstallment && !!transaction.installmentPurchaseId;
+
+      if (isLegacyRecurringOccurrence || isLegacyInstallment) {
+        toast.error('Este lançamento foi gerado por uma recorrência/parcela. A exclusão individual ainda não está disponível com segurança para este tipo.');
+        return;
       }
+
+      if (!confirm('Tem certeza que deseja excluir esta transação?')) return;
+
+      await api.delete(`/transactions/${transaction.id}`);
+      toast.success('Transação excluída com sucesso!');
       
       loadData();
     } catch (error: any) {
@@ -1864,8 +1831,8 @@ export default function TransactionsPage() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <div className="flex justify-end gap-2">
-                          {!transaction.isRecurringOccurrence && (
-                            <>
+                          <>
+                            {!transaction.isRecurringOccurrence && (
                               <button
                                 onClick={() => handleEdit(transaction)}
                                 className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
@@ -1873,22 +1840,24 @@ export default function TransactionsPage() {
                               >
                                 <Edit2 className="w-4 h-4 text-blue-600" />
                               </button>
+                            )}
+                            <button
+                              onClick={() => handleDelete(transaction)}
+                              className="p-2 hover:bg-red-100 rounded-lg transition-colors"
+                              title="Excluir"
+                            >
+                              <Trash2 className="w-4 h-4 text-red-600" />
+                            </button>
+                          </>
+                          {transaction.isRecurringOccurrence && transaction.status === 'pending' && (
+                            <>
                               <button
-                                onClick={() => handleDelete(transaction)}
-                                className="p-2 hover:bg-red-100 rounded-lg transition-colors"
-                                title="Excluir"
+                                onClick={() => togglePaidStatus(transaction)}
+                                className="px-3 py-1 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-xs font-medium"
                               >
-                                <Trash2 className="w-4 h-4 text-red-600" />
+                                Pagar
                               </button>
                             </>
-                          )}
-                          {transaction.isRecurringOccurrence && transaction.status === 'pending' && (
-                            <button
-                              onClick={() => togglePaidStatus(transaction)}
-                              className="px-3 py-1 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-xs font-medium"
-                            >
-                              Pagar
-                            </button>
                           )}
                         </div>
                       </td>

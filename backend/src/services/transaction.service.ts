@@ -2074,7 +2074,6 @@ export class TransactionService {
 
       const effectiveAmount = paidAmount !== undefined ? paidAmount : normalizeNumericAmount(transaction.amount);
       const effectivePaidDate = newStatus === 'completed' ? (paidDate || transaction.paidDate || new Date()) : null;
-      const statusTransitioningToCompleted = transaction.status !== 'completed' && newStatus === 'completed';
       const isNoOpStatusUpdate =
         transaction.status === newStatus &&
         normalizeNumericAmount(transaction.amount) === effectiveAmount &&
@@ -2129,53 +2128,142 @@ export class TransactionService {
         }
       }
 
-      const result = await prisma.$transaction(async (tx) => {
-        // Reverter saldo se estava completa
-        if (transaction.status === 'completed' && transaction.bankAccountId) {
+      const transactionResult = await prisma.$transaction(async (tx) => {
+        const current = typeof tx.transaction.findFirst === 'function'
+          ? await tx.transaction.findFirst({
+              where: {
+                id,
+                tenantId,
+                deletedAt: null,
+              },
+            })
+          : transaction;
+
+        if (!current) {
+          throw new Error('Transação não encontrada');
+        }
+
+        const currentEffectiveAmount = paidAmount !== undefined ? paidAmount : normalizeNumericAmount(current.amount);
+        const currentEffectivePaidDate = newStatus === 'completed' ? (paidDate || current.paidDate || new Date()) : null;
+        const currentIsNoOpStatusUpdate =
+          current.status === newStatus &&
+          normalizeNumericAmount(current.amount) === currentEffectiveAmount &&
+          sameInstant(current.paidDate, currentEffectivePaidDate);
+
+        if (currentIsNoOpStatusUpdate) {
+          const currentWithRelations = typeof tx.transaction.findFirst === 'function'
+            ? await tx.transaction.findFirst({
+                where: {
+                  id,
+                  tenantId,
+                  deletedAt: null,
+                },
+                include: {
+                  category: true,
+                  bankAccount: true,
+                  paymentMethod: true,
+                },
+              })
+            : current;
+
+          if (!currentWithRelations) {
+            throw new Error('Transação não encontrada');
+          }
+
+          return {
+            updated: currentWithRelations,
+            shouldGenerateNextOccurrence: false,
+          };
+        }
+
+        let transitionApplied = current.status === newStatus;
+
+        if (current.status === 'completed' && current.bankAccountId) {
           await applyBalanceDelta(
             tx,
-            transaction.bankAccountId,
-            -getBalanceDeltaForTransaction(transaction.type, transaction.amount)
+            current.bankAccountId,
+            -getBalanceDeltaForTransaction(current.type, current.amount)
           );
         }
 
-        // Atualizar transação
-        const updated = await tx.transaction.update({
-          where: { id },
-          data: {
-            status: newStatus,
-            transactionDate: newStatus === 'completed'
-              ? effectivePaidDate || transaction.transactionDate
-              : transaction.dueDate || transaction.transactionDate,
-            paidDate: effectivePaidDate,
-            isPaidEarly,
-            isPaidLate,
-            daysEarlyLate,
-            amount: effectiveAmount,
-          },
-          include: {
-            category: true,
-            bankAccount: true,
-            paymentMethod: true,
-          },
-        });
+        const updateData = {
+          status: newStatus,
+          transactionDate: newStatus === 'completed'
+            ? currentEffectivePaidDate || current.transactionDate
+            : current.dueDate || current.transactionDate,
+          paidDate: currentEffectivePaidDate,
+          isPaidEarly,
+          isPaidLate,
+          daysEarlyLate,
+          amount: currentEffectiveAmount,
+        };
 
-        // Aplicar saldo se ficando completa
-        if (newStatus === 'completed' && transaction.bankAccountId) {
+        if (current.status !== newStatus && typeof tx.transaction.updateMany === 'function') {
+          const transitionResult = await tx.transaction.updateMany({
+            where: {
+              id,
+              tenantId,
+              deletedAt: null,
+              status: current.status,
+            },
+            data: updateData,
+          });
+          transitionApplied = transitionResult.count > 0;
+        } else if (current.status !== newStatus) {
+          transitionApplied = true;
+        }
+
+        let updated: any;
+        if (current.status !== newStatus && !transitionApplied) {
+          updated = typeof tx.transaction.findFirst === 'function'
+            ? await tx.transaction.findFirst({
+                where: {
+                  id,
+                  tenantId,
+                  deletedAt: null,
+                },
+                include: {
+                  category: true,
+                  bankAccount: true,
+                  paymentMethod: true,
+                },
+              })
+            : current;
+        } else {
+          updated = await tx.transaction.update({
+            where: { id },
+            data: updateData,
+            include: {
+              category: true,
+              bankAccount: true,
+              paymentMethod: true,
+            },
+          });
+        }
+
+        if (newStatus === 'completed' && current.bankAccountId && transitionApplied) {
           await applyBalanceDelta(
             tx,
-            transaction.bankAccountId,
-            getBalanceDeltaForTransaction(transaction.type, effectiveAmount)
+            current.bankAccountId,
+            getBalanceDeltaForTransaction(current.type, currentEffectiveAmount)
           );
         }
 
-        return updated;
+        return {
+          updated,
+          shouldGenerateNextOccurrence:
+            transitionApplied &&
+            current.status !== 'completed' &&
+            newStatus === 'completed' &&
+            current.transactionType === 'recurring' &&
+            !!current.parentId,
+        };
       });
 
+      const result = transactionResult.updated;
+
       // Se for recorrente e completada, gerar próxima
-      if (statusTransitioningToCompleted && 
-          transaction.transactionType === 'recurring' && 
-          transaction.parentId) {
+      if (transactionResult.shouldGenerateNextOccurrence && transaction.parentId) {
         try {
           await this.generateNextOccurrence(transaction.parentId, tenantId);
         } catch (e) {
