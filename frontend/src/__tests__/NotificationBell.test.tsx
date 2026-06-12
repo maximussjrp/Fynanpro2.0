@@ -2,6 +2,17 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import NotificationBell from '@/components/NotificationBell';
 import api from '@/lib/api';
 
+const pushMock = jest.fn();
+
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({
+    push: pushMock,
+    replace: jest.fn(),
+    prefetch: jest.fn(),
+    back: jest.fn(),
+  }),
+}));
+
 jest.mock('@/lib/api', () => ({
   __esModule: true,
   default: {
@@ -20,7 +31,21 @@ jest.mock('sonner', () => ({
 
 const mockedApi = api as jest.Mocked<typeof api>;
 
-function mockUnreadCount(count: number) {
+function makeNotification(overrides = {}) {
+  return {
+    id: 'not-1',
+    type: 'payment_due',
+    title: 'Conta vence hoje',
+    message: 'Existe uma conta pendente para hoje.',
+    isRead: false,
+    priority: 'high',
+    createdAt: '2026-06-11T12:00:00.000Z',
+    actionUrl: '/dashboard/recurring-bills',
+    ...overrides,
+  };
+}
+
+function mockNotifications(count: number, notifications = [makeNotification()]) {
   mockedApi.get.mockImplementation((url: string) => {
     if (url === '/notifications/unread-count') {
       return Promise.resolve({ data: { data: { count } } });
@@ -30,17 +55,7 @@ function mockUnreadCount(count: number) {
         data: {
           data: {
             unreadCount: count,
-            notifications: [
-              {
-                id: 'not-1',
-                type: 'payment_due',
-                title: 'Conta vence hoje',
-                message: 'Existe uma conta pendente para hoje.',
-                isRead: false,
-                priority: 'high',
-                createdAt: '2026-06-11T12:00:00.000Z',
-              },
-            ],
+            notifications,
           },
         },
       });
@@ -57,7 +72,7 @@ describe('NotificationBell', () => {
   });
 
   it('abre e fecha o painel carregando notificacoes reais', async () => {
-    mockUnreadCount(1);
+    mockNotifications(1);
 
     render(<NotificationBell />);
 
@@ -75,15 +90,7 @@ describe('NotificationBell', () => {
   });
 
   it('mostra estado vazio sem ponto fixo quando nao ha nao lidas', async () => {
-    mockedApi.get.mockImplementation((url: string) => {
-      if (url === '/notifications/unread-count') {
-        return Promise.resolve({ data: { data: { count: 0 } } });
-      }
-      if (url === '/notifications') {
-        return Promise.resolve({ data: { data: { unreadCount: 0, notifications: [] } } });
-      }
-      return Promise.reject(new Error(`Unexpected url ${url}`));
-    });
+    mockNotifications(0, []);
 
     render(<NotificationBell />);
 
@@ -97,7 +104,7 @@ describe('NotificationBell', () => {
   });
 
   it('marca notificacao como lida, marca todas e remove mantendo contador real', async () => {
-    mockUnreadCount(2);
+    mockNotifications(2);
 
     render(<NotificationBell />);
 
@@ -114,6 +121,78 @@ describe('NotificationBell', () => {
 
     fireEvent.click(screen.getByText('Remover'));
     await waitFor(() => expect(mockedApi.delete).toHaveBeenCalledWith('/notifications/not-1'));
+  });
+
+  it('Ver todas navega com router.push e fecha o painel', async () => {
+    mockNotifications(1);
+
+    render(<NotificationBell />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Notificações' }));
+    await screen.findByText('Conta vence hoje');
+
+    fireEvent.click(screen.getByText('Ver todas as notificações'));
+
+    expect(pushMock).toHaveBeenCalledWith('/dashboard/notifications');
+    expect(screen.queryByText('Conta vence hoje')).not.toBeInTheDocument();
+  });
+
+  it('Ver detalhes com rota interna valida usa router.push e marca como lida', async () => {
+    mockNotifications(1, [makeNotification({ actionUrl: '/dashboard/bank-accounts' })]);
+
+    render(<NotificationBell />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Notificações' }));
+    await screen.findByText('Conta vence hoje');
+
+    fireEvent.click(screen.getByText('Ver detalhes'));
+
+    await waitFor(() => expect(mockedApi.patch).toHaveBeenCalledWith('/notifications/not-1/read'));
+    expect(pushMock).toHaveBeenCalledWith('/dashboard/bank-accounts');
+    expect(window.location.href).not.toContain('/login');
+  });
+
+  it('rejeita rota externa usando fallback seguro', async () => {
+    mockNotifications(1, [
+      makeNotification({ id: 'external', actionUrl: 'https://api.utopsistema.com.br/health' }),
+    ]);
+
+    render(<NotificationBell />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Notificações' }));
+    await screen.findByText('Conta vence hoje');
+
+    fireEvent.click(screen.getByText('Ver detalhes'));
+    await waitFor(() => expect(pushMock).toHaveBeenLastCalledWith('/dashboard/notifications'));
+  });
+
+  it('normaliza rota antiga de transacao', async () => {
+    mockNotifications(1, [makeNotification({ actionUrl: '/transactions/tx-123' })]);
+
+    render(<NotificationBell />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Notificações' }));
+    await screen.findByText('Conta vence hoje');
+
+    fireEvent.click(screen.getByText('Ver detalhes'));
+
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/dashboard/transactions?focus=tx-123'));
+  });
+
+  it('erro ao marcar como lida no detalhe nao limpa sessao nem impede navegacao segura', async () => {
+    mockNotifications(1, [makeNotification({ actionUrl: '/dashboard/budgets' })]);
+    mockedApi.patch.mockRejectedValueOnce(new Error('network'));
+    const clearSpy = jest.spyOn(window.localStorage.__proto__, 'clear');
+
+    render(<NotificationBell />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Notificações' }));
+    await screen.findByText('Conta vence hoje');
+
+    fireEvent.click(screen.getByText('Ver detalhes'));
+
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/dashboard/budgets'));
+    expect(clearSpy).not.toHaveBeenCalled();
   });
 
   it('nao quebra o header quando a API falha', async () => {
