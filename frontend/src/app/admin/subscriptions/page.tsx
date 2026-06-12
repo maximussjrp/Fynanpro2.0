@@ -362,8 +362,8 @@ export default function SubscriptionsPage() {
             <div className="p-4 space-y-4">
               <div className="p-3 bg-red-50 rounded-lg">
                 <p className="text-sm text-red-700">
-                  <strong>Atenção:</strong> Esta ação irá cancelar a assinatura de "{selectedSub.tenant?.name}" 
-                  e reverter o workspace para o plano gratuito.
+                  <strong>Atenção:</strong>
+                  {` Esta ação irá cancelar a assinatura de "${selectedSub.tenant?.name}" e reverter o workspace para o plano gratuito.`}
                 </p>
               </div>
               <div>

@@ -1498,7 +1498,7 @@ export default function ReportsPage() {
                     {dreViewMode === 'year' && (
                       <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-center">
                         <p className="text-xs text-amber-700">
-                          📱 No mobile, mostrando dados do mês atual. Alterne para "Mês" para navegar.
+                          {'📱 No mobile, mostrando dados do mês atual. Alterne para "Mês" para navegar.'}
                         </p>
                       </div>
                     )}

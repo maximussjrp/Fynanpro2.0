@@ -1,6 +1,7 @@
 'use client';
 
 import { formatCurrency } from '@/lib/energyColors';
+import { DueStatus, getDueStatus } from '@/lib/dashboard-due-reminders';
 import Badge from '@/components/ui/Badge';
 import { Card, CardContent } from '@/components/ui/Card';
 import EmptyState from '@/components/ui/EmptyState';
@@ -20,7 +21,7 @@ export interface UpcomingItem {
   dueDate: string; // ISO
   amount: number;
   account?: string;
-  status: 'upcoming' | 'overdue' | 'recurring';
+  status: DueStatus;
   icon?: string;
 }
 
@@ -38,10 +39,10 @@ function formatBrDate(iso: string) {
   }
 }
 
-const STATUS_STYLES: Record<UpcomingItem['status'], { label: string; bg: string; color: string }> = {
-  upcoming: { label: 'A vencer', bg: 'rgba(59,130,246,0.15)', color: '#60A5FA' },
-  overdue: { label: 'Atrasada', bg: 'rgba(244,63,94,0.15)', color: '#FB7185' },
-  recurring: { label: 'Recorrente', bg: 'rgba(139,92,246,0.15)', color: '#A78BFA' },
+const STATUS_STYLES: Record<UpcomingItem['status'], { label: string; variant: 'info' | 'danger' | 'warning' }> = {
+  today: { label: 'Hoje', variant: 'warning' },
+  upcoming: { label: 'A vencer', variant: 'info' },
+  overdue: { label: 'Vencido', variant: 'danger' },
 };
 
 export default function UpcomingTable({ items, onItemClick }: UpcomingTableProps) {
@@ -73,7 +74,8 @@ export default function UpcomingTable({ items, onItemClick }: UpcomingTableProps
         </TableHeader>
         <TableBody>
           {items.map((item) => {
-            const sty = STATUS_STYLES[item.status];
+            const status = getDueStatus(item.dueDate);
+            const sty = STATUS_STYLES[status];
             return (
               <TableRow
                 key={item.id}
@@ -96,9 +98,7 @@ export default function UpcomingTable({ items, onItemClick }: UpcomingTableProps
                 <TableCell className="v2-muted hidden md:table-cell truncate max-w-[160px]">{item.account || '—'}</TableCell>
                 <TableCell className="text-right">
                   <Badge
-                    variant={
-                      item.status === 'upcoming' ? 'info' : item.status === 'overdue' ? 'danger' : 'success'
-                    }
+                    variant={sty.variant}
                   >
                     {sty.label}
                   </Badge>

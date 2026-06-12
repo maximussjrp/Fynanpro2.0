@@ -9,6 +9,7 @@ import EditTransactionModal from '@/components/NewTransactionModal';
 import CreateTransactionModal from '@/components/UnifiedTransactionModal';
 import TransactionCategoryDisplay from '@/components/TransactionCategoryDisplay';
 import { applyTransactionTableFiltersAndSort, getEffectiveStatus } from '@/lib/transaction-table-filters';
+import { DueFilter, getDuePeriod } from '@/lib/dashboard-due-reminders';
 import { Receipt, Filter, Edit2, Trash2, Calendar, CheckCircle, XCircle, Clock, Plus, ArrowLeft, ChevronUp, ChevronDown, Check, User, ArrowRightLeft, Search, X, Tag, Eye, EyeOff , Loader2 } from 'lucide-react';
 
 interface UserProfile {
@@ -299,15 +300,25 @@ export default function TransactionsPage() {
     const dateParam = urlParams.get('date');
     const typeParam = urlParams.get('type');
     const statusParam = urlParams.get('status');
+    const dueParam = urlParams.get('due');
     const startDateParam = urlParams.get('startDate');
     const endDateParam = urlParams.get('endDate');
+    const dueFilter = dueParam && ['today', 'week', 'month'].includes(dueParam)
+      ? dueParam as DueFilter
+      : null;
+    const duePeriod = dueFilter ? getDuePeriod(dueFilter) : null;
+    const statusValues = (statusParam || '')
+      .split(',')
+      .map(status => status.trim().toLowerCase())
+      .filter(Boolean);
     
-    if (dateParam || typeParam || statusParam || startDateParam || endDateParam) {
+    if (dateParam || typeParam || statusParam || duePeriod || startDateParam || endDateParam) {
       // Data de hoje formatada
       const today = new Date().toISOString().split('T')[0];
       
       // Se status for overdue, expandir range para pegar transações antigas (últimos 2 anos até hoje)
-      const isOverdue = statusParam === 'overdue';
+      const isOverdue = statusValues.length === 1 && statusValues[0] === 'overdue';
+      const useColumnStatusFilter = statusValues.includes('overdue') || statusValues.length > 1;
       const overdueStartDate = new Date();
       overdueStartDate.setFullYear(overdueStartDate.getFullYear() - 2);
       
@@ -320,18 +331,22 @@ export default function TransactionsPage() {
         }),
         // Se tiver date específico, usa como start e end
         ...(!isOverdue && dateParam && { startDate: dateParam, endDate: dateParam }),
+        // Filtro rapido de vencimento vindo do dashboard
+        ...(!isOverdue && duePeriod && { startDate: duePeriod.startDate, endDate: duePeriod.endDate }),
         // Se tiver startDate e endDate, usa eles
-        ...(!isOverdue && startDateParam && { startDate: startDateParam }),
-        ...(!isOverdue && endDateParam && { endDate: endDateParam }),
+        ...(!isOverdue && !duePeriod && startDateParam && { startDate: startDateParam }),
+        ...(!isOverdue && !duePeriod && endDateParam && { endDate: endDateParam }),
         // Tipo: INCOME, EXPENSE ou TRANSFER
         ...(typeParam && { type: typeParam.toLowerCase() as 'all' | 'income' | 'expense' | 'transfer' }),
         // Status: completed ou pending (se for overdue, deixa all para filtrar por coluna)
-        ...(statusParam && statusParam !== 'overdue' && { status: statusParam.toLowerCase() as 'all' | 'completed' | 'pending' })
+        ...(statusValues.length === 1 && !useColumnStatusFilter && ['completed', 'pending'].includes(statusValues[0]) && {
+          status: statusValues[0] as 'completed' | 'pending',
+        })
       }));
       
-      // Se status for overdue, aplicar filtro de coluna para status atrasado
-      if (isOverdue) {
-        setColumnFilters(prev => ({ ...prev, statuses: ['overdue'] }));
+      // Status composto usa filtro de coluna para nao depender de suporte novo no backend.
+      if (useColumnStatusFilter) {
+        setColumnFilters(prev => ({ ...prev, statuses: statusValues.filter(status => ['pending', 'overdue', 'completed'].includes(status)) }));
       }
       
       setShowFilters(true);
@@ -1172,7 +1187,7 @@ export default function TransactionsPage() {
           >
             <div className="space-y-3">
               <div className="text-xs text-gray-500 bg-blue-50 p-2 rounded-lg border border-blue-100">
-                💡 Digite as datas e clique em <strong>"Aplicar Filtro"</strong>
+                {'💡 Digite as datas e clique em "Aplicar Filtro"'}
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Data Inicial</label>
@@ -1446,7 +1461,7 @@ export default function TransactionsPage() {
                       <button onClick={applyThisMonth} className="px-2 py-0.5 text-[11px] bg-gray-100 text-gray-700 hover:bg-gray-200 rounded transition-colors">Este Mês</button>
                       <button onClick={applyLastMonth} className="px-2 py-0.5 text-[11px] bg-gray-100 text-gray-700 hover:bg-gray-200 rounded transition-colors">Mês Anterior</button>
                       {dateFilterPending && (
-                        <span className="flex items-center text-[11px] text-amber-600 font-medium ml-2">⚠️ Clique em "Aplicar"</span>
+                        <span className="flex items-center text-[11px] text-amber-600 font-medium ml-2">{'⚠️ Clique em "Aplicar"'}</span>
                       )}
                     </div>
                   </div>

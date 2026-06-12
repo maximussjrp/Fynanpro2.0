@@ -17,6 +17,14 @@ import {
 import api from '@/lib/api';
 import { useAuth, useTenant, useUser } from '@/stores/auth';
 import { formatCurrency } from '@/lib/energyColors';
+import {
+  DueFilter,
+  buildReminderMessage,
+  filterDueItems,
+  getDismissKey,
+  getDuePeriod,
+  getDueStatus,
+} from '@/lib/dashboard-due-reminders';
 import KpiCard from '@/components/dashboard-v2/KpiCard';
 import QuickCard from '@/components/dashboard-v2/QuickCard';
 import RankingList from '@/components/dashboard-v2/RankingList';
@@ -210,6 +218,8 @@ export default function DashboardV2Page() {
   const [ranking, setRanking] = useState<RankingRow[]>([]);
   const [today, setToday] = useState<TodaySummary | null>(null);
   const [upcoming, setUpcoming] = useState<UpcomingItem[]>([]);
+  const [selectedDueFilter, setSelectedDueFilter] = useState<DueFilter>('week');
+  const [reminderDismissed, setReminderDismissed] = useState(false);
   const [bankAccounts, setBankAccounts] = useState<BankAccountSummary[]>([]);
   const [totalAccountsBalance, setTotalAccountsBalance] = useState(0);
 
@@ -224,12 +234,7 @@ export default function DashboardV2Page() {
         const prev = getMonthRange(-1);
         const sixMonths = getRangeMonths(6);
 
-        const today0 = new Date().toISOString().split('T')[0];
-        const upcomingEnd = (() => {
-          const d = new Date();
-          d.setDate(d.getDate() + 30);
-          return d.toISOString().split('T')[0];
-        })();
+        const monthPeriod = getDuePeriod('month');
 
         const [
           curBalance,
@@ -239,6 +244,8 @@ export default function DashboardV2Page() {
           todayRes,
           accountsRes,
           upcomingRes,
+          occurrencesRes,
+          installmentsRes,
         ] = await Promise.all([
           api.get('/dashboard/balance-summary', { params: { startDate: cur.start, endDate: cur.end } }),
           api.get('/dashboard/balance-summary', { params: { startDate: prev.start, endDate: prev.end } }),
@@ -248,14 +255,23 @@ export default function DashboardV2Page() {
           api.get('/bank-accounts?isActive=true'),
           api.get('/transactions', {
             params: {
-              startDate: today0,
-              endDate: upcomingEnd,
+              startDate: monthPeriod.startDate,
+              endDate: monthPeriod.endDate,
               status: 'pending',
               type: 'expense',
-              limit: 8,
+              limit: 100,
               page: 1,
             },
           }),
+          api.get('/recurring-bills/occurrences', {
+            params: {
+              startDate: monthPeriod.startDate,
+              endDate: monthPeriod.endDate,
+              status: 'pending',
+              type: 'expense',
+            },
+          }),
+          api.get('/installments'),
         ]);
 
         setCurrentMonth(curBalance.data.data?.summary ?? null);
@@ -282,7 +298,6 @@ export default function DashboardV2Page() {
         setTotalAccountsBalance(totalBalance);
 
         const upcomingTx: UpcomingItem[] = (upcomingRes.data.data?.transactions ?? [])
-          .slice(0, 6)
           .map((t: {
             id: string;
             description: string;
@@ -298,17 +313,38 @@ export default function DashboardV2Page() {
             dueDate: t.dueDate || t.transactionDate,
             amount: Number(t.amount),
             account: t.bankAccount?.name,
-            status: (() => {
-              const due = new Date(t.dueDate || t.transactionDate);
-              const today = new Date();
-              today.setHours(0, 0, 0, 0);
-              if (due < today) return 'overdue' as const;
-              if (t.isRecurringOccurrence) return 'recurring' as const;
-              return 'upcoming' as const;
-            })(),
+            status: getDueStatus(t.dueDate || t.transactionDate),
             icon: t.category?.icon,
           }));
-        setUpcoming(upcomingTx);
+
+        const occurrenceItems: UpcomingItem[] = (occurrencesRes.data.data?.occurrences ?? [])
+          .filter((occ: any) => occ.status === 'pending')
+          .map((occ: any) => ({
+            id: occ.id,
+            description: occ.recurringBill?.name || 'Recorrencia',
+            dueDate: occ.dueDate,
+            amount: Number(occ.amount ?? 0),
+            account: occ.recurringBill?.bankAccount?.name,
+            status: getDueStatus(occ.dueDate),
+            icon: occ.recurringBill?.category?.icon,
+          }));
+
+        const purchases = installmentsRes.data?.data?.purchases || installmentsRes.data?.purchases || [];
+        const installmentItems: UpcomingItem[] = purchases.flatMap((purchase: any) =>
+          (purchase.installments || [])
+            .filter((installment: any) => installment.status === 'pending')
+            .map((installment: any) => ({
+              id: installment.id,
+              description: `${purchase.name} (${installment.installmentNumber}/${purchase.numberOfInstallments})`,
+              dueDate: installment.dueDate,
+              amount: Number(installment.amount ?? 0),
+              account: installment.bankAccount?.name,
+              status: getDueStatus(installment.dueDate),
+              icon: purchase.category?.icon,
+            })),
+        );
+
+        setUpcoming([...upcomingTx, ...occurrenceItems, ...installmentItems]);
       } catch (err) {
         console.error('Erro carregando dashboard v2:', err);
       } finally {
@@ -367,9 +403,37 @@ export default function DashboardV2Page() {
     [bankAccounts],
   );
 
+  const visibleUpcoming = useMemo(
+    () => filterDueItems(upcoming, selectedDueFilter).slice(0, 6),
+    [upcoming, selectedDueFilter],
+  );
+
+  const reminder = useMemo(
+    () => buildReminderMessage({ items: upcoming }),
+    [upcoming],
+  );
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    setReminderDismissed(window.localStorage.getItem(getDismissKey()) === 'true');
+  }, []);
+
+  const closeReminder = () => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(getDismissKey(), 'true');
+    }
+    setReminderDismissed(true);
+  };
+
   // Próxima conta + mais antiga em atraso (para QuickCards)
   const nextDue = upcoming.find((u) => u.status !== 'overdue');
   const oldestOverdue = (today?.overdue?.items ?? [])[0];
+  const selectedDuePeriod = getDuePeriod(selectedDueFilter);
+  const dueFilters: Array<{ id: DueFilter; label: string }> = [
+    { id: 'today', label: 'Hoje' },
+    { id: 'week', label: 'Semana' },
+    { id: 'month', label: 'Mes' },
+  ];
 
   // Previsão fim do mês (caixa)
   const forecastEom =
@@ -386,6 +450,29 @@ export default function DashboardV2Page() {
 
   return (
     <div className="utop-v2 min-h-screen p-4 md:p-6 lg:p-8">
+      {reminder && !reminderDismissed && (
+        <div className="fixed inset-x-3 bottom-4 z-50 md:left-auto md:right-6 md:bottom-6 md:w-[360px]">
+          <div className={`rounded-xl border px-4 py-3 shadow-2xl backdrop-blur ${
+            reminder.tone === 'danger'
+              ? 'border-rose-400/40 bg-rose-950/90 text-rose-50'
+              : reminder.tone === 'warning'
+                ? 'border-amber-400/40 bg-amber-950/90 text-amber-50'
+                : 'border-blue-400/40 bg-slate-950/90 text-blue-50'
+          }`}>
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-sm leading-5">{reminder.message}</p>
+              <button
+                type="button"
+                className="shrink-0 rounded-md px-2 py-1 text-xs opacity-80 hover:opacity-100"
+                onClick={closeReminder}
+                aria-label="Fechar lembrete"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Hero / Greeting */}
       <header className="mb-6">
         <div className="flex flex-wrap items-end justify-between gap-3">
@@ -638,23 +725,41 @@ export default function DashboardV2Page() {
         </div>
       </section>
 
-      {/* Bloco 5: Próximos vencimentos */}
+      {/* Bloco 5: Proximos vencimentos */}
       <section className="v2-card p-5 mb-4">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
           <div>
-            <h2 className="text-base font-semibold">Próximos vencimentos</h2>
-            <p className="text-xs v2-muted mt-0.5">Próximos 30 dias</p>
+            <h2 className="text-base font-semibold">Proximos vencimentos</h2>
+            <p className="text-xs v2-muted mt-0.5">{selectedDuePeriod.label}</p>
           </div>
-          <button
-            type="button"
-            className="text-xs px-3 py-1.5 rounded-lg border border-[var(--v2-border-strong)] v2-muted hover:text-[var(--v2-text-primary)]"
-            onClick={() => router.push('/dashboard/transactions?status=pending')}
-            title="Ver todas as transações"
-          >
-            Ver todas
-          </button>
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+            <div className="grid grid-cols-3 gap-1 rounded-lg border border-[var(--v2-border-strong)] p-1">
+              {dueFilters.map((filter) => (
+                <button
+                  key={filter.id}
+                  type="button"
+                  className={`min-h-9 rounded-md px-3 text-xs font-medium transition ${
+                    selectedDueFilter === filter.id
+                      ? 'bg-[var(--v2-bg-elevated)] text-[var(--v2-text-primary)]'
+                      : 'v2-muted hover:text-[var(--v2-text-primary)]'
+                  }`}
+                  onClick={() => setSelectedDueFilter(filter.id)}
+                >
+                  {filter.label}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="min-h-9 text-xs px-3 py-1.5 rounded-lg border border-[var(--v2-border-strong)] v2-muted hover:text-[var(--v2-text-primary)]"
+              onClick={() => router.push(`/dashboard/transactions?status=pending,overdue&due=${selectedDueFilter}`)}
+              title="Ver todas as transacoes"
+            >
+              Ver todas
+            </button>
+          </div>
         </div>
-        <UpcomingTable items={upcoming} onItemClick={(id) => router.push(`/dashboard/transactions?focus=${id}`)} />
+        <UpcomingTable items={visibleUpcoming} onItemClick={(id) => router.push(`/dashboard/transactions?focus=${id}`)} />
       </section>
 
       <p className="text-center text-xs v2-faint mt-6">
