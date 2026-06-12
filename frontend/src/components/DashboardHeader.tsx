@@ -1,7 +1,8 @@
 'use client';
 
-import { Bell, Search, Plus } from 'lucide-react';
+import { Search, Plus } from 'lucide-react';
 import { usePathname } from 'next/navigation';
+import NotificationBell from './NotificationBell';
 
 interface DashboardHeaderProps {
   onAddTransaction?: () => void;
@@ -106,13 +107,7 @@ export default function DashboardHeader({ onAddTransaction, showAddButton = true
             </div>
 
             {/* Notifications */}
-            <button
-              className="relative p-2 rounded-lg transition-all utop-icon-btn"
-              title="Notificações"
-            >
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-1 right-1 w-2 h-2 rounded-full" style={{ background: 'var(--v2-danger)' }}></span>
-            </button>
+            <NotificationBell />
 
             {/* Add Transaction Button */}
             {showAddButton && onAddTransaction && (

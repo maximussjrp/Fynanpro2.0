@@ -225,6 +225,17 @@ export default function UnifiedTransactionModal({
     setLockedFields(prev => ({ ...prev, [field]: !prev[field] }));
   };
 
+  const lockFieldLabels: Record<keyof typeof lockedFields, string> = {
+    type: 'tipo',
+    description: 'descrição',
+    transactionDate: 'data',
+    categoryId: 'categoria',
+    bankAccountId: 'conta bancária',
+    paymentMethodId: 'meio de pagamento',
+    status: 'status',
+    notes: 'observações',
+  };
+
   // Componente de botão de bloqueio
   const LockButton = ({ field, className = '' }: { field: keyof typeof lockedFields; className?: string }) => {
     if (!multipleModeEnabled) return null;
@@ -239,6 +250,7 @@ export default function UnifiedTransactionModal({
             : 'bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600'
         } ${className}`}
         title={isLocked ? 'Desbloquear campo (será limpo após salvar)' : 'Bloquear campo (será mantido após salvar)'}
+        aria-label={`${isLocked ? 'Desbloquear' : 'Bloquear'} ${lockFieldLabels[field]}`}
       >
         {isLocked ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
       </button>
@@ -269,6 +281,12 @@ export default function UnifiedTransactionModal({
       // Preservar busca de categoria se bloqueada
       if (!currentLockedFields.categoryId) {
         setCategorySearch('');
+      } else {
+        setCategorySearch(prev => {
+          if (prev) return prev;
+          const selectedCategory = categories.find(category => category.id === formData.categoryId);
+          return selectedCategory?.name || prev;
+        });
       }
     } else {
       setFormData({
