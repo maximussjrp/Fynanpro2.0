@@ -118,6 +118,10 @@ interface PaymentMethod {
   type: string;
 }
 
+interface LoadDataOptions {
+  showLoading?: boolean;
+}
+
 export default function TransactionsPage() {
   const router = useRouter();
   const { accessToken, isAuthenticated } = useAuth();
@@ -361,9 +365,11 @@ export default function TransactionsPage() {
     loadData();
   }, [filters, isAuthenticated]);
 
-  const loadData = async () => {
+  const loadData = async ({ showLoading = true }: LoadDataOptions = {}) => {
     try {
-      setLoading(true);
+      if (showLoading) {
+        setLoading(true);
+      }
 
       const params: any = {
         startDate: filters.startDate,
@@ -517,7 +523,9 @@ export default function TransactionsPage() {
       console.error('Erro ao carregar dados:', error);
       toast.error('Erro ao carregar dados');
     } finally {
-      setLoading(false);
+      if (showLoading) {
+        setLoading(false);
+      }
     }
   };
 
@@ -659,7 +667,7 @@ export default function TransactionsPage() {
   };
 
   const handleModalSuccess = () => {
-    loadData();
+    loadData({ showLoading: false });
   };
 
   // Funções para gerenciar categorias
